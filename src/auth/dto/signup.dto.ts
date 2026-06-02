@@ -7,6 +7,7 @@ import {
   IsEnum,
   Matches,
   IsNotEmpty,
+  Equals,
 } from "class-validator";
 
 export enum UserRole {
@@ -48,9 +49,7 @@ export class SignupDto {
   role?: UserRole;
 
   @IsBoolean()
-  @Matches(/true/, {
-    message: "You must accept the terms and conditions",
-  })
+  @Equals(true, { message: "You must accept the terms and conditions" })
   termsAccepted!: boolean;
 
   @IsOptional()
