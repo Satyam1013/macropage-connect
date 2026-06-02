@@ -14,7 +14,7 @@ export interface JwtPayload {
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy, "jwt") {
   constructor(
-    private readonly config: ConfigService,
+    config: ConfigService,
     private readonly users: UsersService,
   ) {
     super({
@@ -24,8 +24,8 @@ export class JwtStrategy extends PassportStrategy(Strategy, "jwt") {
     });
   }
 
-  validate(payload: JwtPayload) {
-    const user = this.users.findById(payload.sub);
+  async validate(payload: JwtPayload) {
+    const user = await this.users.findById(payload.sub);
     if (!user) throw new UnauthorizedException("User not found");
     return user;
   }

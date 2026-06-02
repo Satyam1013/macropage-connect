@@ -5,7 +5,7 @@ import {
 } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { ConfigService } from "@nestjs/config";
-import { UsersService, User } from "../users/users.service";
+import { UsersService, UserDocument } from "../users/users.service";
 import { LoginDto } from "./dto/login.dto";
 import { SignupDto } from "./dto/signup.dto";
 import { OAuthDto } from "./dto/oauth.dto";
@@ -22,7 +22,7 @@ export class AuthService {
   // ─── Login ────────────────────────────────────────────────────────────────
 
   async login(dto: LoginDto): Promise<AuthResponse> {
-    const user = this.users.findByEmail(dto.email);
+    const user = await this.users.findByEmail(dto.email);
 
     if (!user) {
       throw new UnauthorizedException({
@@ -79,8 +79,8 @@ export class AuthService {
 
   // ─── Refresh Token ────────────────────────────────────────────────────────
 
-  refreshToken(userId: string): { accessToken: string } {
-    const user = this.users.findById(userId);
+  async refreshToken(userId: string): Promise<{ accessToken: string }> {
+    const user = await this.users.findById(userId);
     if (!user) {
       throw new UnauthorizedException({
         success: false,
@@ -95,7 +95,7 @@ export class AuthService {
 
   // ─── Helpers ──────────────────────────────────────────────────────────────
 
-  private buildAuthResponse(user: User, message: string): AuthResponse {
+  private buildAuthResponse(user: UserDocument, message: string): AuthResponse {
     const accessToken = this.signAccessToken(user.id, user.email);
     const refreshToken = this.signRefreshToken(user.id, user.email);
 
