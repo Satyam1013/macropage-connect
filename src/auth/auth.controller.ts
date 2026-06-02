@@ -7,14 +7,15 @@ import {
   UseGuards,
   Request,
   Get,
-} from '@nestjs/common';
-import { AuthService } from './auth.service';
-import { LoginDto } from './dto/login.dto';
-import { SignupDto } from './dto/signup.dto';
-import { OAuthDto } from './dto/oauth.dto';
-import { JwtAuthGuard } from './guards/jwt-auth.guard';
+} from "@nestjs/common";
+import { AuthService } from "./auth.service";
+import { LoginDto } from "./dto/login.dto";
+import { SignupDto } from "./dto/signup.dto";
+import { OAuthDto } from "./dto/oauth.dto";
+import { JwtAuthGuard } from "./guards/jwt-auth.guard";
+import { UserPayload } from "./dto/auth-response.interface";
 
-@Controller('auth')
+@Controller("auth")
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
@@ -22,7 +23,7 @@ export class AuthController {
    * POST /auth/signup
    * Register a new user
    */
-  @Post('signup')
+  @Post("signup")
   @HttpCode(HttpStatus.CREATED)
   signup(@Body() dto: SignupDto) {
     return this.authService.signup(dto);
@@ -32,7 +33,7 @@ export class AuthController {
    * POST /auth/login
    * Authenticate with email + password
    */
-  @Post('login')
+  @Post("login")
   @HttpCode(HttpStatus.OK)
   login(@Body() dto: LoginDto) {
     return this.authService.login(dto);
@@ -42,7 +43,7 @@ export class AuthController {
    * POST /auth/oauth
    * Authenticate via OAuth provider (Google, Facebook, etc.)
    */
-  @Post('oauth')
+  @Post("oauth")
   @HttpCode(HttpStatus.OK)
   oauthLogin(@Body() dto: OAuthDto) {
     return this.authService.oauthLogin(dto);
@@ -53,9 +54,9 @@ export class AuthController {
    * Refresh access token (requires valid JWT)
    */
   @UseGuards(JwtAuthGuard)
-  @Post('refresh')
+  @Post("refresh")
   @HttpCode(HttpStatus.OK)
-  refresh(@Request() req) {
+  refresh(@Request() req: { user: UserPayload }) {
     return this.authService.refreshToken(req.user.id);
   }
 
@@ -64,8 +65,8 @@ export class AuthController {
    * Get current authenticated user profile
    */
   @UseGuards(JwtAuthGuard)
-  @Get('me')
-  me(@Request() req) {
+  @Get("me")
+  me(@Request() req: { user: UserPayload }) {
     return {
       success: true,
       data: { user: req.user },

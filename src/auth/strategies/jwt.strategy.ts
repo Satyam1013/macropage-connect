@@ -1,8 +1,8 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
-import { PassportStrategy } from '@nestjs/passport';
-import { ExtractJwt, Strategy } from 'passport-jwt';
-import { ConfigService } from '@nestjs/config';
-import { UsersService } from '../../users/users.service';
+import { Injectable, UnauthorizedException } from "@nestjs/common";
+import { PassportStrategy } from "@nestjs/passport";
+import { ExtractJwt, Strategy } from "passport-jwt";
+import { ConfigService } from "@nestjs/config";
+import { UsersService } from "../../users/users.service";
 
 export interface JwtPayload {
   sub: string;
@@ -12,7 +12,7 @@ export interface JwtPayload {
 }
 
 @Injectable()
-export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
+export class JwtStrategy extends PassportStrategy(Strategy, "jwt") {
   constructor(
     private readonly config: ConfigService,
     private readonly users: UsersService,
@@ -20,13 +20,13 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
-      secretOrKey: config.get<string>('JWT_SECRET', 'fallback-secret'),
+      secretOrKey: config.get<string>("JWT_SECRET", "fallback-secret"),
     });
   }
 
-  async validate(payload: JwtPayload) {
-    const user = await this.users.findById(payload.sub);
-    if (!user) throw new UnauthorizedException('User not found');
+  validate(payload: JwtPayload) {
+    const user = this.users.findById(payload.sub);
+    if (!user) throw new UnauthorizedException("User not found");
     return user;
   }
 }

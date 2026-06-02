@@ -1,13 +1,13 @@
-import { IsString, IsNotEmpty, IsIn } from 'class-validator';
+import { IsString, IsNotEmpty, IsIn } from "class-validator";
 
 export class OAuthDto {
   @IsString()
-  @IsIn(['google', 'facebook', 'github'], {
-    message: 'Provider must be google, facebook, or github',
+  @IsIn(["google", "facebook", "github"], {
+    message: "Provider must be google, facebook, or github",
   })
-  provider: string;
+  provider!: string;
 
   @IsString()
-  @IsNotEmpty({ message: 'OAuth token is required' })
-  token: string;
+  @IsNotEmpty({ message: "OAuth token is required" })
+  token!: string;
 }

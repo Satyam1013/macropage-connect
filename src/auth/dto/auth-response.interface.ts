@@ -5,7 +5,7 @@ export interface UserPayload {
   phone?: string;
   emailVerified?: boolean;
   whatsappSetupDone?: boolean;
-  plan?: 'FREE' | 'PRO';
+  plan?: "FREE" | "PRO";
   trialEndsAt?: string;
   createdAt: string;
 }

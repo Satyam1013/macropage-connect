@@ -1,7 +1,7 @@
-import { Injectable, ConflictException } from '@nestjs/common';
-import * as bcrypt from 'bcryptjs';
-import { SignupDto } from '../auth/dto/signup.dto';
-import { UserPayload } from '../auth/dto/auth-response.interface';
+import { Injectable, ConflictException } from "@nestjs/common";
+import * as bcrypt from "bcryptjs";
+import { SignupDto } from "../auth/dto/signup.dto";
+import { UserPayload } from "../auth/dto/auth-response.interface";
 
 export interface User {
   id: string;
@@ -13,7 +13,7 @@ export interface User {
   role: string;
   emailVerified: boolean;
   whatsappSetupDone: boolean;
-  plan: 'FREE' | 'PRO';
+  plan: "FREE" | "PRO";
   trialEndsAt: string;
   marketingOptIn: boolean;
   createdAt: string;
@@ -24,18 +24,18 @@ export class UsersService {
   // ⚠️  In-memory store — replace with TypeORM/Prisma DB in production
   private users: User[] = [];
 
-  async findByEmail(email: string): Promise<User | undefined> {
+  findByEmail(email: string): User | undefined {
     return this.users.find((u) => u.email === email);
   }
 
-  async findById(id: string): Promise<User | undefined> {
+  findById(id: string): User | undefined {
     return this.users.find((u) => u.id === id);
   }
 
   async create(dto: SignupDto): Promise<User> {
-    const exists = await this.findByEmail(dto.email);
+    const exists = this.findByEmail(dto.email);
     if (exists) {
-      throw new ConflictException('Email already registered');
+      throw new ConflictException("Email already registered");
     }
 
     const hashed = await bcrypt.hash(dto.password, 12);
@@ -47,11 +47,13 @@ export class UsersService {
       password: hashed,
       phone: dto.phone,
       company: dto.company,
-      role: dto.role ?? 'user',
+      role: dto.role ?? "user",
       emailVerified: false,
       whatsappSetupDone: false,
-      plan: 'FREE',
-      trialEndsAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+      plan: "FREE",
+      trialEndsAt: new Date(
+        Date.now() + 30 * 24 * 60 * 60 * 1000,
+      ).toISOString(),
       marketingOptIn: dto.marketingOptIn ?? false,
       createdAt: new Date().toISOString(),
     };
