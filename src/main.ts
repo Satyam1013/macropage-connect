@@ -1,3 +1,6 @@
+import { webcrypto } from "node:crypto";
+(globalThis as Record<string, unknown>).crypto ??= webcrypto;
+
 import { NestFactory } from "@nestjs/core";
 import { ValidationPipe } from "@nestjs/common";
 import { AppModule } from "./app.module";
