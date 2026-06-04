@@ -1,0 +1,95 @@
+import {
+  Controller,
+  Get,
+  Post,
+  Patch,
+  Delete,
+  Body,
+  Param,
+  Query,
+  UseGuards,
+  Request,
+  HttpCode,
+  HttpStatus,
+} from "@nestjs/common";
+import { ContactsService } from "./contacts.service";
+import { CreateContactDto } from "./dto/create-contact.dto";
+import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
+import { UserPayload } from "../auth/dto/auth-response.interface";
+
+@UseGuards(JwtAuthGuard)
+@Controller("contacts")
+export class ContactsController {
+  constructor(private readonly contactsService: ContactsService) {}
+
+  @Get()
+  findAll(
+    @Request() req: { user: UserPayload & { tenantId?: string } },
+    @Query("search") search?: string,
+    @Query("tags") tags?: string,
+    @Query("page") page?: string,
+    @Query("limit") limit?: string,
+  ) {
+    const tenantId = req.user.tenantId ?? req.user.id;
+    return this.contactsService.findAll(tenantId, {
+      search,
+      tags: tags ? tags.split(",") : undefined,
+      page: page ? Number(page) : 1,
+      limit: limit ? Number(limit) : 20,
+    });
+  }
+
+  @Get(":id")
+  findOne(
+    @Request() req: { user: UserPayload & { tenantId?: string } },
+    @Param("id") id: string,
+  ) {
+    const tenantId = req.user.tenantId ?? req.user.id;
+    return this.contactsService.findOne(tenantId, id);
+  }
+
+  @Post()
+  @HttpCode(HttpStatus.CREATED)
+  create(
+    @Request() req: { user: UserPayload & { tenantId?: string } },
+    @Body() dto: CreateContactDto,
+  ) {
+    const tenantId = req.user.tenantId ?? req.user.id;
+    return this.contactsService.create(tenantId, dto);
+  }
+
+  @Patch(":id")
+  update(
+    @Request() req: { user: UserPayload & { tenantId?: string } },
+    @Param("id") id: string,
+    @Body() dto: Partial<CreateContactDto>,
+  ) {
+    const tenantId = req.user.tenantId ?? req.user.id;
+    return this.contactsService.update(tenantId, id, dto);
+  }
+
+  @Delete(":id")
+  @HttpCode(HttpStatus.NO_CONTENT)
+  remove(
+    @Request() req: { user: UserPayload & { tenantId?: string } },
+    @Param("id") id: string,
+  ) {
+    const tenantId = req.user.tenantId ?? req.user.id;
+    return this.contactsService.remove(tenantId, id);
+  }
+
+  @Post("bulk-tag")
+  @HttpCode(HttpStatus.OK)
+  bulkTag(
+    @Request() req: { user: UserPayload & { tenantId?: string } },
+    @Body() body: { ids: string[]; tags: string[]; action: "add" | "remove" },
+  ) {
+    const tenantId = req.user.tenantId ?? req.user.id;
+    return this.contactsService.bulkTag(
+      tenantId,
+      body.ids,
+      body.tags,
+      body.action,
+    );
+  }
+}

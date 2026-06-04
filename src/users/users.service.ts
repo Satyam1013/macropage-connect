@@ -22,6 +22,15 @@ export class UsersService {
     return this.userModel.findById(id).exec();
   }
 
+  findByEmailVerifyToken(tokenHash: string): Promise<UserDocument | null> {
+    return this.userModel
+      .findOne({
+        emailVerifyToken: tokenHash,
+        emailVerifyExpires: { $gt: new Date() },
+      })
+      .exec();
+  }
+
   async create(dto: SignupDto): Promise<UserDocument> {
     const exists = await this.findByEmail(dto.email);
     if (exists) {
@@ -36,7 +45,7 @@ export class UsersService {
       password: hashed,
       phone: dto.phone,
       company: dto.company,
-      role: dto.role ?? "user",
+      role: dto.role ?? "AGENT",
       trialEndsAt: new Date(
         Date.now() + 30 * 24 * 60 * 60 * 1000,
       ).toISOString(),
@@ -50,6 +59,44 @@ export class UsersService {
     return bcrypt.compare(plain, hashed);
   }
 
+  async setEmailVerifyToken(userId: string, tokenHash: string): Promise<void> {
+    await this.userModel.updateOne(
+      { _id: userId },
+      {
+        emailVerifyToken: tokenHash,
+        emailVerifyExpires: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      },
+    );
+  }
+
+  async markEmailVerified(userId: string): Promise<void> {
+    await this.userModel.updateOne(
+      { _id: userId },
+      { emailVerified: true, emailVerifyToken: null, emailVerifyExpires: null },
+    );
+  }
+
+  async updatePassword(userId: string, hashedPassword: string): Promise<void> {
+    await this.userModel.updateOne(
+      { _id: userId },
+      { password: hashedPassword },
+    );
+  }
+
+  async updateLastLogin(userId: string): Promise<void> {
+    await this.userModel.updateOne(
+      { _id: userId },
+      { lastLoginAt: new Date() },
+    );
+  }
+
+  async updateProfile(
+    userId: string,
+    data: Partial<Pick<User, "name" | "phone" | "company" | "avatarUrl">>,
+  ): Promise<UserDocument | null> {
+    return this.userModel.findByIdAndUpdate(userId, data, { new: true }).exec();
+  }
+
   toPublicProfile(user: UserDocument): UserPayload {
     return {
       id: user.id,
@@ -60,6 +107,8 @@ export class UsersService {
       whatsappSetupDone: user.whatsappSetupDone,
       plan: user.plan,
       trialEndsAt: user.trialEndsAt,
+      subscriptionType: user.subscriptionType,
+      paidUser: user.paidUser,
       createdAt: user.createdAt.toISOString(),
     };
   }

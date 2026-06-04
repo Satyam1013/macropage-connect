@@ -7,6 +7,8 @@ export interface UserPayload {
   whatsappSetupDone?: boolean;
   plan?: "FREE" | "PRO";
   trialEndsAt?: string;
+  subscriptionType?: "free" | "pro" | "business";
+  paidUser?: boolean;
   createdAt: string;
 }
 
