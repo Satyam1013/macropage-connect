@@ -30,7 +30,7 @@ export class User {
   @Prop({
     type: String,
     enum: Object.values(UserRole),
-    default: UserRole.ADMIN,
+    required: true,
   })
   role!: string;
 
