@@ -62,13 +62,15 @@ async function main() {
   };
   console.log("Phone details:", phoneData);
 
-  // Find the first owner/admin user to use their _id as tenantId
+  // Find the target user — by META_TEST_USER_EMAIL if set, else first owner/admin
   const userCol = mongoose.connection.collection("users");
-  const user =
-    (await userCol.findOne(
-      { role: { $in: ["owner", "admin", "OWNER", "ADMIN"] } },
-      { sort: { createdAt: 1 } },
-    )) ?? (await userCol.findOne({}, { sort: { createdAt: 1 } }));
+  const targetEmail = process.env.META_TEST_USER_EMAIL;
+  const user = targetEmail
+    ? await userCol.findOne({ email: targetEmail.toLowerCase() })
+    : ((await userCol.findOne(
+        { role: { $in: ["owner", "admin", "OWNER", "ADMIN"] } },
+        { sort: { createdAt: 1 } },
+      )) ?? (await userCol.findOne({}, { sort: { createdAt: 1 } })));
 
   if (!user) {
     console.error("No users found in database. Create a user first.");

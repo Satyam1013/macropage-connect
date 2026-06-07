@@ -11,6 +11,7 @@ import {
 } from "@nestjs/common";
 import {
   WhatsappService,
+  BusinessInfoDto,
   ConnectMetaDto,
   VerifyPhoneDto,
   ConfirmPhoneDto,
@@ -29,6 +30,13 @@ export class WhatsappController {
   getStatus(@Request() req: AuthReq) {
     const tenantId = req.user.tenantId ?? req.user.id;
     return this.whatsappService.getStatus(tenantId);
+  }
+
+  @Post("setup/business-info")
+  @HttpCode(HttpStatus.OK)
+  saveBusinessInfo(@Request() req: AuthReq, @Body() dto: BusinessInfoDto) {
+    const tenantId = req.user.tenantId ?? req.user.id;
+    return this.whatsappService.saveBusinessInfo(tenantId, dto);
   }
 
   @Post("connect")
@@ -50,6 +58,20 @@ export class WhatsappController {
   confirmCode(@Request() req: AuthReq, @Body() dto: ConfirmPhoneDto) {
     const tenantId = req.user.tenantId ?? req.user.id;
     return this.whatsappService.confirmVerificationCode(tenantId, dto);
+  }
+
+  @Post("setup/send-test")
+  @HttpCode(HttpStatus.OK)
+  sendTestMessage(@Request() req: AuthReq) {
+    const tenantId = req.user.tenantId ?? req.user.id;
+    return this.whatsappService.sendTestMessage(tenantId);
+  }
+
+  @Post("setup/complete")
+  @HttpCode(HttpStatus.OK)
+  completeSetup(@Request() req: AuthReq) {
+    const tenantId = req.user.tenantId ?? req.user.id;
+    return this.whatsappService.completeSetup(tenantId);
   }
 
   @Delete("disconnect")

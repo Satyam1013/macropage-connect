@@ -55,6 +55,21 @@ export class User {
   @Prop({ default: false })
   whatsappSetupDone!: boolean;
 
+  @Prop({ default: false })
+  businessInfoSaved!: boolean;
+
+  @Prop()
+  industry?: string;
+
+  @Prop()
+  description?: string;
+
+  @Prop()
+  website?: string;
+
+  @Prop()
+  address?: string;
+
   @Prop({ type: String, enum: ["FREE", "PRO"], default: "FREE" })
   plan!: "FREE" | "PRO";
 

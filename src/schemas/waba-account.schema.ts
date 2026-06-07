@@ -47,6 +47,12 @@ export class WABAAccount {
   @Prop({ default: false })
   webhookVerified!: boolean;
 
+  @Prop({ default: false })
+  phoneVerified!: boolean;
+
+  @Prop({ default: false })
+  testMessageSent!: boolean;
+
   @Prop()
   connectedAt?: Date;
 }
