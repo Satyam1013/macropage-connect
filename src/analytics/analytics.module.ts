@@ -9,6 +9,7 @@ import { Campaign, CampaignSchema } from "../schemas/campaign.schema";
 import { Contact, ContactSchema } from "../schemas/contact.schema";
 import { AnalyticsService } from "./analytics.service";
 import { AnalyticsController } from "./analytics.controller";
+import { DashboardController } from "./dashboard.controller";
 
 @Module({
   imports: [
@@ -20,6 +21,6 @@ import { AnalyticsController } from "./analytics.controller";
     ]),
   ],
   providers: [AnalyticsService],
-  controllers: [AnalyticsController],
+  controllers: [AnalyticsController, DashboardController],
 })
 export class AnalyticsModule {}

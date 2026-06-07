@@ -2,7 +2,9 @@ import {
   Injectable,
   NotFoundException,
   ForbiddenException,
+  BadRequestException,
 } from "@nestjs/common";
+import axios from "axios";
 import { InjectModel } from "@nestjs/mongoose";
 import { Model } from "mongoose";
 import {
@@ -14,6 +16,7 @@ import {
   MessageDocument,
   MessageType,
 } from "../schemas/message.schema";
+import { Contact, ContactDocument } from "../schemas/contact.schema";
 import { MetaService } from "../meta/meta.service";
 import { EventsGateway } from "../gateway/events.gateway";
 import {
@@ -38,6 +41,8 @@ export class ConversationsService {
     private readonly convModel: Model<ConversationDocument>,
     @InjectModel(Message.name)
     private readonly msgModel: Model<MessageDocument>,
+    @InjectModel(Contact.name)
+    private readonly contactModel: Model<ContactDocument>,
     private readonly metaService: MetaService,
     private readonly gateway: EventsGateway,
   ) {}
@@ -113,10 +118,14 @@ export class ConversationsService {
       .exec();
     if (!conv) throw new NotFoundException("Conversation not found");
 
+    const contact = await this.contactModel
+      .findOne({ _id: conv.contactId, tenantId })
+      .exec();
+    if (!contact) throw new NotFoundException("Contact not found");
+
     const client = await this.metaService.getClient(tenantId);
 
-    const contactPhone = (conv as ConversationDocument & { phone?: string })
-      .phone;
+    const contactPhone = contact.phone.replace("+", "");
     let payload: Record<string, unknown>;
 
     if (dto.type === "TEXT") {
@@ -222,6 +231,80 @@ export class ConversationsService {
     const conv = await this.convModel.create({ tenantId, contactId });
     this.gateway.emitToTenant(tenantId, "conversation:new", conv);
     return conv;
+  }
+
+  async initiateConversation(
+    tenantId: string,
+    contactId: string,
+    templateName: string,
+    agentId: string,
+  ) {
+    const contact = await this.contactModel
+      .findOne({ _id: contactId, tenantId })
+      .exec();
+    if (!contact) throw new NotFoundException("Contact not found");
+
+    const conv = await this.findOrCreate(tenantId, contactId);
+    const client = await this.metaService.getClient(tenantId);
+
+    const toNumber = contact.phone.replace("+", "");
+    let metaMessageId: string | undefined;
+    try {
+      const resp = await client.sendMessage({
+        messaging_product: "whatsapp",
+        to: toNumber,
+        type: "template",
+        template: { name: templateName, language: { code: "en_US" } },
+      });
+      metaMessageId = (resp.data as { messages?: Array<{ id: string }> })
+        ?.messages?.[0]?.id;
+    } catch (err) {
+      const metaError = axios.isAxiosError(err)
+        ? (
+            err.response?.data as {
+              error?: { message?: string; code?: number };
+            }
+          )?.error
+        : null;
+      throw new BadRequestException({
+        success: false,
+        error: {
+          code: "META_SEND_FAIL",
+          message:
+            metaError?.message ??
+            "Meta rejected the message. Check phone number format or template name.",
+        },
+      });
+    }
+
+    const message = await this.msgModel.create({
+      tenantId,
+      conversationId: conv.id,
+      direction: "OUTBOUND",
+      type: "TEMPLATE",
+      content: templateName,
+      metaMessageId,
+      status: "SENT",
+      agentId,
+      sentAt: new Date(),
+    });
+
+    await this.convModel.updateOne(
+      { _id: conv.id },
+      { lastMessageAt: new Date() },
+    );
+
+    this.gateway.emitToTenant(tenantId, "message:new", message);
+
+    return {
+      success: true,
+      data: {
+        conversationId: conv.id,
+        contactPhone: contact.phone,
+        messageId: metaMessageId,
+        templateName,
+      },
+    };
   }
 
   async handleInboundMessage(

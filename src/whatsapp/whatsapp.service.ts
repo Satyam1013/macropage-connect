@@ -109,7 +109,10 @@ export class WhatsappService {
       businessInfoSaved: true,
     });
 
-    return { success: true, data: { message: "Business info saved", nextStep: 2 } };
+    return {
+      success: true,
+      data: { message: "Business info saved", nextStep: 2 },
+    };
   }
 
   async connectMeta(tenantId: string, dto: ConnectMetaDto) {
@@ -214,27 +217,36 @@ export class WhatsappService {
           access_token: longToken,
         },
       });
-      const phones =
-        (phonesResp.data as { data?: PhoneEntry[] }).data ?? [];
+      const phones = (phonesResp.data as { data?: PhoneEntry[] }).data ?? [];
       phone = phones[0];
     } catch {
       throw new BadRequestException({
         success: false,
-        error: { code: "META_API_ERROR", message: "Failed to fetch phone numbers" },
+        error: {
+          code: "META_API_ERROR",
+          message: "Failed to fetch phone numbers",
+        },
       });
     }
     if (!phone!) {
       throw new BadRequestException({
         success: false,
-        error: { code: "NO_WABA_FOUND", message: "No phone numbers found in WABA" },
+        error: {
+          code: "NO_WABA_FOUND",
+          message: "No phone numbers found in WABA",
+        },
       });
     }
 
     // Step 5 — subscribe app to WABA
     await axios
-      .post(`${BASE}/${wabaId}/subscribed_apps`, {}, {
-        params: { access_token: longToken },
-      })
+      .post(
+        `${BASE}/${wabaId}/subscribed_apps`,
+        {},
+        {
+          params: { access_token: longToken },
+        },
+      )
       .catch(() => null);
 
     const encrypted = this.encryption.encrypt(longToken);
@@ -295,12 +307,18 @@ export class WhatsappService {
       if (axios.isAxiosError(err) && err.response?.status === 429) {
         throw new BadRequestException({
           success: false,
-          error: { code: "TOO_MANY_REQUESTS", message: "Meta rate limited the OTP request" },
+          error: {
+            code: "TOO_MANY_REQUESTS",
+            message: "Meta rate limited the OTP request",
+          },
         });
       }
       throw new BadRequestException({
         success: false,
-        error: { code: "META_REQUEST_FAIL", message: "Meta rejected the OTP request" },
+        error: {
+          code: "META_REQUEST_FAIL",
+          message: "Meta rejected the OTP request",
+        },
       });
     }
 
@@ -339,13 +357,19 @@ export class WhatsappService {
       }
       throw new BadRequestException({
         success: false,
-        error: { code: "META_VERIFY_FAIL", message: "Meta verification failed" },
+        error: {
+          code: "META_VERIFY_FAIL",
+          message: "Meta verification failed",
+        },
       });
     }
 
     await this.wabaModel.updateOne({ tenantId }, { phoneVerified: true });
 
-    return { success: true, data: { message: "Phone number verified", nextStep: 4 } };
+    return {
+      success: true,
+      data: { message: "Phone number verified", nextStep: 4 },
+    };
   }
 
   async sendTestMessage(tenantId: string) {
@@ -357,7 +381,10 @@ export class WhatsappService {
     if (!waba || !waba.metaConnected) {
       throw new BadRequestException({
         success: false,
-        error: { code: "META_NOT_CONNECTED", message: "WhatsApp not connected" },
+        error: {
+          code: "META_NOT_CONNECTED",
+          message: "WhatsApp not connected",
+        },
       });
     }
     if (!user?.phone) {
@@ -386,9 +413,8 @@ export class WhatsappService {
         },
         { headers: { Authorization: `Bearer ${token}` } },
       );
-      messageId = (
-        resp.data as { messages?: Array<{ id: string }> }
-      ).messages?.[0]?.id;
+      messageId = (resp.data as { messages?: Array<{ id: string }> })
+        .messages?.[0]?.id;
     } catch (err) {
       if (axios.isAxiosError(err)) {
         const errMsg = (err.response?.data as { error?: { message?: string } })
@@ -436,7 +462,10 @@ export class WhatsappService {
     ) {
       throw new BadRequestException({
         success: false,
-        error: { code: "SETUP_INCOMPLETE", message: "Not all steps completed yet" },
+        error: {
+          code: "SETUP_INCOMPLETE",
+          message: "Not all steps completed yet",
+        },
       });
     }
 

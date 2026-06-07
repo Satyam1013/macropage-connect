@@ -116,4 +116,19 @@ export class ConversationsController {
     const tenantId = req.user.tenantId ?? req.user.id;
     return this.conversationsService.resolveConversation(tenantId, id);
   }
+
+  @Post("initiate")
+  @HttpCode(HttpStatus.CREATED)
+  initiate(
+    @Request() req: AuthReq,
+    @Body() body: { contactId: string; templateName?: string },
+  ) {
+    const tenantId = req.user.tenantId ?? req.user.id;
+    return this.conversationsService.initiateConversation(
+      tenantId,
+      body.contactId,
+      body.templateName ?? "hello_world",
+      req.user.id,
+    );
+  }
 }
