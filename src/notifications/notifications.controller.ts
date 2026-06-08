@@ -11,9 +11,7 @@ import {
 } from "@nestjs/common";
 import { NotificationsService } from "./notifications.service";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
-import { UserPayload } from "../auth/dto/auth-response.interface";
-
-type AuthReq = { user: UserPayload & { tenantId?: string } };
+import type { AuthReq } from "../auth/dto/auth-request.interface";
 
 @UseGuards(JwtAuthGuard)
 @Controller("notifications")

@@ -18,9 +18,8 @@ import {
   UpdateConversationDto,
 } from "./dto/send-message.dto";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
-import { UserPayload } from "../auth/dto/auth-response.interface";
+import type { AuthReq } from "../auth/dto/auth-request.interface";
 
-type AuthReq = { user: UserPayload & { tenantId?: string; role?: string } };
 
 @UseGuards(JwtAuthGuard)
 @Controller("conversations")

@@ -14,9 +14,7 @@ import {
 import { TemplatesService } from "./templates.service";
 import { CreateTemplateDto } from "./dto/create-template.dto";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
-import { UserPayload } from "../auth/dto/auth-response.interface";
-
-type AuthReq = { user: UserPayload & { tenantId?: string } };
+import type { AuthReq } from "../auth/dto/auth-request.interface";
 
 @UseGuards(JwtAuthGuard)
 @Controller("templates")

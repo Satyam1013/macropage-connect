@@ -12,9 +12,7 @@ import {
 import { FileInterceptor } from "@nestjs/platform-express";
 import { UploadService } from "./upload.service";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
-import { UserPayload } from "../auth/dto/auth-response.interface";
-
-type AuthReq = { user: UserPayload & { tenantId?: string } };
+import type { AuthReq } from "../auth/dto/auth-request.interface";
 
 @UseGuards(JwtAuthGuard)
 @Controller("upload")

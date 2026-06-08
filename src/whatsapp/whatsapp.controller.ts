@@ -11,15 +11,13 @@ import {
 } from "@nestjs/common";
 import { WhatsappService } from "./whatsapp.service";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
-import { UserPayload } from "../auth/dto/auth-response.interface";
+import type { AuthReq } from "../auth/dto/auth-request.interface";
 import {
   BusinessInfoDto,
   ConfirmPhoneDto,
   ConnectMetaDto,
   VerifyPhoneDto,
 } from "./dto/whatsapp.dto";
-
-type AuthReq = { user: UserPayload & { tenantId?: string } };
 
 @UseGuards(JwtAuthGuard)
 @Controller("whatsapp")

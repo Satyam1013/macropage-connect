@@ -13,9 +13,8 @@ import {
 } from "@nestjs/common";
 import { SettingsService } from "./settings.service";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
-import { UserPayload } from "../auth/dto/auth-response.interface";
+import type { AuthReq } from "../auth/dto/auth-request.interface";
 
-type AuthReq = { user: UserPayload & { tenantId?: string } };
 
 @UseGuards(JwtAuthGuard)
 @Controller("settings")

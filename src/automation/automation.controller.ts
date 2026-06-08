@@ -14,9 +14,7 @@ import {
 } from "@nestjs/common";
 import { AutomationService } from "./automation.service";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
-import { UserPayload } from "../auth/dto/auth-response.interface";
-
-type AuthReq = { user: UserPayload & { tenantId?: string } };
+import type { AuthReq } from "../auth/dto/auth-request.interface";
 
 @UseGuards(JwtAuthGuard)
 @Controller("automation")

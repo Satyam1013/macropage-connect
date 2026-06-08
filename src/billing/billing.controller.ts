@@ -1,9 +1,7 @@
 import { Controller, Get, UseGuards, Request } from "@nestjs/common";
 import { BillingService } from "./billing.service";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
-import { UserPayload } from "../auth/dto/auth-response.interface";
-
-type AuthReq = { user: UserPayload & { tenantId?: string } };
+import type { AuthReq } from "../auth/dto/auth-request.interface";
 
 @Controller("billing")
 export class BillingController {
