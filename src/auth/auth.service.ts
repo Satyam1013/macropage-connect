@@ -234,7 +234,7 @@ export class AuthService {
   private signAccessToken(sub: string, email: string): string {
     const expiresIn = this.config.get<string>(
       "JWT_EXPIRES_IN",
-      "15m",
+      "24h",
     ) as `${number}${"s" | "m" | "h" | "d"}`;
     return this.jwt.sign(
       { sub, email },

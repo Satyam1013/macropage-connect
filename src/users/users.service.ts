@@ -45,7 +45,7 @@ export class UsersService {
       password: hashed,
       phone: dto.phone,
       company: dto.company,
-      role: dto.role ?? "AGENT",
+      role: dto.role ?? "OWNER",
       trialEndsAt: new Date(
         Date.now() + 30 * 24 * 60 * 60 * 1000,
       ).toISOString(),

@@ -35,7 +35,7 @@ import { Session, SessionSchema } from "../schemas/session.schema";
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
         secret: config.get<string>("JWT_SECRET", "fallback-secret"),
-        signOptions: { expiresIn: "15m" as const },
+        signOptions: { expiresIn: "24h" as const },
       }),
     }),
   ],

@@ -20,7 +20,6 @@ import {
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import type { AuthReq } from "../auth/dto/auth-request.interface";
 
-
 @UseGuards(JwtAuthGuard)
 @Controller("conversations")
 export class ConversationsController {
