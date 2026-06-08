@@ -4,7 +4,7 @@ import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import type { AuthReq } from "../auth/dto/auth-request.interface";
 
 @UseGuards(JwtAuthGuard)
-@Controller("dashboard")
+@Controller("analytics/dashboard")
 export class DashboardController {
   constructor(private readonly analyticsService: AnalyticsService) {}
 
@@ -15,11 +15,7 @@ export class DashboardController {
     @Query("to") to?: string,
   ) {
     const tenantId = req.user.tenantId ?? req.user.id;
-    const dateFrom = from
-      ? new Date(from)
-      : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-    const dateTo = to ? new Date(to) : new Date();
-    return this.analyticsService.getStats(tenantId, dateFrom, dateTo);
+    return this.analyticsService.getDashboardStats(tenantId, from, to);
   }
 
   @Get("chart")
@@ -27,12 +23,29 @@ export class DashboardController {
     @Request() req: AuthReq,
     @Query("from") from?: string,
     @Query("to") to?: string,
+    @Query("groupBy") groupBy?: string,
   ) {
     const tenantId = req.user.tenantId ?? req.user.id;
-    const dateFrom = from
-      ? new Date(from)
-      : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-    const dateTo = to ? new Date(to) : new Date();
-    return this.analyticsService.getChartData(tenantId, dateFrom, dateTo);
+    return this.analyticsService.getDashboardChart(
+      tenantId,
+      from,
+      to,
+      groupBy ?? "day",
+    );
+  }
+
+  @Get("recent")
+  getRecent(@Request() req: AuthReq, @Query("limit") limit?: string) {
+    const tenantId = req.user.tenantId ?? req.user.id;
+    return this.analyticsService.getDashboardRecent(
+      tenantId,
+      limit ? Number(limit) : 10,
+    );
+  }
+
+  @Get("health")
+  getHealth(@Request() req: AuthReq) {
+    const tenantId = req.user.tenantId ?? req.user.id;
+    return this.analyticsService.getDashboardHealth(tenantId);
   }
 }
