@@ -278,6 +278,29 @@ export class WhatsappService {
     }
 
     const token = this.encryption.decrypt(waba.accessToken);
+
+    // Check if the phone is already verified on Meta's side
+    try {
+      const phoneResp = await axios.get<{
+        code_verification_status?: string;
+      }>(`${BASE}/${dto.phoneNumberId}`, {
+        params: { fields: "code_verification_status", access_token: token },
+      });
+      if (phoneResp.data.code_verification_status === "VERIFIED") {
+        await this.wabaModel.updateOne({ tenantId }, { phoneVerified: true });
+        return {
+          success: true,
+          data: {
+            message: "Phone number is already verified",
+            alreadyVerified: true,
+            nextStep: 4,
+          },
+        };
+      }
+    } catch {
+      // ignore — proceed to request_code
+    }
+
     try {
       await axios.post(
         `${BASE}/${dto.phoneNumberId}/request_code`,
@@ -285,12 +308,38 @@ export class WhatsappService {
         { headers: { Authorization: `Bearer ${token}` } },
       );
     } catch (err) {
-      if (axios.isAxiosError(err) && err.response?.status === 429) {
+      if (axios.isAxiosError(err)) {
+        const metaErr = (
+          err.response?.data as {
+            error?: { message?: string; code?: number };
+          }
+        )?.error;
+        // "Request code error" means the number is already verified on Meta
+        if (metaErr?.message?.toLowerCase().includes("request code error")) {
+          await this.wabaModel.updateOne({ tenantId }, { phoneVerified: true });
+          return {
+            success: true,
+            data: {
+              message: "Phone number is already verified",
+              alreadyVerified: true,
+              nextStep: 4,
+            },
+          };
+        }
+        if (err.response?.status === 429) {
+          throw new BadRequestException({
+            success: false,
+            error: {
+              code: "TOO_MANY_REQUESTS",
+              message: "Meta rate limited the OTP request",
+            },
+          });
+        }
         throw new BadRequestException({
           success: false,
           error: {
-            code: "TOO_MANY_REQUESTS",
-            message: "Meta rate limited the OTP request",
+            code: "META_REQUEST_FAIL",
+            message: metaErr?.message ?? "Meta rejected the OTP request",
           },
         });
       }
