@@ -1,4 +1,9 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from "@nestjs/common";
+import axios from "axios";
 import { InjectModel } from "@nestjs/mongoose";
 import { Model } from "mongoose";
 import {
@@ -48,14 +53,23 @@ export class TemplatesService {
     if (dto.buttons)
       components.push({ type: "BUTTONS", ...(dto.buttons as object) });
 
-    const metaResp = await client.createTemplate({
-      name: dto.name,
-      category: dto.category,
-      language: dto.language,
-      components,
-    });
-
-    const metaId = (metaResp.data as { id?: string }).id;
+    let metaId: string | undefined;
+    try {
+      const metaResp = await client.createTemplate({
+        name: dto.name,
+        category: dto.category,
+        language: dto.language,
+        components,
+      });
+      metaId = (metaResp.data as { id?: string }).id;
+    } catch (err) {
+      if (axios.isAxiosError(err)) {
+        const metaMsg = (err.response?.data as { error?: { message?: string } })
+          ?.error?.message;
+        throw new BadRequestException(metaMsg ?? "Meta rejected the template");
+      }
+      throw err;
+    }
 
     return this.templateModel.create({
       ...dto,
