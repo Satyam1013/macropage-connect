@@ -9,15 +9,15 @@ import {
   HttpCode,
   HttpStatus,
 } from "@nestjs/common";
-import {
-  WhatsappService,
-  BusinessInfoDto,
-  ConnectMetaDto,
-  VerifyPhoneDto,
-  ConfirmPhoneDto,
-} from "./whatsapp.service";
+import { WhatsappService } from "./whatsapp.service";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { UserPayload } from "../auth/dto/auth-response.interface";
+import {
+  BusinessInfoDto,
+  ConfirmPhoneDto,
+  ConnectMetaDto,
+  VerifyPhoneDto,
+} from "./dto/whatsapp.dto";
 
 type AuthReq = { user: UserPayload & { tenantId?: string } };
 

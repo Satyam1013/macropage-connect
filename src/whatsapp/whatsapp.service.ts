@@ -8,33 +8,14 @@ import {
 } from "../schemas/waba-account.schema";
 import { User, UserDocument } from "../users/schemas/user.schema";
 import { EncryptionService } from "../meta/encryption.service";
+import {
+  BusinessInfoDto,
+  ConnectMetaDto,
+  VerifyPhoneDto,
+  ConfirmPhoneDto,
+} from "./dto/whatsapp.dto";
 
 const BASE = "https://graph.facebook.com/v21.0";
-
-export class BusinessInfoDto {
-  businessName!: string;
-  category!: string;
-  description!: string;
-  website?: string;
-  address?: string;
-  email?: string;
-}
-
-export class ConnectMetaDto {
-  code!: string;
-  wabaId?: string;
-  phoneNumberId?: string;
-}
-
-export class VerifyPhoneDto {
-  phoneNumberId!: string;
-  method!: "SMS" | "VOICE";
-}
-
-export class ConfirmPhoneDto {
-  phoneNumberId!: string;
-  code!: string;
-}
 
 @Injectable()
 export class WhatsappService {
