@@ -5,6 +5,7 @@ import { WebhookService } from "./webhook.service";
 import { WebhookController } from "./webhook.controller";
 import { ContactsModule } from "../contacts/contacts.module";
 import { ConversationsModule } from "../conversations/conversations.module";
+import { GatewayModule } from "../gateway/gateway.module";
 
 @Module({
   imports: [
@@ -13,6 +14,7 @@ import { ConversationsModule } from "../conversations/conversations.module";
     ]),
     ContactsModule,
     ConversationsModule,
+    GatewayModule,
   ],
   providers: [WebhookService],
   controllers: [WebhookController],

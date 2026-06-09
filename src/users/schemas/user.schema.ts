@@ -76,6 +76,18 @@ export class User {
   @Prop()
   address?: string;
 
+  @Prop()
+  city?: string;
+
+  @Prop()
+  state?: string;
+
+  @Prop({ default: "IN" })
+  country!: string;
+
+  @Prop()
+  postalCode?: string;
+
   @Prop({ type: String, enum: ["FREE", "PRO"], default: "FREE" })
   plan!: "FREE" | "PRO";
 

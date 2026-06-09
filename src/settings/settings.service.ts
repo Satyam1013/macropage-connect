@@ -34,7 +34,7 @@ export class SettingsService {
     const user = await this.userModel
       .findById(tenantId)
       .select(
-        "_id name company email website description industry address city state country timezone language logoUrl createdAt",
+        "_id name company email website description industry address city state country postalCode timezone language logoUrl createdAt",
       )
       .lean()
       .exec();
@@ -53,6 +53,7 @@ export class SettingsService {
       city?: string;
       state?: string;
       country?: string;
+      postalCode?: string;
       timezone?: string;
       language?: string;
       currency?: string;
@@ -64,13 +65,17 @@ export class SettingsService {
     if (dto.description !== undefined) update.description = dto.description;
     if (dto.industry !== undefined) update.industry = dto.industry;
     if (dto.address !== undefined) update.address = dto.address;
+    if (dto.city !== undefined) update.city = dto.city;
+    if (dto.state !== undefined) update.state = dto.state;
+    if (dto.country !== undefined) update.country = dto.country;
+    if (dto.postalCode !== undefined) update.postalCode = dto.postalCode;
     if (dto.timezone !== undefined) update.timezone = dto.timezone;
     if (dto.language !== undefined) update.language = dto.language;
 
     const updated = await this.userModel
       .findByIdAndUpdate(tenantId, update, { new: true })
       .select(
-        "_id name company email website description industry address timezone language logoUrl",
+        "_id name company email website description industry address city state country postalCode timezone language logoUrl",
       )
       .lean()
       .exec();

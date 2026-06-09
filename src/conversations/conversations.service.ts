@@ -11,22 +11,18 @@ import {
   Conversation,
   ConversationDocument,
 } from "../schemas/conversation.schema";
-import {
-  Message,
-  MessageDocument,
-} from "../schemas/message.schema";
+import { Message, MessageDocument } from "../schemas/message.schema";
 import type { MessageType } from "../messages/messages.types";
 import { Contact, ContactDocument } from "../schemas/contact.schema";
 import { User, UserDocument } from "../users/schemas/user.schema";
 import { MetaService } from "../meta/meta.service";
-import { EventsGateway } from "../gateway/events.gateway";
+import { SocketService } from "../gateway/socket.service";
 import {
   SendMessageDto,
   AddNoteDto,
   UpdateConversationDto,
 } from "./dto/send-message.dto";
 import type { ConversationFilters } from "./conversations.types";
-
 
 @Injectable()
 export class ConversationsService {
@@ -40,7 +36,7 @@ export class ConversationsService {
     @InjectModel(User.name)
     private readonly userModel: Model<UserDocument>,
     private readonly metaService: MetaService,
-    private readonly gateway: EventsGateway,
+    private readonly socketService: SocketService,
   ) {}
 
   async findAll(
@@ -294,7 +290,20 @@ export class ConversationsService {
       { lastMessageAt: new Date() },
     );
 
-    this.gateway.emitToTenant(tenantId, "message:new", message);
+    this.socketService.newMessage(tenantId, {
+      _id: String(message._id),
+      conversationId: String(message.conversationId),
+      direction: message.direction,
+      type: message.type,
+      content: message.content,
+      mediaUrl: message.mediaUrl ?? null,
+      metaMessageId: message.metaMessageId,
+      status: message.status,
+      isNote: false,
+      agentId,
+      sentAt: message.sentAt,
+      createdAt: (message as MessageDocument & { createdAt?: Date }).createdAt,
+    } as Record<string, unknown>);
     return message;
   }
 
@@ -313,7 +322,15 @@ export class ConversationsService {
       isNote: true,
       agentId,
     });
-    this.gateway.emitToTenant(tenantId, "message:new", note);
+    this.socketService.newMessage(tenantId, {
+      _id: String(note._id),
+      conversationId: String(note.conversationId),
+      direction: note.direction,
+      type: note.type,
+      content: note.content,
+      isNote: true,
+      agentId,
+    } as Record<string, unknown>);
     return note;
   }
 
@@ -326,7 +343,7 @@ export class ConversationsService {
       .findOneAndUpdate({ _id: id, tenantId }, dto, { new: true })
       .exec();
     if (!conv) throw new NotFoundException("Conversation not found");
-    this.gateway.emitToTenant(tenantId, "conversation:updated", conv);
+    this.socketService.conversationUpdated(tenantId, conv);
     return conv;
   }
 
@@ -347,7 +364,7 @@ export class ConversationsService {
     if (existing) return existing;
 
     const conv = await this.convModel.create({ tenantId, contactId });
-    this.gateway.emitToTenant(tenantId, "conversation:new", conv);
+    this.socketService.conversationCreated(tenantId, conv);
     return conv;
   }
 
@@ -412,7 +429,16 @@ export class ConversationsService {
       { lastMessageAt: new Date() },
     );
 
-    this.gateway.emitToTenant(tenantId, "message:new", message);
+    this.socketService.newMessage(tenantId, {
+      _id: String(message._id),
+      conversationId: String(message.conversationId),
+      direction: "OUTBOUND",
+      type: "TEMPLATE",
+      content: templateName,
+      metaMessageId,
+      status: "SENT",
+      agentId,
+    } as Record<string, unknown>);
 
     return {
       success: true,
@@ -449,7 +475,15 @@ export class ConversationsService {
       { lastMessageAt: new Date(timestamp * 1000), $inc: { unreadCount: 1 } },
     );
 
-    this.gateway.emitToTenant(tenantId, "message:new", message);
+    this.socketService.newMessage(tenantId, {
+      _id: String(message._id),
+      conversationId: String(message.conversationId),
+      direction: "INBOUND",
+      type: message.type,
+      content: message.content,
+      metaMessageId: message.metaMessageId,
+      isNote: false,
+    } as Record<string, unknown>);
     return message;
   }
 
@@ -469,9 +503,11 @@ export class ConversationsService {
       .exec();
 
     if (msg) {
-      this.gateway.emitToTenant(tenantId, "message:status", {
-        messageId: msg.id,
+      this.socketService.messageStatus(tenantId, {
+        messageId: String(msg._id),
+        conversationId: String(msg.conversationId),
         status: status.toUpperCase(),
+        timestamp: new Date().toISOString(),
       });
     }
   }
