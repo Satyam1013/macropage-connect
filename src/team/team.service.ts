@@ -7,7 +7,7 @@ import { InjectModel } from "@nestjs/mongoose";
 import { Model } from "mongoose";
 import * as crypto from "crypto";
 import { User, UserDocument } from "../users/schemas/user.schema";
-import type { UserRole } from "../schemas/team-invite.schema";
+import type { TeamUserRole } from "./team.types";
 import { TeamInvite, TeamInviteDocument } from "../schemas/team-invite.schema";
 import { EmailService } from "../queue/email.service";
 
@@ -50,7 +50,7 @@ export class TeamService {
     const invite = await this.inviteModel.create({
       tenantId,
       email,
-      role: role as UserRole,
+      role: role as TeamUserRole,
       tokenHash,
       invitedBy,
       expiresAt: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),

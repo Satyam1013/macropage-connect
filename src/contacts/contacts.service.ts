@@ -7,14 +7,7 @@ import { InjectModel } from "@nestjs/mongoose";
 import { Model } from "mongoose";
 import { Contact, ContactDocument } from "../schemas/contact.schema";
 import { CreateContactDto } from "./dto/create-contact.dto";
-
-export interface ContactFilters {
-  search?: string;
-  tags?: string[];
-  isOptedOut?: boolean;
-  page?: number;
-  limit?: number;
-}
+import type { ContactFilters } from "./contacts.types";
 
 @Injectable()
 export class ContactsService {

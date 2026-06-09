@@ -2,6 +2,7 @@ import { Injectable, BadRequestException } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
 import { Model } from "mongoose";
 import axios from "axios";
+import { META_GRAPH_BASE as BASE } from "../meta/meta.constants";
 import {
   WABAAccount,
   WABAAccountDocument,
@@ -14,8 +15,6 @@ import {
   VerifyPhoneDto,
   ConfirmPhoneDto,
 } from "./dto/whatsapp.dto";
-
-const BASE = "https://graph.facebook.com/v21.0";
 
 @Injectable()
 export class WhatsappService {

@@ -1,3 +1,7 @@
+import type {
+  TemplateStatus,
+  TemplateCategory,
+} from "../templates/templates.types";
 import { Prop, Schema, SchemaFactory } from "@nestjs/mongoose";
 import { HydratedDocument } from "mongoose";
 
@@ -5,9 +9,6 @@ export type TemplateDocument = HydratedDocument<Template> & {
   createdAt: Date;
   updatedAt: Date;
 };
-
-export type TemplateStatus = "PENDING" | "APPROVED" | "REJECTED" | "PAUSED";
-export type TemplateCategory = "MARKETING" | "UTILITY" | "AUTHENTICATION";
 
 @Schema({ timestamps: true })
 export class Template {

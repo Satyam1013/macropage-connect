@@ -2,13 +2,12 @@ import { Injectable, BadRequestException } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
 import { Model } from "mongoose";
 import axios, { AxiosInstance } from "axios";
+import { META_GRAPH_BASE as BASE } from "./meta.constants";
 import {
   WABAAccount,
   WABAAccountDocument,
 } from "../schemas/waba-account.schema";
 import { EncryptionService } from "./encryption.service";
-
-const BASE = "https://graph.facebook.com/v21.0";
 
 @Injectable()
 export class MetaService {

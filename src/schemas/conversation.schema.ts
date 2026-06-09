@@ -1,3 +1,4 @@
+import type { ConversationStatus } from "../conversations/conversations.types";
 import { Prop, Schema, SchemaFactory } from "@nestjs/mongoose";
 import { HydratedDocument } from "mongoose";
 
@@ -5,8 +6,6 @@ export type ConversationDocument = HydratedDocument<Conversation> & {
   createdAt: Date;
   updatedAt: Date;
 };
-
-export type ConversationStatus = "OPEN" | "PENDING" | "RESOLVED";
 
 @Schema({ timestamps: true })
 export class Conversation {

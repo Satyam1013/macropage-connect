@@ -1,23 +1,14 @@
+import type {
+  MessageDirection,
+  MessageType,
+  MessageStatus,
+} from "../messages/messages.types";
 import { Prop, Schema, SchemaFactory } from "@nestjs/mongoose";
 import { HydratedDocument } from "mongoose";
 
 export type MessageDocument = HydratedDocument<Message> & {
   createdAt: Date;
 };
-
-export type MessageDirection = "INBOUND" | "OUTBOUND";
-export type MessageType =
-  | "TEXT"
-  | "IMAGE"
-  | "VIDEO"
-  | "DOCUMENT"
-  | "AUDIO"
-  | "TEMPLATE"
-  | "INTERACTIVE"
-  | "LOCATION"
-  | "NOTE"
-  | "SYSTEM";
-export type MessageStatus = "SENT" | "DELIVERED" | "READ" | "FAILED";
 
 @Schema({ timestamps: { createdAt: true, updatedAt: false } })
 export class Message {

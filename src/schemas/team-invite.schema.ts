@@ -1,12 +1,10 @@
+import type { InviteStatus, TeamUserRole } from "../team/team.types";
 import { Prop, Schema, SchemaFactory } from "@nestjs/mongoose";
 import { HydratedDocument } from "mongoose";
 
 export type TeamInviteDocument = HydratedDocument<TeamInvite> & {
   createdAt: Date;
 };
-
-export type InviteStatus = "PENDING" | "ACCEPTED" | "EXPIRED" | "CANCELLED";
-export type UserRole = "OWNER" | "ADMIN" | "MANAGER" | "AGENT";
 
 @Schema({ timestamps: { createdAt: true, updatedAt: false } })
 export class TeamInvite {
@@ -17,7 +15,7 @@ export class TeamInvite {
   email!: string;
 
   @Prop({ type: String, enum: ["OWNER", "ADMIN", "MANAGER", "AGENT"] })
-  role!: UserRole;
+  role!: TeamUserRole;
 
   @Prop({ required: true, unique: true })
   tokenHash!: string;

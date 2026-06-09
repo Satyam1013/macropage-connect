@@ -5,12 +5,7 @@ import * as nodemailer from "nodemailer";
 import SMTPTransport from "nodemailer/lib/smtp-transport"; // ✅ import SMTP transport directly
 import { ConfigService } from "@nestjs/config";
 
-export type EmailJobData = {
-  to: string;
-  subject: string;
-  html: string;
-  text?: string;
-};
+import { EmailJobData } from "../queue.types";
 
 @Processor("emails")
 export class EmailProcessor extends WorkerHost {

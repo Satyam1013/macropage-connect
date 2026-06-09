@@ -6,11 +6,8 @@ import {
 import axios from "axios";
 import { InjectModel } from "@nestjs/mongoose";
 import { Model } from "mongoose";
-import {
-  Template,
-  TemplateDocument,
-  TemplateCategory,
-} from "../schemas/template.schema";
+import { Template, TemplateDocument } from "../schemas/template.schema";
+import type { TemplateCategory } from "./templates.types";
 import { MetaService } from "../meta/meta.service";
 import { CreateTemplateDto } from "./dto/create-template.dto";
 

@@ -1,3 +1,4 @@
+import type { Plan, SubStatus } from "../billing/billing.types";
 import { Prop, Schema, SchemaFactory } from "@nestjs/mongoose";
 import { HydratedDocument } from "mongoose";
 
@@ -5,14 +6,6 @@ export type SubscriptionDocument = HydratedDocument<Subscription> & {
   createdAt: Date;
   updatedAt: Date;
 };
-
-export type Plan = "TRIAL" | "STARTER" | "GROWTH" | "BUSINESS" | "ENTERPRISE";
-export type SubStatus =
-  | "TRIALING"
-  | "ACTIVE"
-  | "PAST_DUE"
-  | "CANCELLED"
-  | "PAUSED";
 
 @Schema({ timestamps: true })
 export class Subscription {

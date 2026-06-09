@@ -1,3 +1,4 @@
+import type { CampaignStatus } from "../campaigns/campaigns.types";
 import { Prop, Schema, SchemaFactory } from "@nestjs/mongoose";
 import { HydratedDocument } from "mongoose";
 
@@ -5,15 +6,6 @@ export type CampaignDocument = HydratedDocument<Campaign> & {
   createdAt: Date;
   updatedAt: Date;
 };
-
-export type CampaignStatus =
-  | "DRAFT"
-  | "SCHEDULED"
-  | "RUNNING"
-  | "PAUSED"
-  | "COMPLETED"
-  | "FAILED"
-  | "CANCELLED";
 
 @Schema({ timestamps: true })
 export class Campaign {

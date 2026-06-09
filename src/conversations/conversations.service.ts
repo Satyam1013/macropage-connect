@@ -14,8 +14,8 @@ import {
 import {
   Message,
   MessageDocument,
-  MessageType,
 } from "../schemas/message.schema";
+import type { MessageType } from "../messages/messages.types";
 import { Contact, ContactDocument } from "../schemas/contact.schema";
 import { User, UserDocument } from "../users/schemas/user.schema";
 import { MetaService } from "../meta/meta.service";
@@ -25,15 +25,8 @@ import {
   AddNoteDto,
   UpdateConversationDto,
 } from "./dto/send-message.dto";
+import type { ConversationFilters } from "./conversations.types";
 
-export interface ConversationFilters {
-  status?: string;
-  assignedTo?: string;
-  unread?: boolean;
-  search?: string;
-  page?: number;
-  limit?: number;
-}
 
 @Injectable()
 export class ConversationsService {

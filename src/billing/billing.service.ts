@@ -1,91 +1,12 @@
 import { Injectable } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
+import { PLAN_LIMITS, PLAN_PRICING } from "./billing.constants";
 import { Model } from "mongoose";
 import {
   Subscription,
   SubscriptionDocument,
 } from "../schemas/subscription.schema";
 import { Invoice, InvoiceDocument } from "../schemas/invoice.schema";
-
-export const PLAN_LIMITS = {
-  TRIAL: {
-    teamMembers: 10,
-    contacts: 25000,
-    whatsappNumbers: 2,
-    aiSessions: 500,
-    flowBuilder: true,
-    aiChatbot: true,
-    apiAccess: true,
-  },
-  STARTER: {
-    teamMembers: 3,
-    contacts: 5000,
-    whatsappNumbers: 1,
-    aiSessions: 0,
-    flowBuilder: false,
-    aiChatbot: false,
-    apiAccess: false,
-  },
-  GROWTH: {
-    teamMembers: 10,
-    contacts: 25000,
-    whatsappNumbers: 2,
-    aiSessions: 500,
-    flowBuilder: true,
-    aiChatbot: true,
-    apiAccess: true,
-  },
-  BUSINESS: {
-    teamMembers: 25,
-    contacts: 100000,
-    whatsappNumbers: 5,
-    aiSessions: 5000,
-    flowBuilder: true,
-    aiChatbot: true,
-    apiAccess: true,
-  },
-  ENTERPRISE: {
-    teamMembers: -1,
-    contacts: -1,
-    whatsappNumbers: -1,
-    aiSessions: -1,
-    flowBuilder: true,
-    aiChatbot: true,
-    apiAccess: true,
-  },
-};
-
-export const PLAN_PRICING = [
-  {
-    id: "STARTER",
-    name: "Starter",
-    price: 1999,
-    currency: "INR",
-    period: "month",
-  },
-  {
-    id: "GROWTH",
-    name: "Growth",
-    price: 4999,
-    currency: "INR",
-    period: "month",
-  },
-  {
-    id: "BUSINESS",
-    name: "Business",
-    price: 9999,
-    currency: "INR",
-    period: "month",
-  },
-  {
-    id: "ENTERPRISE",
-    name: "Enterprise",
-    price: 0,
-    currency: "INR",
-    period: "month",
-    custom: true,
-  },
-];
 
 @Injectable()
 export class BillingService {
