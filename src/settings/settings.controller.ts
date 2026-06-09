@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Patch,
+  Put,
   Delete,
   Body,
   Param,
@@ -10,18 +11,102 @@ import {
   Request,
   HttpCode,
   HttpStatus,
+  UseInterceptors,
+  UploadedFile,
 } from "@nestjs/common";
+import { FileInterceptor } from "@nestjs/platform-express";
 import { SettingsService } from "./settings.service";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import type { AuthReq } from "../auth/dto/auth-request.interface";
-
 
 @UseGuards(JwtAuthGuard)
 @Controller("settings")
 export class SettingsController {
   constructor(private readonly settingsService: SettingsService) {}
 
-  // API Keys
+  // ── Account / Company settings ────────────────────────────────────────────
+
+  @Get("account")
+  getAccount(@Request() req: AuthReq) {
+    return this.settingsService.getAccount(req.user.tenantId ?? req.user.id);
+  }
+
+  @Patch("account")
+  updateAccount(
+    @Request() req: AuthReq,
+    @Body()
+    dto: {
+      companyName?: string;
+      website?: string;
+      description?: string;
+      industry?: string;
+      address?: string;
+      city?: string;
+      state?: string;
+      country?: string;
+      timezone?: string;
+      language?: string;
+      currency?: string;
+    },
+  ) {
+    return this.settingsService.updateAccount(
+      req.user.tenantId ?? req.user.id,
+      dto,
+    );
+  }
+
+  @Post("account/logo")
+  @UseInterceptors(FileInterceptor("file"))
+  uploadLogo(
+    @Request() req: AuthReq,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    return this.settingsService.uploadLogo(
+      req.user.tenantId ?? req.user.id,
+      file,
+    );
+  }
+
+  // ── User profile ──────────────────────────────────────────────────────────
+
+  @Get("profile")
+  getProfile(@Request() req: AuthReq) {
+    return this.settingsService.getProfile(req.user.id);
+  }
+
+  @Patch("profile")
+  updateProfile(
+    @Request() req: AuthReq,
+    @Body()
+    dto: {
+      name?: string;
+      phone?: string;
+      department?: string;
+      jobTitle?: string;
+      timezone?: string;
+      language?: string;
+    },
+  ) {
+    return this.settingsService.updateProfile(req.user.id, dto);
+  }
+
+  // ── Notification preferences ──────────────────────────────────────────────
+
+  @Get("notifications")
+  getNotifications(@Request() req: AuthReq) {
+    return this.settingsService.getNotificationPrefs(req.user.id);
+  }
+
+  @Put("notifications")
+  updateNotifications(
+    @Request() req: AuthReq,
+    @Body() dto: Record<string, unknown>,
+  ) {
+    return this.settingsService.updateNotificationPrefs(req.user.id, dto);
+  }
+
+  // ── API Keys ──────────────────────────────────────────────────────────────
+
   @Get("api-keys")
   listApiKeys(@Request() req: AuthReq) {
     return this.settingsService.listApiKeys(req.user.tenantId ?? req.user.id);
@@ -49,7 +134,8 @@ export class SettingsController {
     );
   }
 
-  // Webhooks
+  // ── Webhooks ──────────────────────────────────────────────────────────────
+
   @Get("webhooks")
   listWebhooks(@Request() req: AuthReq) {
     return this.settingsService.listWebhooks(req.user.tenantId ?? req.user.id);
@@ -86,6 +172,14 @@ export class SettingsController {
   @HttpCode(HttpStatus.NO_CONTENT)
   deleteWebhook(@Request() req: AuthReq, @Param("id") id: string) {
     return this.settingsService.deleteWebhook(
+      req.user.tenantId ?? req.user.id,
+      id,
+    );
+  }
+
+  @Post("webhooks/:id/test")
+  testWebhook(@Request() req: AuthReq, @Param("id") id: string) {
+    return this.settingsService.testWebhook(
       req.user.tenantId ?? req.user.id,
       id,
     );

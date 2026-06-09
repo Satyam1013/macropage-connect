@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Patch,
   Delete,
   Body,
   UseGuards,
@@ -70,6 +71,24 @@ export class WhatsappController {
   completeSetup(@Request() req: AuthReq) {
     const tenantId = req.user.tenantId ?? req.user.id;
     return this.whatsappService.completeSetup(tenantId);
+  }
+
+  @Patch("profile")
+  @HttpCode(HttpStatus.OK)
+  updateProfile(
+    @Request() req: AuthReq,
+    @Body()
+    dto: {
+      about?: string;
+      address?: string;
+      description?: string;
+      email?: string;
+      websites?: string[];
+      vertical?: string;
+    },
+  ) {
+    const tenantId = req.user.tenantId ?? req.user.id;
+    return this.whatsappService.updateProfile(tenantId, dto);
   }
 
   @Delete("disconnect")

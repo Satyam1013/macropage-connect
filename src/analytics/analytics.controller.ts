@@ -3,7 +3,6 @@ import { AnalyticsService } from "./analytics.service";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import type { AuthReq } from "../auth/dto/auth-request.interface";
 
-
 @UseGuards(JwtAuthGuard)
 @Controller("analytics")
 export class AnalyticsController {
@@ -42,8 +41,45 @@ export class AnalyticsController {
   }
 
   @Get("campaigns")
-  getCampaignPerformance(@Request() req: AuthReq) {
+  getCampaignPerformance(
+    @Request() req: AuthReq,
+    @Query("from") from?: string,
+    @Query("to") to?: string,
+  ) {
     const tenantId = req.user.tenantId ?? req.user.id;
+    if (from || to) {
+      return this.analyticsService.getCampaignAnalytics(tenantId, from, to);
+    }
     return this.analyticsService.getCampaignPerformance(tenantId);
+  }
+
+  @Get("agents")
+  getAgents(
+    @Request() req: AuthReq,
+    @Query("from") from?: string,
+    @Query("to") to?: string,
+  ) {
+    const tenantId = req.user.tenantId ?? req.user.id;
+    return this.analyticsService.getAgentAnalytics(tenantId, from, to);
+  }
+
+  @Get("contacts")
+  getContacts(
+    @Request() req: AuthReq,
+    @Query("from") from?: string,
+    @Query("to") to?: string,
+  ) {
+    const tenantId = req.user.tenantId ?? req.user.id;
+    return this.analyticsService.getContactAnalytics(tenantId, from, to);
+  }
+
+  @Get("messages")
+  getMessages(
+    @Request() req: AuthReq,
+    @Query("from") from?: string,
+    @Query("to") to?: string,
+  ) {
+    const tenantId = req.user.tenantId ?? req.user.id;
+    return this.analyticsService.getMessageAnalytics(tenantId, from, to);
   }
 }

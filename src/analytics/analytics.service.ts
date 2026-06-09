@@ -13,6 +13,7 @@ import {
   WABAAccount,
   WABAAccountDocument,
 } from "../schemas/waba-account.schema";
+import { User, UserDocument } from "../users/schemas/user.schema";
 import { ANALYTICS_REDIS } from "./analytics.constants";
 
 @Injectable()
@@ -28,6 +29,8 @@ export class AnalyticsService {
     private readonly contactModel: Model<ContactDocument>,
     @InjectModel(WABAAccount.name)
     private readonly wabaModel: Model<WABAAccountDocument>,
+    @InjectModel(User.name)
+    private readonly userModel: Model<UserDocument>,
     @Inject(ANALYTICS_REDIS) private readonly redis: Redis,
   ) {}
 
@@ -448,6 +451,215 @@ export class AnalyticsService {
     };
   }
 
+  // ─── GET /analytics/agents ────────────────────────────────────────────────
+
+  async getAgentAnalytics(tenantId: string, from?: string, to?: string) {
+    const { dateFrom, dateTo } = this.getDateRange(from, to);
+
+    const agents = await this.userModel
+      .find({ tenantId, role: { $in: ["AGENT", "MANAGER", "ADMIN"] } })
+      .select("_id name avatarUrl role")
+      .lean()
+      .exec();
+
+    const agentStats = await Promise.all(
+      agents.map(async (agent) => {
+        const agentId = String(agent._id);
+        const [conversations, resolved, messagesSent] = await Promise.all([
+          this.convModel.countDocuments({
+            tenantId,
+            assignedTo: agentId,
+            createdAt: { $gte: dateFrom, $lte: dateTo },
+          }),
+          this.convModel.countDocuments({
+            tenantId,
+            assignedTo: agentId,
+            status: "RESOLVED",
+            createdAt: { $gte: dateFrom, $lte: dateTo },
+          }),
+          this.msgModel.countDocuments({
+            tenantId,
+            agentId,
+            direction: "OUTBOUND",
+            isNote: { $ne: true },
+            createdAt: { $gte: dateFrom, $lte: dateTo },
+          }),
+        ]);
+
+        return {
+          agent: {
+            id: agentId,
+            name: agent.name,
+            avatarUrl: agent.avatarUrl,
+            role: agent.role,
+          },
+          stats: {
+            conversations,
+            resolved,
+            resolutionRate:
+              conversations > 0
+                ? Math.round((resolved / conversations) * 100)
+                : 0,
+            messagesSent,
+          },
+        };
+      }),
+    );
+
+    return {
+      success: true,
+      data: {
+        agents: agentStats.sort(
+          (a, b) => b.stats.conversations - a.stats.conversations,
+        ),
+        period: { from: dateFrom.toISOString(), to: dateTo.toISOString() },
+      },
+    };
+  }
+
+  // ─── GET /analytics/contacts ──────────────────────────────────────────────
+
+  async getContactAnalytics(tenantId: string, from?: string, to?: string) {
+    const { dateFrom, dateTo } = this.getDateRange(from, to);
+    const cacheKey = `analytics:contacts:${tenantId}:${dateFrom.toDateString()}:${dateTo.toDateString()}`;
+    const cached = await this.cacheGet(cacheKey);
+    if (cached) return { success: true, data: cached };
+
+    const [totalContacts, newByDay, optOutByDay, topTags] = await Promise.all([
+      this.contactModel.countDocuments({ tenantId }),
+
+      this.contactModel.aggregate([
+        { $match: { tenantId, createdAt: { $gte: dateFrom, $lte: dateTo } } },
+        {
+          $group: {
+            _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
+            newContacts: { $sum: 1 },
+          },
+        },
+        { $sort: { _id: 1 } },
+        { $project: { date: "$_id", newContacts: 1, _id: 0 } },
+      ]),
+
+      this.contactModel.aggregate([
+        {
+          $match: {
+            tenantId,
+            isOptedOut: true,
+            optedOutAt: { $gte: dateFrom, $lte: dateTo },
+          },
+        },
+        {
+          $group: {
+            _id: {
+              $dateToString: { format: "%Y-%m-%d", date: "$optedOutAt" },
+            },
+            optOuts: { $sum: 1 },
+          },
+        },
+        { $sort: { _id: 1 } },
+        { $project: { date: "$_id", optOuts: 1, _id: 0 } },
+      ]),
+
+      this.contactModel.aggregate([
+        { $match: { tenantId, tags: { $exists: true, $ne: [] } } },
+        { $unwind: "$tags" },
+        { $group: { _id: "$tags", count: { $sum: 1 } } },
+        { $sort: { count: -1 } },
+        { $limit: 10 },
+        { $project: { tag: "$_id", count: 1, _id: 0 } },
+      ]),
+    ]);
+
+    const data = {
+      totalContacts,
+      newByDay,
+      optOutByDay,
+      topTags,
+      period: { from: dateFrom.toISOString(), to: dateTo.toISOString() },
+    };
+    await this.cacheSet(cacheKey, data, 300);
+    return { success: true, data };
+  }
+
+  // ─── GET /analytics/messages ──────────────────────────────────────────────
+
+  async getMessageAnalytics(tenantId: string, from?: string, to?: string) {
+    const { dateFrom, dateTo } = this.getDateRange(from, to);
+    const cacheKey = `analytics:messages:${tenantId}:${dateFrom.toDateString()}:${dateTo.toDateString()}`;
+    const cached = await this.cacheGet(cacheKey);
+    if (cached) return { success: true, data: cached };
+
+    const [byType, byDirection, byHour, totalInbound, totalOutbound] =
+      await Promise.all([
+        this.msgModel.aggregate([
+          {
+            $match: {
+              tenantId,
+              isNote: { $ne: true },
+              createdAt: { $gte: dateFrom, $lte: dateTo },
+            },
+          },
+          { $group: { _id: "$type", count: { $sum: 1 } } },
+          { $project: { type: "$_id", count: 1, _id: 0 } },
+        ]),
+
+        this.msgModel.aggregate([
+          {
+            $match: {
+              tenantId,
+              isNote: { $ne: true },
+              createdAt: { $gte: dateFrom, $lte: dateTo },
+            },
+          },
+          { $group: { _id: "$direction", count: { $sum: 1 } } },
+          { $project: { direction: "$_id", count: 1, _id: 0 } },
+        ]),
+
+        this.msgModel.aggregate([
+          {
+            $match: {
+              tenantId,
+              isNote: { $ne: true },
+              createdAt: { $gte: dateFrom, $lte: dateTo },
+            },
+          },
+          {
+            $group: {
+              _id: { $hour: "$createdAt" },
+              count: { $sum: 1 },
+            },
+          },
+          { $sort: { _id: 1 } },
+          { $project: { hour: "$_id", count: 1, _id: 0 } },
+        ]),
+
+        this.msgModel.countDocuments({
+          tenantId,
+          direction: "INBOUND",
+          createdAt: { $gte: dateFrom, $lte: dateTo },
+        }),
+
+        this.msgModel.countDocuments({
+          tenantId,
+          direction: "OUTBOUND",
+          isNote: { $ne: true },
+          createdAt: { $gte: dateFrom, $lte: dateTo },
+        }),
+      ]);
+
+    const data = {
+      byType,
+      byDirection,
+      byHour,
+      totalInbound,
+      totalOutbound,
+      total: totalInbound + totalOutbound,
+      period: { from: dateFrom.toISOString(), to: dateTo.toISOString() },
+    };
+    await this.cacheSet(cacheKey, data, 300);
+    return { success: true, data };
+  }
+
   // ─── Legacy methods (used by AnalyticsController) ─────────────────────────
 
   async getDashboard(tenantId: string, dateFrom: Date, dateTo: Date) {
@@ -527,5 +739,82 @@ export class AnalyticsService {
       .sort({ createdAt: -1 })
       .limit(10)
       .exec();
+  }
+
+  async getCampaignAnalytics(tenantId: string, from?: string, to?: string) {
+    const { dateFrom, dateTo } = this.getDateRange(from, to);
+    const cacheKey = `analytics:campaigns:${tenantId}:${dateFrom.toDateString()}:${dateTo.toDateString()}`;
+    const cached = await this.cacheGet(cacheKey);
+    if (cached) return { success: true, data: cached };
+
+    const campaigns = await this.campaignModel
+      .find({
+        tenantId,
+        status: { $in: ["COMPLETED", "RUNNING", "PAUSED"] },
+        startedAt: { $gte: dateFrom, $lte: dateTo },
+      })
+      .select(
+        "_id name status sent delivered read replied failed totalContacts startedAt completedAt",
+      )
+      .sort({ startedAt: -1 })
+      .lean()
+      .exec();
+
+    const totalSent = campaigns.reduce((s, c) => s + (c.sent ?? 0), 0);
+    const totalDelivered = campaigns.reduce(
+      (s, c) => s + (c.delivered ?? 0),
+      0,
+    );
+    const totalRead = campaigns.reduce((s, c) => s + (c.read ?? 0), 0);
+    const totalFailed = campaigns.reduce((s, c) => s + (c.failed ?? 0), 0);
+
+    const volumeByWeek = await this.campaignModel.aggregate([
+      {
+        $match: {
+          tenantId,
+          status: { $in: ["COMPLETED", "RUNNING"] },
+          startedAt: { $gte: dateFrom, $lte: dateTo },
+        },
+      },
+      {
+        $group: {
+          _id: { $dateToString: { format: "%Y-%U", date: "$startedAt" } },
+          campaigns: { $sum: 1 },
+          totalSent: { $sum: "$sent" },
+          totalDelivered: { $sum: "$delivered" },
+        },
+      },
+      { $sort: { _id: 1 } },
+      {
+        $project: {
+          week: "$_id",
+          campaigns: 1,
+          totalSent: 1,
+          totalDelivered: 1,
+          _id: 0,
+        },
+      },
+    ]);
+
+    const data = {
+      campaigns,
+      summary: {
+        totalCampaigns: campaigns.length,
+        totalSent,
+        totalDelivered,
+        deliveryRate:
+          totalSent > 0 ? Math.round((totalDelivered / totalSent) * 100) : 0,
+        totalRead,
+        readRate:
+          totalDelivered > 0
+            ? Math.round((totalRead / totalDelivered) * 100)
+            : 0,
+        totalFailed,
+      },
+      volumeByWeek,
+      period: { from: dateFrom.toISOString(), to: dateTo.toISOString() },
+    };
+    await this.cacheSet(cacheKey, data, 300);
+    return { success: true, data };
   }
 }

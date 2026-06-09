@@ -5,6 +5,8 @@ import {
   WebhookEndpoint,
   WebhookEndpointSchema,
 } from "../schemas/webhook-endpoint.schema";
+import { User, UserSchema } from "../users/schemas/user.schema";
+import { UploadModule } from "../upload/upload.module";
 import { SettingsService } from "./settings.service";
 import { SettingsController } from "./settings.controller";
 
@@ -13,7 +15,9 @@ import { SettingsController } from "./settings.controller";
     MongooseModule.forFeature([
       { name: APIKey.name, schema: APIKeySchema },
       { name: WebhookEndpoint.name, schema: WebhookEndpointSchema },
+      { name: User.name, schema: UserSchema },
     ]),
+    UploadModule,
   ],
   providers: [SettingsService],
   controllers: [SettingsController],

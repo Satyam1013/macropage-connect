@@ -10,6 +10,7 @@ import { Message, MessageSchema } from "../schemas/message.schema";
 import { Campaign, CampaignSchema } from "../schemas/campaign.schema";
 import { Contact, ContactSchema } from "../schemas/contact.schema";
 import { WABAAccount, WABAAccountSchema } from "../schemas/waba-account.schema";
+import { User, UserSchema } from "../users/schemas/user.schema";
 import { AnalyticsService } from "./analytics.service";
 import { AnalyticsController } from "./analytics.controller";
 import { DashboardController } from "./dashboard.controller";
@@ -24,6 +25,7 @@ import { ANALYTICS_REDIS } from "./analytics.constants";
       { name: Campaign.name, schema: CampaignSchema },
       { name: Contact.name, schema: ContactSchema },
       { name: WABAAccount.name, schema: WABAAccountSchema },
+      { name: User.name, schema: UserSchema },
     ]),
   ],
   providers: [

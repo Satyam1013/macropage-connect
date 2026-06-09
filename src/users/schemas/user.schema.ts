@@ -58,6 +58,12 @@ export class User {
   @Prop({ default: false })
   businessInfoSaved!: boolean;
 
+  @Prop({ default: false })
+  onboardingComplete!: boolean;
+
+  @Prop({ default: 1 })
+  onboardingStep!: number;
+
   @Prop()
   industry?: string;
 
@@ -87,6 +93,24 @@ export class User {
 
   @Prop()
   avatarUrl?: string;
+
+  @Prop()
+  logoUrl?: string;
+
+  @Prop()
+  department?: string;
+
+  @Prop()
+  jobTitle?: string;
+
+  @Prop({ default: "Asia/Kolkata" })
+  timezone!: string;
+
+  @Prop({ default: "en" })
+  language!: string;
+
+  @Prop({ type: Object, default: {} })
+  notificationPrefs!: Record<string, unknown>;
 
   @Prop({ default: "offline" })
   onlineStatus!: string;

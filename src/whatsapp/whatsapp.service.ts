@@ -508,6 +508,59 @@ export class WhatsappService {
     };
   }
 
+  async updateProfile(
+    tenantId: string,
+    dto: {
+      about?: string;
+      address?: string;
+      description?: string;
+      email?: string;
+      websites?: string[];
+      vertical?: string;
+    },
+  ) {
+    const waba = await this.wabaModel.findOne({ tenantId }).exec();
+    if (!waba?.metaConnected) {
+      throw new BadRequestException({
+        success: false,
+        error: {
+          code: "META_NOT_CONNECTED",
+          message: "WhatsApp not connected",
+        },
+      });
+    }
+
+    const token = this.encryption.decrypt(waba.accessToken);
+    try {
+      await axios.post(
+        `${BASE}/${waba.phoneNumberId}/whatsapp_business_profile`,
+        { messaging_product: "whatsapp", ...dto },
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+    } catch (err) {
+      if (axios.isAxiosError(err)) {
+        const msg = (err.response?.data as { error?: { message?: string } })
+          ?.error?.message;
+        throw new BadRequestException({
+          success: false,
+          error: {
+            code: "META_PROFILE_UPDATE_FAIL",
+            message: msg ?? "Failed to update WhatsApp profile",
+          },
+        });
+      }
+      throw new BadRequestException({
+        success: false,
+        error: {
+          code: "META_PROFILE_UPDATE_FAIL",
+          message: "Failed to update WhatsApp profile",
+        },
+      });
+    }
+
+    return { success: true, data: { message: "WhatsApp profile updated" } };
+  }
+
   async disconnect(tenantId: string): Promise<void> {
     const waba = await this.wabaModel.findOne({ tenantId }).exec();
     if (!waba) return;
