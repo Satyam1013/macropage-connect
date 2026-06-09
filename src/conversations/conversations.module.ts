@@ -6,6 +6,7 @@ import {
 } from "../schemas/conversation.schema";
 import { Message, MessageSchema } from "../schemas/message.schema";
 import { Contact, ContactSchema } from "../schemas/contact.schema";
+import { User, UserSchema } from "../users/schemas/user.schema";
 import { ConversationsService } from "./conversations.service";
 import { ConversationsController } from "./conversations.controller";
 import { MetaModule } from "../meta/meta.module";
@@ -17,6 +18,7 @@ import { GatewayModule } from "../gateway/gateway.module";
       { name: Conversation.name, schema: ConversationSchema },
       { name: Message.name, schema: MessageSchema },
       { name: Contact.name, schema: ContactSchema },
+      { name: User.name, schema: UserSchema },
     ]),
     MetaModule,
     GatewayModule,

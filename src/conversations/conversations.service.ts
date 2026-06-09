@@ -17,6 +17,7 @@ import {
   MessageType,
 } from "../schemas/message.schema";
 import { Contact, ContactDocument } from "../schemas/contact.schema";
+import { User, UserDocument } from "../users/schemas/user.schema";
 import { MetaService } from "../meta/meta.service";
 import { EventsGateway } from "../gateway/events.gateway";
 import {
@@ -43,6 +44,8 @@ export class ConversationsService {
     private readonly msgModel: Model<MessageDocument>,
     @InjectModel(Contact.name)
     private readonly contactModel: Model<ContactDocument>,
+    @InjectModel(User.name)
+    private readonly userModel: Model<UserDocument>,
     private readonly metaService: MetaService,
     private readonly gateway: EventsGateway,
   ) {}
@@ -61,32 +64,129 @@ export class ConversationsService {
     if (assignedTo) where.assignedTo = assignedTo;
     if (unread) where.unreadCount = { $gt: 0 };
 
-    const [data, total] = await Promise.all([
+    const [conversations, total] = await Promise.all([
       this.convModel
         .find(where)
         .sort({ lastMessageAt: -1 })
         .skip((page - 1) * limit)
         .limit(limit)
+        .lean()
         .exec(),
       this.convModel.countDocuments(where),
     ]);
 
+    // Batch-fetch contacts and agents
+    const contactIds = [
+      ...new Set(conversations.map((c) => c.contactId).filter(Boolean)),
+    ];
+    const agentIds = [
+      ...new Set(conversations.map((c) => c.assignedTo).filter(Boolean)),
+    ] as string[];
+
+    const [contacts, agents] = await Promise.all([
+      this.contactModel
+        .find({ _id: { $in: contactIds } })
+        .select("_id name phone email avatarUrl tags")
+        .lean()
+        .exec(),
+      agentIds.length
+        ? this.userModel
+            .find({ _id: { $in: agentIds } })
+            .select("_id name avatarUrl")
+            .lean()
+            .exec()
+        : Promise.resolve([]),
+    ]);
+
+    const contactMap = Object.fromEntries(
+      contacts.map((c) => [String(c._id), c]),
+    );
+    const agentMap = Object.fromEntries(agents.map((a) => [String(a._id), a]));
+
+    // Fetch last message per conversation
+    const data = await Promise.all(
+      conversations.map(async (conv) => {
+        const lastMessage = await this.msgModel
+          .findOne({ conversationId: String(conv._id), isNote: { $ne: true } })
+          .sort({ createdAt: -1 })
+          .select("_id content direction type status createdAt")
+          .lean()
+          .exec();
+
+        return {
+          ...conv,
+          contact: contactMap[String(conv.contactId)] ?? null,
+          assignedAgent: conv.assignedTo
+            ? (agentMap[String(conv.assignedTo)] ?? null)
+            : null,
+          lastMessage: lastMessage ?? null,
+        };
+      }),
+    );
+
     return { data, total, page, limit };
   }
 
-  async findOne(
-    tenantId: string,
-    id: string,
-    userId: string,
-    role: string,
-  ): Promise<ConversationDocument> {
-    const conv = await this.convModel.findOne({ _id: id, tenantId }).exec();
+  async findOne(tenantId: string, id: string, userId: string, role: string) {
+    const conv = await this.convModel
+      .findOne({ _id: id, tenantId })
+      .lean()
+      .exec();
     if (!conv) throw new NotFoundException("Conversation not found");
     if (role === "AGENT" && conv.assignedTo !== userId) {
       throw new ForbiddenException("Access denied");
     }
+
+    const [contact, assignedAgent, messages] = await Promise.all([
+      this.contactModel
+        .findOne({ _id: conv.contactId })
+        .select(
+          "_id name phone email avatarUrl tags company city isOptedOut lastMessageAt",
+        )
+        .lean()
+        .exec(),
+      conv.assignedTo
+        ? this.userModel
+            .findOne({ _id: conv.assignedTo })
+            .select("_id name avatarUrl role")
+            .lean()
+            .exec()
+        : Promise.resolve(null),
+      this.msgModel
+        .find({ conversationId: id, tenantId })
+        .sort({ createdAt: 1 })
+        .limit(50)
+        .lean()
+        .exec(),
+    ]);
+
+    // Enrich messages with agent details
+    const agentIds = [
+      ...new Set(messages.map((m) => m.agentId).filter(Boolean)),
+    ] as string[];
+    const agents = agentIds.length
+      ? await this.userModel
+          .find({ _id: { $in: agentIds } })
+          .select("_id name avatarUrl")
+          .lean()
+          .exec()
+      : [];
+    const agentMap = Object.fromEntries(agents.map((a) => [String(a._id), a]));
+
     await this.convModel.updateOne({ _id: id }, { unreadCount: 0 });
-    return conv;
+
+    return {
+      success: true,
+      data: {
+        ...conv,
+        contact: contact ?? null,
+        assignedAgent: assignedAgent ?? null,
+        messages: messages.map((m) => ({
+          ...m,
+          agent: m.agentId ? (agentMap[String(m.agentId)] ?? null) : null,
+        })),
+      },
+    };
   }
 
   async getMessages(
@@ -95,15 +195,40 @@ export class ConversationsService {
     page = 1,
     limit = 50,
   ) {
-    const [data, total] = await Promise.all([
+    const conv = await this.convModel
+      .findOne({ _id: conversationId, tenantId })
+      .lean()
+      .exec();
+    if (!conv) throw new NotFoundException("Conversation not found");
+
+    const [messages, total] = await Promise.all([
       this.msgModel
         .find({ conversationId, tenantId })
         .sort({ createdAt: 1 })
         .skip((page - 1) * limit)
         .limit(limit)
+        .lean()
         .exec(),
       this.msgModel.countDocuments({ conversationId, tenantId }),
     ]);
+
+    const agentIds = [
+      ...new Set(messages.map((m) => m.agentId).filter(Boolean)),
+    ] as string[];
+    const agents = agentIds.length
+      ? await this.userModel
+          .find({ _id: { $in: agentIds } })
+          .select("_id name avatarUrl")
+          .lean()
+          .exec()
+      : [];
+    const agentMap = Object.fromEntries(agents.map((a) => [String(a._id), a]));
+
+    const data = messages.map((m) => ({
+      ...m,
+      agent: m.agentId ? (agentMap[String(m.agentId)] ?? null) : null,
+    }));
+
     return { data, total, page, limit };
   }
 
@@ -310,7 +435,7 @@ export class ConversationsService {
   async handleInboundMessage(
     tenantId: string,
     metaMsgId: string,
-    contactId: string,
+    _contactId: string,
     conversationId: string,
     content: string,
     type: string,
