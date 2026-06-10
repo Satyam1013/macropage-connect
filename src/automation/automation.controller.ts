@@ -14,9 +14,12 @@ import {
 } from "@nestjs/common";
 import { AutomationService } from "./automation.service";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
+import { PlanGuard } from "../billing/guards/plan.guard";
+import { RequirePlan } from "../common/decorators/require-plan.decorator";
 import type { AuthReq } from "../auth/dto/auth-request.interface";
 
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PlanGuard)
+@RequirePlan("automation")
 @Controller("automation")
 export class AutomationController {
   constructor(private readonly automationService: AutomationService) {}

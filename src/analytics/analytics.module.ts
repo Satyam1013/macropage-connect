@@ -11,6 +11,7 @@ import { Campaign, CampaignSchema } from "../schemas/campaign.schema";
 import { Contact, ContactSchema } from "../schemas/contact.schema";
 import { WABAAccount, WABAAccountSchema } from "../schemas/waba-account.schema";
 import { User, UserSchema } from "../users/schemas/user.schema";
+import { BillingModule } from "../billing/billing.module";
 import { AnalyticsService } from "./analytics.service";
 import { AnalyticsController } from "./analytics.controller";
 import { DashboardController } from "./dashboard.controller";
@@ -27,6 +28,7 @@ import { ANALYTICS_REDIS } from "./analytics.constants";
       { name: WABAAccount.name, schema: WABAAccountSchema },
       { name: User.name, schema: UserSchema },
     ]),
+    BillingModule,
   ],
   providers: [
     {

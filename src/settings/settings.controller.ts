@@ -17,6 +17,8 @@ import {
 import { FileInterceptor } from "@nestjs/platform-express";
 import { SettingsService } from "./settings.service";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
+import { PlanGuard } from "../billing/guards/plan.guard";
+import { RequirePlan } from "../common/decorators/require-plan.decorator";
 import type { AuthReq } from "../auth/dto/auth-request.interface";
 
 @UseGuards(JwtAuthGuard)
@@ -108,12 +110,16 @@ export class SettingsController {
   // ── API Keys ──────────────────────────────────────────────────────────────
 
   @Get("api-keys")
+  @UseGuards(PlanGuard)
+  @RequirePlan("apiAccess")
   listApiKeys(@Request() req: AuthReq) {
     return this.settingsService.listApiKeys(req.user.tenantId ?? req.user.id);
   }
 
   @Post("api-keys")
   @HttpCode(HttpStatus.CREATED)
+  @UseGuards(PlanGuard)
+  @RequirePlan("apiAccess")
   createApiKey(
     @Request() req: AuthReq,
     @Body() body: { name: string; permissions: string[] },

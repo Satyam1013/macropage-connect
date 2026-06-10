@@ -37,7 +37,7 @@ export class BillingService {
       tenantId,
       plan: "TRIAL",
       status: "TRIALING",
-      trialEndsAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+      trialEndsAt: new Date(Date.now() + 1 * 24 * 60 * 60 * 1000),
     });
   }
 

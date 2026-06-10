@@ -7,6 +7,7 @@ import {
 import { Flow, FlowSchema } from "../schemas/flow.schema";
 import { AutomationService } from "./automation.service";
 import { AutomationController } from "./automation.controller";
+import { BillingModule } from "../billing/billing.module";
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import { AutomationController } from "./automation.controller";
       { name: AutomationRule.name, schema: AutomationRuleSchema },
       { name: Flow.name, schema: FlowSchema },
     ]),
+    BillingModule,
   ],
   providers: [AutomationService],
   controllers: [AutomationController],

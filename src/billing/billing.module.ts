@@ -7,6 +7,7 @@ import {
 import { Invoice, InvoiceSchema } from "../schemas/invoice.schema";
 import { BillingService } from "./billing.service";
 import { BillingController } from "./billing.controller";
+import { PlanGuard } from "./guards/plan.guard";
 
 @Module({
   imports: [
@@ -15,8 +16,8 @@ import { BillingController } from "./billing.controller";
       { name: Invoice.name, schema: InvoiceSchema },
     ]),
   ],
-  providers: [BillingService],
+  providers: [BillingService, PlanGuard],
   controllers: [BillingController],
-  exports: [BillingService],
+  exports: [BillingService, PlanGuard],
 })
 export class BillingModule {}

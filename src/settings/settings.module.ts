@@ -7,6 +7,7 @@ import {
 } from "../schemas/webhook-endpoint.schema";
 import { User, UserSchema } from "../users/schemas/user.schema";
 import { UploadModule } from "../upload/upload.module";
+import { BillingModule } from "../billing/billing.module";
 import { SettingsService } from "./settings.service";
 import { SettingsController } from "./settings.controller";
 
@@ -18,6 +19,7 @@ import { SettingsController } from "./settings.controller";
       { name: User.name, schema: UserSchema },
     ]),
     UploadModule,
+    BillingModule,
   ],
   providers: [SettingsService],
   controllers: [SettingsController],

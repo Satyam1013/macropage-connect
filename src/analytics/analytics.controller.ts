@@ -1,6 +1,8 @@
 import { Controller, Get, Query, UseGuards, Request } from "@nestjs/common";
 import { AnalyticsService } from "./analytics.service";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
+import { PlanGuard } from "../billing/guards/plan.guard";
+import { RequirePlan } from "../common/decorators/require-plan.decorator";
 import type { AuthReq } from "../auth/dto/auth-request.interface";
 
 @UseGuards(JwtAuthGuard)
@@ -54,6 +56,8 @@ export class AnalyticsController {
   }
 
   @Get("agents")
+  @UseGuards(PlanGuard)
+  @RequirePlan("advancedAnalytics")
   getAgents(
     @Request() req: AuthReq,
     @Query("from") from?: string,
@@ -64,6 +68,8 @@ export class AnalyticsController {
   }
 
   @Get("contacts")
+  @UseGuards(PlanGuard)
+  @RequirePlan("advancedAnalytics")
   getContacts(
     @Request() req: AuthReq,
     @Query("from") from?: string,
@@ -74,6 +80,8 @@ export class AnalyticsController {
   }
 
   @Get("messages")
+  @UseGuards(PlanGuard)
+  @RequirePlan("advancedAnalytics")
   getMessages(
     @Request() req: AuthReq,
     @Query("from") from?: string,
