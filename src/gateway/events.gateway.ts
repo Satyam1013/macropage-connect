@@ -63,10 +63,7 @@ export class EventsGateway
     try {
       const token =
         (client.handshake.auth as { token?: string }).token ??
-        (client.handshake.headers.authorization as string | undefined)?.replace(
-          "Bearer ",
-          "",
-        ) ??
+        client.handshake.headers.authorization?.replace("Bearer ", "") ??
         (client.handshake.query.token as string | undefined);
 
       if (!token) {

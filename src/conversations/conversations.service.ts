@@ -302,8 +302,8 @@ export class ConversationsService {
       isNote: false,
       agentId,
       sentAt: message.sentAt,
-      createdAt: (message as MessageDocument & { createdAt?: Date }).createdAt,
-    } as Record<string, unknown>);
+      createdAt: message.createdAt,
+    });
     return message;
   }
 
@@ -330,7 +330,7 @@ export class ConversationsService {
       content: note.content,
       isNote: true,
       agentId,
-    } as Record<string, unknown>);
+    });
     return note;
   }
 
@@ -438,7 +438,7 @@ export class ConversationsService {
       metaMessageId,
       status: "SENT",
       agentId,
-    } as Record<string, unknown>);
+    });
 
     return {
       success: true,
@@ -483,7 +483,7 @@ export class ConversationsService {
       content: message.content,
       metaMessageId: message.metaMessageId,
       isNote: false,
-    } as Record<string, unknown>);
+    });
     return message;
   }
 

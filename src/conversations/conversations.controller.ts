@@ -25,6 +25,21 @@ import type { AuthReq } from "../auth/dto/auth-request.interface";
 export class ConversationsController {
   constructor(private readonly conversationsService: ConversationsService) {}
 
+  @Post("initiate")
+  @HttpCode(HttpStatus.CREATED)
+  initiate(
+    @Request() req: AuthReq,
+    @Body() body: { contactId: string; templateName?: string },
+  ) {
+    const tenantId = req.user.tenantId ?? req.user.id;
+    return this.conversationsService.initiateConversation(
+      tenantId,
+      body.contactId,
+      body.templateName ?? "hello_world",
+      req.user.id,
+    );
+  }
+
   @Get()
   findAll(
     @Request() req: AuthReq,
@@ -113,20 +128,5 @@ export class ConversationsController {
   resolve(@Request() req: AuthReq, @Param("id") id: string) {
     const tenantId = req.user.tenantId ?? req.user.id;
     return this.conversationsService.resolveConversation(tenantId, id);
-  }
-
-  @Post("initiate")
-  @HttpCode(HttpStatus.CREATED)
-  initiate(
-    @Request() req: AuthReq,
-    @Body() body: { contactId: string; templateName?: string },
-  ) {
-    const tenantId = req.user.tenantId ?? req.user.id;
-    return this.conversationsService.initiateConversation(
-      tenantId,
-      body.contactId,
-      body.templateName ?? "hello_world",
-      req.user.id,
-    );
   }
 }

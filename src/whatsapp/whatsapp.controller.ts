@@ -73,6 +73,16 @@ export class WhatsappController {
     return this.whatsappService.completeSetup(tenantId);
   }
 
+  @Patch("token")
+  @HttpCode(HttpStatus.OK)
+  refreshToken(
+    @Request() req: AuthReq,
+    @Body() body: { accessToken: string },
+  ) {
+    const tenantId = req.user.tenantId ?? req.user.id;
+    return this.whatsappService.refreshToken(tenantId, body.accessToken);
+  }
+
   @Patch("profile")
   @HttpCode(HttpStatus.OK)
   updateProfile(

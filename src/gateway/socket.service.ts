@@ -31,7 +31,8 @@ export class SocketService {
 
   newMessage(tenantId: string, message: Record<string, unknown>) {
     this.emitToTenant(tenantId, "message:new", message);
-    const convId = String(message.conversationId ?? "");
+    const convId =
+      typeof message.conversationId === "string" ? message.conversationId : "";
     if (convId) this.emitToConversation(convId, "message:new", message);
   }
 

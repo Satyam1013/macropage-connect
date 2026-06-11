@@ -561,6 +561,30 @@ export class WhatsappService {
     return { success: true, data: { message: "WhatsApp profile updated" } };
   }
 
+  async refreshToken(tenantId: string, accessToken: string): Promise<object> {
+    const encrypted = this.encryption.encrypt(accessToken);
+    const waba = await this.wabaModel
+      .findOneAndUpdate(
+        { tenantId },
+        {
+          accessToken: encrypted,
+          tokenExpiresAt: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000),
+          tokenExpired: false,
+        },
+        { new: true },
+      )
+      .exec();
+
+    if (!waba) {
+      throw new BadRequestException({
+        success: false,
+        error: { code: "WABA_NOT_FOUND", message: "No WhatsApp account found" },
+      });
+    }
+
+    return { success: true, data: { message: "Access token updated" } };
+  }
+
   async disconnect(tenantId: string): Promise<void> {
     const waba = await this.wabaModel.findOne({ tenantId }).exec();
     if (!waba) return;
