@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException } from "@nestjs/common";
+import { Injectable, BadRequestException, Logger } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
 import { Model } from "mongoose";
 import axios, { AxiosInstance } from "axios";
@@ -56,16 +56,43 @@ export class MetaService {
     };
   }
 
+  private readonly logger = new Logger(MetaService.name);
+
   private handleMetaError(tenantId: string) {
     return async (err: unknown) => {
-      if (axios.isAxiosError(err) && err.response?.data) {
-        const code: number =
-          (err.response.data as { error?: { code?: number } }).error?.code ?? 0;
-        if (code === 190) {
-          await this.wabaModel.updateOne({ tenantId }, { tokenExpired: true });
-        }
+      if (!axios.isAxiosError(err)) throw err;
+
+      const metaError = err.response?.data as {
+        error?: {
+          message?: string;
+          code?: number;
+          error_subcode?: number;
+          error_user_title?: string;
+          error_user_msg?: string;
+        };
+      };
+
+      const code = metaError?.error?.code ?? 0;
+      const message =
+        metaError?.error?.error_user_msg ??
+        metaError?.error?.error_user_title ??
+        metaError?.error?.message ??
+        `Meta API error (HTTP ${err.response?.status ?? "unknown"})`;
+
+      this.logger.error(`Meta API error [${code}]: ${message}`);
+
+      if (code === 190) {
+        await this.wabaModel.updateOne({ tenantId }, { tokenExpired: true });
+        throw new BadRequestException({
+          success: false,
+          error: { code: "WHATSAPP_TOKEN_EXPIRED", message: "WhatsApp token expired. Please reconnect." },
+        });
       }
-      throw err;
+
+      throw new BadRequestException({
+        success: false,
+        error: { code: "META_SEND_FAIL", message },
+      });
     };
   }
 
