@@ -23,7 +23,51 @@ const ENCRYPTION_KEY = Buffer.from(
 const WABA_ID = process.env.META_TEST_WABA_ID!;
 const PHONE_NUMBER_ID = process.env.META_TEST_PHONE_NUMBER_ID!;
 const ACCESS_TOKEN = process.env.META_TEST_ACCESS_TOKEN!;
+const APP_ID = process.env.META_APP_ID!;
+const APP_SECRET = process.env.META_APP_SECRET!;
 const BASE = "https://graph.facebook.com/v21.0";
+
+async function getLongLivedToken(
+  shortToken: string,
+): Promise<{ token: string; expiresAt: Date }> {
+  if (!APP_ID || !APP_SECRET || APP_SECRET === "your_meta_app_secret") {
+    console.warn(
+      "META_APP_SECRET not set — using token as-is (may expire quickly)",
+    );
+    return {
+      token: shortToken,
+      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+    };
+  }
+  try {
+    const resp = await axios.get<{ access_token: string; expires_in?: number }>(
+      `${BASE}/oauth/access_token`,
+      {
+        params: {
+          grant_type: "fb_exchange_token",
+          client_id: APP_ID,
+          client_secret: APP_SECRET,
+          fb_exchange_token: shortToken,
+        },
+      },
+    );
+    const expiresIn = resp.data.expires_in ?? 60 * 24 * 60 * 60;
+    const expiresAt = new Date(Date.now() + expiresIn * 1000);
+    console.log(
+      `Long-lived token obtained. Expires: ${expiresAt.toISOString()}`,
+    );
+    return { token: resp.data.access_token, expiresAt };
+  } catch (err) {
+    console.warn(
+      "Token exchange failed — using token as-is:",
+      (err as Error).message,
+    );
+    return {
+      token: shortToken,
+      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+    };
+  }
+}
 
 function encrypt(text: string): string {
   const iv = crypto.randomBytes(16);
@@ -46,12 +90,16 @@ async function main() {
   await mongoose.connect(MONGODB_URI);
   console.log("Connected to MongoDB");
 
+  // Exchange for long-lived token (60 days) before storing
+  const { token: longToken, expiresAt: tokenExpiresAt } =
+    await getLongLivedToken(ACCESS_TOKEN);
+
   // Fetch phone number details from Meta
   const phoneResp = await axios.get(`${BASE}/${PHONE_NUMBER_ID}`, {
     params: {
       fields:
         "display_phone_number,verified_name,quality_rating,messaging_limit_tier",
-      access_token: ACCESS_TOKEN,
+      access_token: longToken,
     },
   });
   const phoneData = phoneResp.data as {
@@ -81,7 +129,7 @@ async function main() {
     (user.tenantId as string | undefined) ?? user._id.toString();
   console.log(`Using tenantId: ${tenantId} (user: ${user.email as string})`);
 
-  const encryptedToken = encrypt(ACCESS_TOKEN);
+  const encryptedToken = encrypt(longToken);
 
   const wabaCol = mongoose.connection.collection("wabaaccounts");
   const result = await wabaCol.findOneAndUpdate(
@@ -95,7 +143,7 @@ async function main() {
         displayName: phoneData.verified_name,
         businessName: phoneData.verified_name,
         accessToken: encryptedToken,
-        tokenExpiresAt: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000),
+        tokenExpiresAt,
         tokenExpired: false,
         metaConnected: true,
         qualityRating: phoneData.quality_rating ?? "GREEN",

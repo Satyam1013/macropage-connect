@@ -47,8 +47,17 @@ export class TemplatesService {
         : {}),
     });
     if (dto.footer) components.push({ type: "FOOTER", text: dto.footer });
-    if (dto.buttons)
-      components.push({ type: "BUTTONS", ...(dto.buttons as object) });
+    if (dto.buttons) {
+      const { buttons: btnList, ...btnRest } = dto.buttons as {
+        buttons?: unknown[];
+        [k: string]: unknown;
+      };
+      components.push({
+        type: "BUTTONS",
+        buttons: btnList,
+        ...btnRest,
+      });
+    }
 
     let metaId: string | undefined;
     try {
@@ -61,9 +70,28 @@ export class TemplatesService {
       metaId = (metaResp.data as { id?: string }).id;
     } catch (err) {
       if (axios.isAxiosError(err)) {
-        const metaMsg = (err.response?.data as { error?: { message?: string } })
-          ?.error?.message;
-        throw new BadRequestException(metaMsg ?? "Meta rejected the template");
+        const metaError = err.response?.data as {
+          error?: {
+            message?: string;
+            error_user_title?: string;
+            error_user_msg?: string;
+            error_data?: unknown;
+          };
+        };
+        const detail =
+          metaError?.error?.error_user_msg ??
+          metaError?.error?.error_user_title ??
+          metaError?.error?.message ??
+          "Meta rejected the template";
+        throw new BadRequestException({
+          success: false,
+          error: {
+            code: "META_TEMPLATE_ERROR",
+            message: detail,
+            meta: metaError?.error,
+            sentComponents: components,
+          },
+        });
       }
       throw err;
     }
