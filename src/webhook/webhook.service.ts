@@ -72,7 +72,9 @@ export class WebhookService {
         }
 
         if (change.value.statuses) {
-          const statuses = change.value.statuses as Array<Record<string, unknown>>;
+          const statuses = change.value.statuses as Array<
+            Record<string, unknown>
+          >;
           this.logger.log(`Processing ${statuses.length} status update(s)`);
           for (const status of statuses) {
             await this.handleStatusUpdate(tenantId, status);
@@ -97,14 +99,20 @@ export class WebhookService {
         `+${phone}`,
         name,
       );
+      this.logger.log(`Contact resolved: ${contact.id} (${contact.phone})`);
+
       const conversation = await this.conversationsService.findOrCreate(
         tenantId,
         contact.id,
       );
+      this.logger.log(`Conversation resolved: ${conversation.id}`);
 
       const content =
         (msg.text as { body?: string })?.body ?? (msg.caption as string) ?? "";
       const type = (msg.type as string) ?? "TEXT";
+      this.logger.log(
+        `Saving inbound msg: "${content}" type=${type} to conv=${conversation.id}`,
+      );
 
       await this.conversationsService.handleInboundMessage(
         tenantId,
