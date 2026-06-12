@@ -1,8 +1,7 @@
 import { Processor, WorkerHost } from "@nestjs/bullmq";
 import { Logger } from "@nestjs/common";
 import { Job } from "bullmq";
-import * as nodemailer from "nodemailer";
-import SMTPTransport from "nodemailer/lib/smtp-transport"; // ✅ import SMTP transport directly
+import { Resend } from "resend";
 import { ConfigService } from "@nestjs/config";
 
 import { EmailJobData } from "../queue.types";
@@ -10,36 +9,14 @@ import { EmailJobData } from "../queue.types";
 @Processor("emails")
 export class EmailProcessor extends WorkerHost {
   private readonly logger = new Logger(EmailProcessor.name);
-  private transporter: nodemailer.Transporter<SMTPTransport.SentMessageInfo>;
+  private readonly resend: Resend;
+  private readonly from: string;
 
   constructor(private readonly config: ConfigService) {
     super();
-
-    const port = Number(this.config.get("SMTP_PORT", "587"));
-
-    this.transporter = nodemailer.createTransport(
-      new SMTPTransport({
-        // ✅ pass SMTPTransport instance directly
-        host: this.config.get<string>("SMTP_HOST"),
-        port,
-        secure: port === 465,
-        auth: {
-          user: this.config.get<string>("SMTP_USER"),
-          pass: this.config.get<string>("SMTP_PASS"),
-        },
-      }),
-    );
-
-    void this.verifyTransporter();
-  }
-
-  private async verifyTransporter(): Promise<void> {
-    try {
-      await this.transporter.verify();
-      this.logger.log("SMTP transporter verified successfully");
-    } catch (err) {
-      this.logger.error("SMTP transporter verification failed", err);
-    }
+    this.resend = new Resend(this.config.get<string>("RESEND_API_KEY"));
+    this.from =
+      this.config.get<string>("EMAIL_FROM") ?? "Macropage <noreply@macropage.in>";
   }
 
   async process(job: Job<EmailJobData>): Promise<void> {
@@ -47,19 +24,19 @@ export class EmailProcessor extends WorkerHost {
 
     this.logger.log(`Processing email job [${job.id}] → ${to}: ${subject}`);
 
-    try {
-      const info = await this.transporter.sendMail({
-        from: this.config.get<string>("EMAIL_FROM"),
-        to,
-        subject,
-        html,
-        text,
-      });
+    const { data, error } = await this.resend.emails.send({
+      from: this.from,
+      to,
+      subject,
+      html,
+      text,
+    });
 
-      this.logger.log(`Email sent to ${to} | messageId: ${info.messageId}`);
-    } catch (err) {
-      this.logger.error(`Failed to send email to ${to}`, err);
-      throw err;
+    if (error) {
+      this.logger.error(`Failed to send email to ${to}`, error);
+      throw new Error(error.message);
     }
+
+    this.logger.log(`Email sent to ${to} | id: ${data?.id}`);
   }
 }
