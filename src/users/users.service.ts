@@ -94,7 +94,9 @@ export class UsersService {
     userId: string,
     data: Partial<Pick<User, "name" | "phone" | "company" | "avatarUrl">>,
   ): Promise<UserDocument | null> {
-    return this.userModel.findByIdAndUpdate(userId, data, { new: true }).exec();
+    return this.userModel
+      .findByIdAndUpdate(userId, data, { returnDocument: "after" })
+      .exec();
   }
 
   toPublicProfile(user: UserDocument): UserPayload {

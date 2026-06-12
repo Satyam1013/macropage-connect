@@ -84,7 +84,7 @@ export class TeamService {
       throw new BadRequestException("Cannot assign OWNER role");
 
     const member = await this.userModel
-      .findOneAndUpdate({ _id: memberId, tenantId }, { role }, { new: true })
+      .findOneAndUpdate({ _id: memberId, tenantId }, { role }, { returnDocument: "after" })
       .exec();
     if (!member) throw new NotFoundException("Member not found");
     return member;

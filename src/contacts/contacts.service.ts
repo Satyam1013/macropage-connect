@@ -70,7 +70,7 @@ export class ContactsService {
     dto: Partial<CreateContactDto>,
   ): Promise<ContactDocument> {
     const contact = await this.contactModel
-      .findOneAndUpdate({ _id: id, tenantId }, dto, { new: true })
+      .findOneAndUpdate({ _id: id, tenantId }, dto, { returnDocument: "after" })
       .exec();
     if (!contact) throw new NotFoundException("Contact not found");
     return contact;
@@ -125,7 +125,7 @@ export class ContactsService {
       .findOneAndUpdate(
         { tenantId, phone },
         { $setOnInsert: { tenantId, phone, name: name ?? phone } },
-        { upsert: true, new: true },
+        { returnDocument: "after", upsert: true },
       )
       .exec();
     return doc!;

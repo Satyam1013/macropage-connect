@@ -49,7 +49,7 @@ export class BillingService {
       .findOneAndUpdate(
         { tenantId },
         { plan, status: "ACTIVE", currentPeriodStart: new Date() },
-        { new: true, upsert: true },
+        { returnDocument: "after", upsert: true },
       )
       .exec();
   }

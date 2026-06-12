@@ -122,7 +122,7 @@ export class TemplatesService {
           metaTemplateId: t["id"],
           tenantId,
         },
-        { upsert: true, new: true },
+        { returnDocument: "after", upsert: true },
       );
       updated++;
     }

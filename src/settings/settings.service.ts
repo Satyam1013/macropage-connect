@@ -73,7 +73,7 @@ export class SettingsService {
     if (dto.language !== undefined) update.language = dto.language;
 
     const updated = await this.userModel
-      .findByIdAndUpdate(tenantId, update, { new: true })
+      .findByIdAndUpdate(tenantId, update, { returnDocument: "after" })
       .select(
         "_id name company email website description industry address city state country postalCode timezone language logoUrl",
       )
@@ -132,7 +132,7 @@ export class SettingsService {
     if (dto.language !== undefined) update.language = dto.language;
 
     const updated = await this.userModel
-      .findByIdAndUpdate(userId, update, { new: true })
+      .findByIdAndUpdate(userId, update, { returnDocument: "after" })
       .select(
         "_id name email phone avatarUrl role department jobTitle timezone language",
       )
@@ -256,7 +256,7 @@ export class SettingsService {
     dto: Partial<{ url: string; events: string[]; isEnabled: boolean }>,
   ): Promise<WebhookEndpointDocument> {
     const wh = await this.webhookModel
-      .findOneAndUpdate({ _id: id, tenantId }, dto, { new: true })
+      .findOneAndUpdate({ _id: id, tenantId }, dto, { returnDocument: "after" })
       .exec();
     if (!wh) throw new NotFoundException("Webhook not found");
     return wh;

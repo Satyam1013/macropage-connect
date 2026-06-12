@@ -249,7 +249,7 @@ export class WhatsappService {
           tokenExpired: false,
           connectedAt: new Date(),
         },
-        { upsert: true, new: true },
+        { returnDocument: "after", upsert: true },
       )
       .exec();
 
@@ -571,7 +571,7 @@ export class WhatsappService {
           tokenExpiresAt: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000),
           tokenExpired: false,
         },
-        { new: true },
+        { returnDocument: "after" },
       )
       .exec();
 

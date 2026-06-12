@@ -38,7 +38,7 @@ export class AutomationService {
     dto: Partial<AutomationRule>,
   ): Promise<AutomationRuleDocument> {
     const rule = await this.ruleModel
-      .findOneAndUpdate({ _id: id, tenantId }, dto, { new: true })
+      .findOneAndUpdate({ _id: id, tenantId }, dto, { returnDocument: "after" })
       .exec();
     if (!rule) throw new NotFoundException("Rule not found");
     return rule;
@@ -78,7 +78,7 @@ export class AutomationService {
   ): Promise<FlowDocument> {
     if (id) {
       return this.flowModel
-        .findOneAndUpdate({ _id: id, tenantId }, dto, { new: true })
+        .findOneAndUpdate({ _id: id, tenantId }, dto, { returnDocument: "after" })
         .exec() as Promise<FlowDocument>;
     }
     return this.flowModel.create({ ...dto, tenantId });
@@ -94,7 +94,7 @@ export class AutomationService {
       .findOneAndUpdate(
         { _id: id, tenantId },
         { status: "active" },
-        { new: true },
+        { returnDocument: "after" },
       )
       .exec() as Promise<FlowDocument>;
   }

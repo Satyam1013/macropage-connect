@@ -340,7 +340,7 @@ export class ConversationsService {
     dto: UpdateConversationDto,
   ): Promise<ConversationDocument> {
     const conv = await this.convModel
-      .findOneAndUpdate({ _id: id, tenantId }, dto, { new: true })
+      .findOneAndUpdate({ _id: id, tenantId }, dto, { returnDocument: "after" })
       .exec();
     if (!conv) throw new NotFoundException("Conversation not found");
     this.socketService.conversationUpdated(tenantId, conv);
@@ -499,7 +499,7 @@ export class ConversationsService {
     if (status === "failed") update.failedAt = new Date(timestamp * 1000);
 
     const msg = await this.msgModel
-      .findOneAndUpdate({ tenantId, metaMessageId }, update, { new: true })
+      .findOneAndUpdate({ tenantId, metaMessageId }, update, { returnDocument: "after" })
       .exec();
 
     if (msg) {
