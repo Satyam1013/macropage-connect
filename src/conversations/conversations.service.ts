@@ -499,7 +499,9 @@ export class ConversationsService {
     if (status === "failed") update.failedAt = new Date(timestamp * 1000);
 
     const msg = await this.msgModel
-      .findOneAndUpdate({ tenantId, metaMessageId }, update, { returnDocument: "after" })
+      .findOneAndUpdate({ tenantId, metaMessageId }, update, {
+        returnDocument: "after",
+      })
       .exec();
 
     if (msg) {
