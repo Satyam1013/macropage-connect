@@ -85,7 +85,10 @@ export class MetaService {
         await this.wabaModel.updateOne({ tenantId }, { tokenExpired: true });
         throw new BadRequestException({
           success: false,
-          error: { code: "WHATSAPP_TOKEN_EXPIRED", message: "WhatsApp token expired. Please reconnect." },
+          error: {
+            code: "WHATSAPP_TOKEN_EXPIRED",
+            message: "WhatsApp token expired. Please reconnect.",
+          },
         });
       }
 

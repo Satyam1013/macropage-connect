@@ -121,8 +121,13 @@ export class ContactsService {
     phone: string,
     name?: string,
   ): Promise<ContactDocument> {
-    const existing = await this.findByPhone(tenantId, phone);
-    if (existing) return existing;
-    return this.contactModel.create({ tenantId, phone, name: name ?? phone });
+    const doc = await this.contactModel
+      .findOneAndUpdate(
+        { tenantId, phone },
+        { $setOnInsert: { tenantId, phone, name: name ?? phone } },
+        { upsert: true, new: true },
+      )
+      .exec();
+    return doc!;
   }
 }
