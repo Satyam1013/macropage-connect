@@ -58,9 +58,11 @@ export class WebhookService {
         const tenantId = waba.tenantId;
 
         if (change.value.messages) {
-          for (const msg of change.value.messages as Array<
-            Record<string, unknown>
-          >) {
+          const msgs = change.value.messages as Array<Record<string, unknown>>;
+          this.logger.log(
+            `Processing ${msgs.length} inbound message(s): ${JSON.stringify(msgs)}`,
+          );
+          for (const msg of msgs) {
             await this.handleInboundMessage(
               tenantId,
               msg,
@@ -70,9 +72,9 @@ export class WebhookService {
         }
 
         if (change.value.statuses) {
-          for (const status of change.value.statuses as Array<
-            Record<string, unknown>
-          >) {
+          const statuses = change.value.statuses as Array<Record<string, unknown>>;
+          this.logger.log(`Processing ${statuses.length} status update(s)`);
+          for (const status of statuses) {
             await this.handleStatusUpdate(tenantId, status);
           }
         }
