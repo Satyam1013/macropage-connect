@@ -9,23 +9,31 @@ import { EmailJobData } from "../queue.types";
 @Processor("emails")
 export class EmailProcessor extends WorkerHost {
   private readonly logger = new Logger(EmailProcessor.name);
-  private readonly resend: Resend;
-  private readonly from: string;
 
   constructor(private readonly config: ConfigService) {
     super();
-    this.resend = new Resend(this.config.get<string>("RESEND_API_KEY"));
-    this.from =
-      this.config.get<string>("EMAIL_FROM") ?? "Macropage <noreply@macropage.in>";
   }
 
   async process(job: Job<EmailJobData>): Promise<void> {
     const { to, subject, html, text } = job.data;
+    const apiKey = this.config.get<string>("RESEND_API_KEY");
+
+    if (!apiKey) {
+      this.logger.warn(
+        `Email skipped (RESEND_API_KEY not set) → ${to}: ${subject}`,
+      );
+      return;
+    }
 
     this.logger.log(`Processing email job [${job.id}] → ${to}: ${subject}`);
 
-    const { data, error } = await this.resend.emails.send({
-      from: this.from,
+    const resend = new Resend(apiKey);
+    const from =
+      this.config.get<string>("EMAIL_FROM") ??
+      "Macropage <noreply@macropage.in>";
+
+    const { data, error } = await resend.emails.send({
+      from,
       to,
       subject,
       html,
