@@ -31,6 +31,8 @@ export class WebhookService {
   }
 
   async handleMetaWebhook(body: Record<string, unknown>): Promise<void> {
+    this.logger.log(`Webhook received: ${JSON.stringify(body).slice(0, 200)}`);
+
     const entries =
       (body.entry as Array<{
         changes?: Array<{ field: string; value: Record<string, unknown> }>;
@@ -45,8 +47,13 @@ export class WebhookService {
         )?.phone_number_id;
         if (!phoneNumberId) continue;
 
+        this.logger.log(`Inbound webhook for phoneNumberId: ${phoneNumberId}`);
+
         const waba = await this.wabaModel.findOne({ phoneNumberId }).exec();
-        if (!waba) continue;
+        if (!waba) {
+          this.logger.warn(`No WABA found for phoneNumberId: ${phoneNumberId}`);
+          continue;
+        }
 
         const tenantId = waba.tenantId;
 
