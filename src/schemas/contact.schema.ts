@@ -14,7 +14,7 @@ export class Contact {
   @Prop({ required: true })
   name!: string;
 
-  @Prop({ required: true, index: true })
+  @Prop({ required: true })
   phone!: string;
 
   @Prop()

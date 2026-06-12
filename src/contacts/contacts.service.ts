@@ -125,7 +125,7 @@ export class ContactsService {
       .findOneAndUpdate(
         { tenantId, phone },
         { $setOnInsert: { tenantId, phone, name: name ?? phone } },
-        { returnDocument: "after", upsert: true },
+        { returnDocument: "after", upsert: true, sort: { _id: 1 } },
       )
       .exec();
     return doc!;
