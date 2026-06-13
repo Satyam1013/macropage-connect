@@ -90,7 +90,9 @@ export class NotificationsService {
       if (cached) {
         return { success: true, data: JSON.parse(cached) as object };
       }
-    } catch {}
+    } catch {
+      console.warn("Failed to fetch notification preferences from Redis cache");
+    }
 
     let prefs = await this.prefModel
       .findOne({ tenantId, userId })
@@ -98,9 +100,7 @@ export class NotificationsService {
       .exec();
 
     if (!prefs) {
-      prefs = (
-        await this.prefModel.create({ tenantId, userId })
-      ).toObject();
+      prefs = (await this.prefModel.create({ tenantId, userId })).toObject();
     }
 
     const data = {
@@ -112,7 +112,9 @@ export class NotificationsService {
 
     try {
       await this.redis.set(cacheKey, JSON.stringify(data), "EX", 600);
-    } catch {}
+    } catch {
+      console.warn("Failed to store notification preferences in Redis cache");
+    }
 
     return { success: true, data };
   }
@@ -157,15 +159,19 @@ export class NotificationsService {
       .exec();
 
     const data = {
-      channels: updated!.channels,
-      events: updated!.events,
-      quietHours: updated!.quietHours,
-      digest: updated!.digest,
+      channels: updated.channels,
+      events: updated.events,
+      quietHours: updated.quietHours,
+      digest: updated.digest,
     };
 
     try {
       await this.redis.del(`notif-prefs:${tenantId}:${userId}`);
-    } catch {}
+    } catch {
+      console.warn(
+        "Failed to delete notification preferences from Redis cache",
+      );
+    }
 
     return { success: true, data };
   }
@@ -184,7 +190,9 @@ export class NotificationsService {
       if (cached) {
         prefs = JSON.parse(cached) as NotificationPreferencesDocument;
       }
-    } catch {}
+    } catch {
+      console.warn("Failed to fetch notification preferences from Redis cache");
+    }
 
     if (!prefs) {
       prefs = await this.prefModel.findOne({ tenantId, userId }).lean().exec();

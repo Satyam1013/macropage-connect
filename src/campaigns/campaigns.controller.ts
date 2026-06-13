@@ -15,7 +15,6 @@ import { CampaignsService } from "./campaigns.service";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import type { AuthReq } from "../auth/dto/auth-request.interface";
 
-
 @UseGuards(JwtAuthGuard)
 @Controller("campaigns")
 export class CampaignsController {

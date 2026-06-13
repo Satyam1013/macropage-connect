@@ -54,9 +54,7 @@ export class TeamService {
     const skipped: string[] = [];
 
     for (const email of emails) {
-      const existing = await this.userModel
-        .findOne({ tenantId, email })
-        .exec();
+      const existing = await this.userModel.findOne({ tenantId, email }).exec();
       if (existing) {
         skipped.push(email);
         continue;
@@ -71,10 +69,7 @@ export class TeamService {
       }
 
       const token = crypto.randomBytes(32).toString("hex");
-      const tokenHash = crypto
-        .createHash("sha256")
-        .update(token)
-        .digest("hex");
+      const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
 
       const expiresAt = new Date(Date.now() + expiresMs);
 
@@ -168,18 +163,17 @@ export class TeamService {
         valid: true,
         email: invite.email,
         role: invite.role,
-        invitedByName: invite.invitedByName ?? null,
+        invitedByName: (invite.invitedByName as string | undefined) ?? null,
         expiresAt: invite.expiresAt,
       },
     };
   }
 
-  async acceptInvite(dto: {
-    token: string;
-    name: string;
-    password: string;
-  }) {
-    const tokenHash = crypto.createHash("sha256").update(dto.token).digest("hex");
+  async acceptInvite(dto: { token: string; name: string; password: string }) {
+    const tokenHash = crypto
+      .createHash("sha256")
+      .update(dto.token)
+      .digest("hex");
     const invite = await this.inviteModel.findOne({ tokenHash }).lean().exec();
 
     if (!invite) {
@@ -239,14 +233,23 @@ export class TeamService {
       { sub: user.id, email: user.email },
       {
         secret: this.config.get<string>("JWT_SECRET", "fallback-secret"),
-        expiresIn: this.config.get<string>("JWT_EXPIRES_IN", "24h") as `${number}${"s" | "m" | "h" | "d"}`,
+        expiresIn: this.config.get<string>(
+          "JWT_EXPIRES_IN",
+          "24h",
+        ) as `${number}${"s" | "m" | "h" | "d"}`,
       },
     );
     const refreshToken = this.jwt.sign(
       { sub: user.id, email: user.email },
       {
-        secret: this.config.get<string>("JWT_REFRESH_SECRET", "fallback-refresh"),
-        expiresIn: this.config.get<string>("JWT_REFRESH_EXPIRES_IN", "30d") as `${number}${"s" | "m" | "h" | "d"}`,
+        secret: this.config.get<string>(
+          "JWT_REFRESH_SECRET",
+          "fallback-refresh",
+        ),
+        expiresIn: this.config.get<string>(
+          "JWT_REFRESH_EXPIRES_IN",
+          "30d",
+        ) as `${number}${"s" | "m" | "h" | "d"}`,
       },
     );
 
@@ -305,11 +308,13 @@ export class TeamService {
       invite.message,
     );
 
+    const newResentCount = (invite.resentCount as number) + 1;
+
     return {
       success: true,
       data: {
         message: `Invite resent to ${invite.email}`,
-        resentCount: invite.resentCount + 1,
+        resentCount: newResentCount,
         expiresAt,
       },
     };

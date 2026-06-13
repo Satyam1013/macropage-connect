@@ -1,4 +1,9 @@
-export const IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+export const IMAGE_TYPES = [
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+];
 
 export const DOC_TYPES = [
   "application/pdf",
@@ -7,4 +12,9 @@ export const DOC_TYPES = [
   "text/plain",
 ];
 
-export const AUDIO_TYPES = ["audio/mpeg", "audio/ogg", "audio/wav", "audio/mp4"];
+export const AUDIO_TYPES = [
+  "audio/mpeg",
+  "audio/ogg",
+  "audio/wav",
+  "audio/mp4",
+];

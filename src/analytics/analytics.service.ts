@@ -15,6 +15,11 @@ import {
 } from "../schemas/waba-account.schema";
 import { User, UserDocument } from "../users/schemas/user.schema";
 import { ANALYTICS_REDIS } from "./analytics.constants";
+import {
+  MESSAGING_TIER_LIMITS,
+  DEFAULT_MESSAGING_TIER,
+  DEFAULT_TIER_LIMIT,
+} from "../whatsapp/whatsapp.constants";
 
 @Injectable()
 export class AnalyticsService {
@@ -420,15 +425,8 @@ export class AnalyticsService {
       createdAt: { $gte: todayStart },
     });
 
-    const tierLimits: Record<string, number> = {
-      TIER_1K: 1000,
-      TIER_10K: 10000,
-      TIER_100K: 100000,
-      TIER_UNLIMITED: -1,
-    };
-
-    const tier = waba.messagingTier ?? "TIER_1K";
-    const tierLimit = tierLimits[tier] ?? 1000;
+    const tier = waba.messagingTier ?? DEFAULT_MESSAGING_TIER;
+    const tierLimit = MESSAGING_TIER_LIMITS[tier] ?? DEFAULT_TIER_LIMIT;
     const usagePercent =
       tierLimit === -1
         ? 0

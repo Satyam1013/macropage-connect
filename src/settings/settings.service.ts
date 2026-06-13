@@ -177,10 +177,7 @@ export class SettingsService {
     return { success: true, data: prefs };
   }
 
-  async updateNotificationPrefs(
-    userId: string,
-    dto: Record<string, unknown>,
-  ) {
+  async updateNotificationPrefs(userId: string, dto: Record<string, unknown>) {
     await this.userModel.findByIdAndUpdate(userId, {
       notificationPrefs: dto,
     });
@@ -307,9 +304,7 @@ export class SettingsService {
       return {
         success: false,
         data: {
-          statusCode: axios.isAxiosError(err)
-            ? (err.response?.status ?? 0)
-            : 0,
+          statusCode: axios.isAxiosError(err) ? (err.response?.status ?? 0) : 0,
           responseTime: Date.now() - start,
           error: err instanceof Error ? err.message : "Unknown error",
           ok: false,

@@ -20,6 +20,26 @@ import {
 } from "./dto/whatsapp.dto";
 import type { EmailJobData } from "../queue/queue.types";
 
+interface WABADetailsData {
+  connected: true;
+  businessName: string | null;
+  wabaId: string | null;
+  phoneNumber: string | null;
+  phoneNumberId: string | null;
+  qualityRating: string;
+  messagingTier: string;
+  tierLimit: number;
+  messagesToday: number;
+  messagesThisMonth: number;
+  usagePercent: number;
+  tokenExpired: boolean;
+  tokenExpiresAt: Date | null;
+  webhookUrl: string;
+  webhookVerified: boolean;
+  connectedAt: Date | undefined;
+  updatedAt: Date | undefined;
+}
+
 @Injectable()
 export class WhatsappService {
   constructor(
@@ -681,7 +701,7 @@ export class WhatsappService {
     await this.emailQueue.add("send_waba_details", {
       to: recipient,
       subject: `WhatsApp Business Details — ${result.data.businessName ?? "Your Account"}`,
-      html: this.buildWABADetailsEmail(result.data, user),
+      html: this.buildWABADetailsEmail(result.data as WABADetailsData, user),
     } satisfies EmailJobData);
 
     return {
@@ -691,22 +711,14 @@ export class WhatsappService {
   }
 
   private buildWABADetailsEmail(
-    data: Record<string, unknown>,
+    data: WABADetailsData,
     user: { name: string },
   ): string {
-    const tierLimit = data.tierLimit as number;
+    const { tierLimit, qualityRating, webhookVerified } = data;
     const tierLimitStr =
-      tierLimit === -1
-        ? "Unlimited"
-        : (tierLimit as number).toLocaleString("en-IN");
-    const qualityRating = String(data.qualityRating ?? "GREEN");
-    const webhookVerified = Boolean(data.webhookVerified);
+      tierLimit === -1 ? "Unlimited" : tierLimit.toLocaleString("en-IN");
     const badge = (rating: string) =>
-      rating === "GREEN"
-        ? "green"
-        : rating === "YELLOW"
-          ? "amber"
-          : "red";
+      rating === "GREEN" ? "green" : rating === "YELLOW" ? "amber" : "red";
 
     return `<!DOCTYPE html>
 <html>
@@ -749,8 +761,8 @@ export class WhatsappService {
   </div>
   <div class="card">
     <h3>Usage</h3>
-    <div class="row"><span class="label">Messages Today</span><span class="value">${(data.messagesToday as number).toLocaleString("en-IN")}</span></div>
-    <div class="row"><span class="label">Messages This Month</span><span class="value">${(data.messagesThisMonth as number).toLocaleString("en-IN")}</span></div>
+    <div class="row"><span class="label">Messages Today</span><span class="value">${data.messagesToday.toLocaleString("en-IN")}</span></div>
+    <div class="row"><span class="label">Messages This Month</span><span class="value">${data.messagesThisMonth.toLocaleString("en-IN")}</span></div>
   </div>
   <div class="card">
     <h3>Webhook Configuration</h3>

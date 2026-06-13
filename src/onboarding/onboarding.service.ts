@@ -5,45 +5,7 @@ import { User, UserDocument } from "../users/schemas/user.schema";
 import { Contact, ContactDocument } from "../schemas/contact.schema";
 import { Template, TemplateDocument } from "../schemas/template.schema";
 import { Campaign, CampaignDocument } from "../schemas/campaign.schema";
-
-const CHECKLIST_STEPS = [
-  {
-    step: 1,
-    title: "Create your account",
-    description: "Sign up for Macropage Connect",
-    link: null as string | null,
-  },
-  {
-    step: 2,
-    title: "Verify your email",
-    description: "Confirm your email address",
-    link: null as string | null,
-  },
-  {
-    step: 3,
-    title: "Connect WhatsApp",
-    description: "Link your WhatsApp Business Account",
-    link: "/setup/whatsapp",
-  },
-  {
-    step: 4,
-    title: "Import contacts",
-    description: "Upload your contact list",
-    link: "/contacts",
-  },
-  {
-    step: 5,
-    title: "Create a template",
-    description: "Set up your first message template",
-    link: "/campaigns/templates",
-  },
-  {
-    step: 6,
-    title: "Send your first campaign",
-    description: "Broadcast to your contacts",
-    link: "/campaigns",
-  },
-];
+import { CHECKLIST_STEPS } from "./onboarding.constants";
 
 @Injectable()
 export class OnboardingService {
@@ -62,11 +24,7 @@ export class OnboardingService {
     const [owner, user, contactCount, templateCount, campaignCount] =
       await Promise.all([
         this.userModel.findById(tenantId).lean().exec(),
-        this.userModel
-          .findById(userId)
-          .select("emailVerified")
-          .lean()
-          .exec(),
+        this.userModel.findById(userId).select("emailVerified").lean().exec(),
         this.contactModel.countDocuments({ tenantId }),
         this.templateModel.countDocuments({ tenantId }),
         this.campaignModel.countDocuments({

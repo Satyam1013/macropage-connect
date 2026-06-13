@@ -3,8 +3,8 @@ import {
   Catch,
   ArgumentsHost,
   HttpException,
-  HttpStatus,
 } from "@nestjs/common";
+import { HTTP_STATUS_CODE_MAP } from "./http-exception.constants";
 import { Response } from "express";
 
 interface ExceptionBody {
@@ -54,14 +54,6 @@ export class HttpExceptionFilter implements ExceptionFilter {
   }
 
   private statusToCode(status: number): string {
-    const map: Record<number, string> = {
-      [HttpStatus.UNAUTHORIZED]: "UNAUTHORIZED",
-      [HttpStatus.FORBIDDEN]: "FORBIDDEN",
-      [HttpStatus.NOT_FOUND]: "NOT_FOUND",
-      [HttpStatus.CONFLICT]: "CONFLICT",
-      [HttpStatus.BAD_REQUEST]: "BAD_REQUEST",
-      [HttpStatus.INTERNAL_SERVER_ERROR]: "INTERNAL_SERVER_ERROR",
-    };
-    return map[status] ?? "UNKNOWN_ERROR";
+    return HTTP_STATUS_CODE_MAP[status] ?? "UNKNOWN_ERROR";
   }
 }

@@ -78,4 +78,7 @@ export const NotificationPreferencesSchema = SchemaFactory.createForClass(
   NotificationPreferences,
 );
 
-NotificationPreferencesSchema.index({ tenantId: 1, userId: 1 }, { unique: true });
+NotificationPreferencesSchema.index(
+  { tenantId: 1, userId: 1 },
+  { unique: true },
+);

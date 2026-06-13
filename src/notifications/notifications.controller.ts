@@ -29,9 +29,16 @@ export class NotificationsController {
 
   @Put("preferences")
   @HttpCode(HttpStatus.OK)
-  updatePreferences(@Request() req: AuthReq, @Body() dto: UpdatePreferencesDto) {
+  updatePreferences(
+    @Request() req: AuthReq,
+    @Body() dto: UpdatePreferencesDto,
+  ) {
     const tenantId = req.user.tenantId ?? req.user.id;
-    return this.notificationsService.updatePreferences(tenantId, req.user.id, dto);
+    return this.notificationsService.updatePreferences(
+      tenantId,
+      req.user.id,
+      dto,
+    );
   }
 
   @Get()

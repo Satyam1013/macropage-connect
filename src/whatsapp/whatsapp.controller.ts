@@ -75,10 +75,7 @@ export class WhatsappController {
 
   @Patch("token")
   @HttpCode(HttpStatus.OK)
-  refreshToken(
-    @Request() req: AuthReq,
-    @Body() body: { accessToken: string },
-  ) {
+  refreshToken(@Request() req: AuthReq, @Body() body: { accessToken: string }) {
     const tenantId = req.user.tenantId ?? req.user.id;
     return this.whatsappService.refreshToken(tenantId, body.accessToken);
   }
@@ -109,10 +106,7 @@ export class WhatsappController {
 
   @Post("share-details")
   @HttpCode(HttpStatus.OK)
-  shareDetails(
-    @Request() req: AuthReq,
-    @Body() body: { email?: string },
-  ) {
+  shareDetails(@Request() req: AuthReq, @Body() body: { email?: string }) {
     const tenantId = req.user.tenantId ?? req.user.id;
     const user = { name: req.user.name ?? "User", email: req.user.email };
     return this.whatsappService.shareWABADetails(tenantId, user, body.email);

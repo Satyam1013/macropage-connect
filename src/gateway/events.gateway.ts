@@ -13,7 +13,21 @@ import { JwtService } from "@nestjs/jwt";
 import { ConfigService } from "@nestjs/config";
 import { InjectModel } from "@nestjs/mongoose";
 import { Model } from "mongoose";
-import { Server, Socket } from "socket.io";
+import { Server, Socket as BaseSocket, DefaultEventsMap } from "socket.io";
+
+interface SocketData {
+  userId: string;
+  tenantId: string;
+  role: string;
+  name: string;
+}
+
+type Socket = BaseSocket<
+  DefaultEventsMap,
+  DefaultEventsMap,
+  DefaultEventsMap,
+  SocketData
+>;
 import { SocketService } from "./socket.service";
 import { User, UserDocument } from "../users/schemas/user.schema";
 
@@ -219,8 +233,8 @@ export class EventsGateway
     @MessageBody() body: { conversationId: string },
   ) {
     client.to(`conv:${body.conversationId}`).emit("agent:typing", {
-      agentId: client.data.userId as string,
-      agentName: client.data.name as string,
+      agentId: client.data.userId,
+      agentName: client.data.name,
       conversationId: body.conversationId,
     });
   }
@@ -231,7 +245,7 @@ export class EventsGateway
     @MessageBody() body: { conversationId: string },
   ) {
     client.to(`conv:${body.conversationId}`).emit("agent:typing:stop", {
-      agentId: client.data.userId as string,
+      agentId: client.data.userId,
       conversationId: body.conversationId,
     });
   }
@@ -295,7 +309,7 @@ export class EventsGateway
   @SubscribeMessage("ping")
   handlePing(@ConnectedSocket() client: Socket) {
     void this.userModel
-      .findByIdAndUpdate(client.data.userId as string, {
+      .findByIdAndUpdate(client.data.userId, {
         lastActiveAt: new Date(),
       })
       .exec()
