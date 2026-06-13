@@ -13,9 +13,7 @@ import { UsersService } from "./users.service";
 import type { AuthReq } from "../auth/dto/auth-request.interface";
 
 class UpdateProfileDto {
-  firstName?: string;
-  lastName?: string;
-  displayName?: string;
+  name?: string;
   bio?: string;
   phone?: string;
   city?: string;
