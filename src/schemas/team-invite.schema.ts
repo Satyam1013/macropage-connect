@@ -4,9 +4,10 @@ import { HydratedDocument } from "mongoose";
 
 export type TeamInviteDocument = HydratedDocument<TeamInvite> & {
   createdAt: Date;
+  updatedAt: Date;
 };
 
-@Schema({ timestamps: { createdAt: true, updatedAt: false } })
+@Schema({ timestamps: true })
 export class TeamInvite {
   @Prop({ required: true, index: true })
   tenantId!: string;
@@ -23,6 +24,9 @@ export class TeamInvite {
   @Prop()
   message?: string;
 
+  @Prop()
+  invitedByName?: string;
+
   @Prop({
     type: String,
     enum: ["PENDING", "ACCEPTED", "EXPIRED", "CANCELLED"],
@@ -38,6 +42,15 @@ export class TeamInvite {
 
   @Prop()
   acceptedAt?: Date;
+
+  @Prop({ default: 0 })
+  resentCount!: number;
+
+  @Prop()
+  lastResentAt?: Date;
 }
 
 export const TeamInviteSchema = SchemaFactory.createForClass(TeamInvite);
+
+TeamInviteSchema.index({ tenantId: 1, status: 1 });
+TeamInviteSchema.index({ email: 1, tenantId: 1 });
