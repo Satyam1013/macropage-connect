@@ -46,6 +46,13 @@ export class TemplatesController {
     return this.templatesService.create(tenantId, dto);
   }
 
+  @Post("draft")
+  @HttpCode(HttpStatus.CREATED)
+  saveDraft(@Request() req: AuthReq, @Body() dto: CreateTemplateDto) {
+    const tenantId = req.user.tenantId ?? req.user.id;
+    return this.templatesService.saveDraft(tenantId, dto);
+  }
+
   @Delete(":id")
   @HttpCode(HttpStatus.NO_CONTENT)
   remove(@Request() req: AuthReq, @Param("id") id: string) {

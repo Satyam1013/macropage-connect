@@ -105,6 +105,18 @@ export class TemplatesService {
     });
   }
 
+  async saveDraft(
+    tenantId: string,
+    dto: CreateTemplateDto,
+  ): Promise<TemplateDocument> {
+    return this.templateModel.create({
+      ...dto,
+      category: dto.category as TemplateCategory,
+      tenantId,
+      status: "DRAFT" as const,
+    });
+  }
+
   async syncFromMeta(tenantId: string): Promise<{ updated: number }> {
     const client = await this.metaService.getClient(tenantId);
     const resp = await client.getTemplates();

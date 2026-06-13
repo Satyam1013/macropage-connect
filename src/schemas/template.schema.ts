@@ -29,7 +29,7 @@ export class Template {
 
   @Prop({
     type: String,
-    enum: ["PENDING", "APPROVED", "REJECTED", "PAUSED"],
+    enum: ["DRAFT", "PENDING", "APPROVED", "REJECTED", "PAUSED"],
     default: "PENDING",
   })
   status!: TemplateStatus;
