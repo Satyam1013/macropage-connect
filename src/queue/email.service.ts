@@ -45,12 +45,16 @@ export class EmailService {
     to: string,
     token: string,
     companyName: string,
+    message?: string,
   ): Promise<void> {
     const link = `${process.env.FRONTEND_URL}/accept-invite?token=${token}`;
+    const messageHtml = message
+      ? `<p style="font-style:italic;color:#555;">"${message}"</p>`
+      : "";
     await this.emailQueue.add("send_invite", {
       to,
       subject: `You've been invited to ${companyName} on Macropage Connect`,
-      html: `<p>You've been invited. Click <a href="${link}">here</a> to accept.</p>`,
+      html: `<p>You've been invited to join <strong>${companyName}</strong> on Macropage Connect.</p>${messageHtml}<p><a href="${link}">Accept Invitation</a></p>`,
     } satisfies EmailJobData);
   }
 }

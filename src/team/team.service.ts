@@ -37,27 +37,68 @@ export class TeamService {
   async invite(
     tenantId: string,
     invitedBy: string,
-    email: string,
+    emails: string[],
     role: string,
-  ): Promise<TeamInviteDocument> {
-    const existing = await this.userModel.findOne({ tenantId, email }).exec();
-    if (existing)
-      throw new BadRequestException("User already in this workspace");
+    message?: string,
+    expiresIn?: string,
+  ): Promise<{ invited: TeamInviteDocument[]; skipped: string[] }> {
+    const expiresMs = this.parseExpiresIn(expiresIn ?? "3d");
+    const invited: TeamInviteDocument[] = [];
+    const skipped: string[] = [];
 
-    const token = crypto.randomBytes(32).toString("hex");
-    const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+    for (const email of emails) {
+      const existing = await this.userModel
+        .findOne({ tenantId, email })
+        .exec();
+      if (existing) {
+        skipped.push(email);
+        continue;
+      }
 
-    const invite = await this.inviteModel.create({
-      tenantId,
-      email,
-      role: role as TeamUserRole,
-      tokenHash,
-      invitedBy,
-      expiresAt: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
-    });
+      const alreadyInvited = await this.inviteModel
+        .findOne({ tenantId, email, status: "PENDING" })
+        .exec();
+      if (alreadyInvited) {
+        skipped.push(email);
+        continue;
+      }
 
-    void this.emailService.sendInviteEmail(email, token, tenantId);
-    return invite;
+      const token = crypto.randomBytes(32).toString("hex");
+      const tokenHash = crypto
+        .createHash("sha256")
+        .update(token)
+        .digest("hex");
+
+      const invite = await this.inviteModel.create({
+        tenantId,
+        email,
+        role: role.toUpperCase() as TeamUserRole,
+        tokenHash,
+        invitedBy,
+        expiresAt: new Date(Date.now() + expiresMs),
+      });
+
+      void this.emailService.sendInviteEmail(email, token, tenantId, message);
+      invited.push(invite);
+    }
+
+    return { invited, skipped };
+  }
+
+  private parseExpiresIn(expiresIn: string): number {
+    const match = /^(\d+)([dhm])$/.exec(expiresIn);
+    if (!match) return 3 * 24 * 60 * 60 * 1000;
+    const value = parseInt(match[1]);
+    switch (match[2]) {
+      case "d":
+        return value * 24 * 60 * 60 * 1000;
+      case "h":
+        return value * 60 * 60 * 1000;
+      case "m":
+        return value * 60 * 1000;
+      default:
+        return 3 * 24 * 60 * 60 * 1000;
+    }
   }
 
   async getInviteByToken(token: string): Promise<TeamInviteDocument> {
@@ -84,7 +125,11 @@ export class TeamService {
       throw new BadRequestException("Cannot assign OWNER role");
 
     const member = await this.userModel
-      .findOneAndUpdate({ _id: memberId, tenantId }, { role }, { returnDocument: "after" })
+      .findOneAndUpdate(
+        { _id: memberId, tenantId },
+        { role },
+        { returnDocument: "after" },
+      )
       .exec();
     if (!member) throw new NotFoundException("Member not found");
     return member;

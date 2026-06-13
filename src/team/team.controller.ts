@@ -31,14 +31,22 @@ export class TeamController {
   @HttpCode(HttpStatus.CREATED)
   invite(
     @Request() req: AuthReq,
-    @Body() body: { email: string; role: string },
+    @Body()
+    body: {
+      emails: string[];
+      role: string;
+      message?: string;
+      expiresIn?: string;
+    },
   ) {
     const tenantId = req.user.tenantId ?? req.user.id;
     return this.teamService.invite(
       tenantId,
       req.user.id,
-      body.email,
+      body.emails,
       body.role,
+      body.message,
+      body.expiresIn,
     );
   }
 
