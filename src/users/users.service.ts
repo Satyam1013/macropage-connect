@@ -92,7 +92,26 @@ export class UsersService {
 
   async updateProfile(
     userId: string,
-    data: Partial<Pick<User, "name" | "phone" | "company" | "avatarUrl">>,
+    data: Partial<
+      Pick<
+        User,
+        | "name"
+        | "phone"
+        | "company"
+        | "avatarUrl"
+        | "firstName"
+        | "lastName"
+        | "displayName"
+        | "bio"
+        | "city"
+        | "state"
+        | "country"
+        | "department"
+        | "jobTitle"
+        | "timezone"
+        | "language"
+      >
+    >,
   ): Promise<UserDocument | null> {
     return this.userModel
       .findByIdAndUpdate(userId, data, { returnDocument: "after" })

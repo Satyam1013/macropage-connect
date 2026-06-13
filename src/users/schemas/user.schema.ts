@@ -110,6 +110,18 @@ export class User {
   logoUrl?: string;
 
   @Prop()
+  firstName?: string;
+
+  @Prop()
+  lastName?: string;
+
+  @Prop()
+  displayName?: string;
+
+  @Prop()
+  bio?: string;
+
+  @Prop()
   department?: string;
 
   @Prop()
