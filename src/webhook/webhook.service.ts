@@ -25,6 +25,7 @@ export class WebhookService {
       query["hub.mode"] === "subscribe" &&
       query["hub.verify_token"] === process.env.META_WEBHOOK_VERIFY_TOKEN
     ) {
+      void this.wabaModel.updateMany({}, { $set: { webhookVerified: true } });
       return query["hub.challenge"];
     }
     throw new ForbiddenException("Webhook verification failed");

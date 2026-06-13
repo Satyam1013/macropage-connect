@@ -101,6 +101,23 @@ export class WhatsappController {
     return this.whatsappService.updateProfile(tenantId, dto);
   }
 
+  @Get("details")
+  getDetails(@Request() req: AuthReq) {
+    const tenantId = req.user.tenantId ?? req.user.id;
+    return this.whatsappService.getWABADetails(tenantId);
+  }
+
+  @Post("share-details")
+  @HttpCode(HttpStatus.OK)
+  shareDetails(
+    @Request() req: AuthReq,
+    @Body() body: { email?: string },
+  ) {
+    const tenantId = req.user.tenantId ?? req.user.id;
+    const user = { name: req.user.name ?? "User", email: req.user.email };
+    return this.whatsappService.shareWABADetails(tenantId, user, body.email);
+  }
+
   @Delete("disconnect")
   @HttpCode(HttpStatus.NO_CONTENT)
   disconnect(@Request() req: AuthReq) {

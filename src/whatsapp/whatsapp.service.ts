@@ -1,6 +1,8 @@
 import { Injectable, BadRequestException } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
+import { InjectQueue } from "@nestjs/bullmq";
 import { Model } from "mongoose";
+import { Queue } from "bullmq";
 import axios from "axios";
 import { META_GRAPH_BASE as BASE } from "../meta/meta.constants";
 import {
@@ -8,6 +10,7 @@ import {
   WABAAccountDocument,
 } from "../schemas/waba-account.schema";
 import { User, UserDocument } from "../users/schemas/user.schema";
+import { Message, MessageDocument } from "../schemas/message.schema";
 import { EncryptionService } from "../meta/encryption.service";
 import {
   BusinessInfoDto,
@@ -15,6 +18,7 @@ import {
   VerifyPhoneDto,
   ConfirmPhoneDto,
 } from "./dto/whatsapp.dto";
+import type { EmailJobData } from "../queue/queue.types";
 
 @Injectable()
 export class WhatsappService {
@@ -23,6 +27,10 @@ export class WhatsappService {
     private readonly wabaModel: Model<WABAAccountDocument>,
     @InjectModel(User.name)
     private readonly userModel: Model<UserDocument>,
+    @InjectModel(Message.name)
+    private readonly messageModel: Model<MessageDocument>,
+    @InjectQueue("emails")
+    private readonly emailQueue: Queue,
     private readonly encryption: EncryptionService,
   ) {}
 
@@ -583,6 +591,176 @@ export class WhatsappService {
     }
 
     return { success: true, data: { message: "Access token updated" } };
+  }
+
+  async getWABADetails(tenantId: string) {
+    const waba = await this.wabaModel.findOne({ tenantId }).lean().exec();
+
+    if (!waba) {
+      return { success: true, data: { connected: false } };
+    }
+
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
+    const monthStart = new Date();
+    monthStart.setDate(1);
+    monthStart.setHours(0, 0, 0, 0);
+
+    const [messagesToday, messagesThisMonth] = await Promise.all([
+      this.messageModel.countDocuments({
+        tenantId,
+        direction: "OUTBOUND",
+        isNote: { $ne: true },
+        createdAt: { $gte: todayStart },
+      }),
+      this.messageModel.countDocuments({
+        tenantId,
+        direction: "OUTBOUND",
+        isNote: { $ne: true },
+        createdAt: { $gte: monthStart },
+      }),
+    ]);
+
+    const tierLimits: Record<string, number> = {
+      TIER_1K: 1000,
+      TIER_10K: 10000,
+      TIER_100K: 100000,
+      TIER_UNLIMITED: -1,
+    };
+
+    const tier = waba.messagingTier ?? "TIER_1K";
+    const tierLimit = tierLimits[tier] ?? 1000;
+    const usagePercent =
+      tierLimit === -1
+        ? 0
+        : Math.min(Math.round((messagesToday / tierLimit) * 100), 100);
+
+    return {
+      success: true,
+      data: {
+        connected: true,
+        businessName: waba.displayName ?? null,
+        wabaId: waba.wabaId ?? null,
+        phoneNumber: waba.phoneNumber ?? null,
+        phoneNumberId: waba.phoneNumberId ?? null,
+        qualityRating: waba.qualityRating ?? "GREEN",
+        messagingTier: tier,
+        tierLimit,
+        messagesToday,
+        messagesThisMonth,
+        usagePercent,
+        tokenExpired: waba.tokenExpired ?? false,
+        tokenExpiresAt: waba.tokenExpiresAt ?? null,
+        webhookUrl: `${process.env.APP_URL}/api/v1/webhook/meta`,
+        webhookVerified: waba.webhookVerified ?? false,
+        connectedAt: (waba as { createdAt?: Date }).createdAt,
+        updatedAt: (waba as { updatedAt?: Date }).updatedAt,
+      },
+    };
+  }
+
+  async shareWABADetails(
+    tenantId: string,
+    user: { name: string; email: string },
+    toEmail?: string,
+  ) {
+    const result = await this.getWABADetails(tenantId);
+    if (!result.data.connected) {
+      throw new BadRequestException({
+        success: false,
+        error: {
+          code: "WABA_NOT_CONNECTED",
+          message: "WhatsApp not connected yet",
+        },
+      });
+    }
+
+    const recipient = toEmail ?? user.email;
+
+    await this.emailQueue.add("send_waba_details", {
+      to: recipient,
+      subject: `WhatsApp Business Details — ${result.data.businessName ?? "Your Account"}`,
+      html: this.buildWABADetailsEmail(result.data, user),
+    } satisfies EmailJobData);
+
+    return {
+      success: true,
+      data: { message: `Details sent to ${recipient}`, sentTo: recipient },
+    };
+  }
+
+  private buildWABADetailsEmail(
+    data: Record<string, unknown>,
+    user: { name: string },
+  ): string {
+    const tierLimit = data.tierLimit as number;
+    const tierLimitStr =
+      tierLimit === -1
+        ? "Unlimited"
+        : (tierLimit as number).toLocaleString("en-IN");
+    const qualityRating = String(data.qualityRating ?? "GREEN");
+    const webhookVerified = Boolean(data.webhookVerified);
+    const badge = (rating: string) =>
+      rating === "GREEN"
+        ? "green"
+        : rating === "YELLOW"
+          ? "amber"
+          : "red";
+
+    return `<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body{font-family:Arial,sans-serif;color:#333;max-width:600px;margin:0 auto;padding:20px}
+    .header{background:#1a3d2b;color:white;padding:24px;border-radius:12px;margin-bottom:24px}
+    .header h1{margin:0;font-size:20px}
+    .header p{margin:4px 0 0;opacity:.7;font-size:14px}
+    .card{background:#f7f8f6;border:1px solid #e8ebe8;border-radius:12px;padding:20px;margin-bottom:16px}
+    .card h3{margin:0 0 12px;font-size:15px}
+    .row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #e8ebe8}
+    .row:last-child{border-bottom:none}
+    .label{color:#666;font-size:13px}
+    .value{font-weight:bold;font-size:13px;color:#1a3d2b;font-family:monospace}
+    .badge{display:inline-block;padding:2px 10px;border-radius:20px;font-size:12px;font-weight:bold}
+    .green{background:#e8f5ee;color:#1a5c3a}
+    .amber{background:#fff8e1;color:#f59e0b}
+    .red{background:#fee2e2;color:#dc2626}
+    .footer{color:#999;font-size:12px;text-align:center;margin-top:24px}
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>WhatsApp Business Details</h1>
+    <p>Shared by ${user.name} from Macropage Connect</p>
+  </div>
+  <div class="card">
+    <h3>Business Information</h3>
+    <div class="row"><span class="label">Business Name</span><span class="value">${data.businessName ?? "N/A"}</span></div>
+    <div class="row"><span class="label">Phone Number</span><span class="value">${data.phoneNumber ?? "N/A"}</span></div>
+    <div class="row"><span class="label">WABA ID</span><span class="value">${data.wabaId ?? "N/A"}</span></div>
+    <div class="row"><span class="label">Phone Number ID</span><span class="value">${data.phoneNumberId ?? "N/A"}</span></div>
+  </div>
+  <div class="card">
+    <h3>Quality &amp; Limits</h3>
+    <div class="row"><span class="label">Quality Rating</span><span class="badge ${badge(qualityRating)}">${qualityRating}</span></div>
+    <div class="row"><span class="label">Messaging Tier</span><span class="value">${data.messagingTier}</span></div>
+    <div class="row"><span class="label">Daily Limit</span><span class="value">${tierLimitStr} messages/day</span></div>
+  </div>
+  <div class="card">
+    <h3>Usage</h3>
+    <div class="row"><span class="label">Messages Today</span><span class="value">${(data.messagesToday as number).toLocaleString("en-IN")}</span></div>
+    <div class="row"><span class="label">Messages This Month</span><span class="value">${(data.messagesThisMonth as number).toLocaleString("en-IN")}</span></div>
+  </div>
+  <div class="card">
+    <h3>Webhook Configuration</h3>
+    <div class="row"><span class="label">Callback URL</span><span class="value" style="font-size:11px">${data.webhookUrl}</span></div>
+    <div class="row"><span class="label">Verify Token</span><span class="value">macropage_webhook_verify_2024</span></div>
+    <div class="row"><span class="label">Status</span><span class="badge ${webhookVerified ? "green" : "amber"}">${webhookVerified ? "Verified" : "Not verified"}</span></div>
+  </div>
+  <div class="footer"><p>Sent from Macropage Connect · ${new Date().toLocaleDateString("en-IN")}</p></div>
+</body>
+</html>`;
   }
 
   async disconnect(tenantId: string): Promise<void> {
