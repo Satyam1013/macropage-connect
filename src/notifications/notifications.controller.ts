@@ -1,15 +1,18 @@
 import {
   Controller,
   Get,
+  Put,
   Patch,
   Param,
   Query,
+  Body,
   UseGuards,
   Request,
   HttpCode,
   HttpStatus,
 } from "@nestjs/common";
 import { NotificationsService } from "./notifications.service";
+import { UpdatePreferencesDto } from "./dto/update-preferences.dto";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import type { AuthReq } from "../auth/dto/auth-request.interface";
 
@@ -17,6 +20,19 @@ import type { AuthReq } from "../auth/dto/auth-request.interface";
 @Controller("notifications")
 export class NotificationsController {
   constructor(private readonly notificationsService: NotificationsService) {}
+
+  @Get("preferences")
+  getPreferences(@Request() req: AuthReq) {
+    const tenantId = req.user.tenantId ?? req.user.id;
+    return this.notificationsService.getPreferences(tenantId, req.user.id);
+  }
+
+  @Put("preferences")
+  @HttpCode(HttpStatus.OK)
+  updatePreferences(@Request() req: AuthReq, @Body() dto: UpdatePreferencesDto) {
+    const tenantId = req.user.tenantId ?? req.user.id;
+    return this.notificationsService.updatePreferences(tenantId, req.user.id, dto);
+  }
 
   @Get()
   findAll(@Request() req: AuthReq, @Query("page") page?: string) {
