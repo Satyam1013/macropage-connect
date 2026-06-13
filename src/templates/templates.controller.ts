@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Patch,
   Delete,
   Body,
   Param,
@@ -51,6 +52,17 @@ export class TemplatesController {
   saveDraft(@Request() req: AuthReq, @Body() dto: CreateTemplateDto) {
     const tenantId = req.user.tenantId ?? req.user.id;
     return this.templatesService.saveDraft(tenantId, dto);
+  }
+
+  @Patch(":id/draft")
+  @HttpCode(HttpStatus.OK)
+  updateDraft(
+    @Request() req: AuthReq,
+    @Param("id") id: string,
+    @Body() dto: Partial<CreateTemplateDto>,
+  ) {
+    const tenantId = req.user.tenantId ?? req.user.id;
+    return this.templatesService.updateDraft(tenantId, id, dto);
   }
 
   @Delete(":id")

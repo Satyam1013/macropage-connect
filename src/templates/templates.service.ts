@@ -117,6 +117,19 @@ export class TemplatesService {
     });
   }
 
+  async updateDraft(
+    tenantId: string,
+    id: string,
+    dto: Partial<CreateTemplateDto>,
+  ): Promise<TemplateDocument> {
+    const t = await this.templateModel
+      .findOne({ _id: id, tenantId, status: "DRAFT" })
+      .exec();
+    if (!t) throw new NotFoundException("Draft template not found");
+    Object.assign(t, dto);
+    return t.save();
+  }
+
   async syncFromMeta(tenantId: string): Promise<{ updated: number }> {
     const client = await this.metaService.getClient(tenantId);
     const resp = await client.getTemplates();
