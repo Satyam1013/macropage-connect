@@ -1,10 +1,11 @@
 import { Module } from "@nestjs/common";
 import { BullModule } from "@nestjs/bullmq";
 import { ConfigModule, ConfigService } from "@nestjs/config";
-import { EmailProcessor } from "./processors/email.processor";
+import { EmailService } from "./email.service";
 
 @Module({
   imports: [
+    ConfigModule,
     BullModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
@@ -21,13 +22,12 @@ import { EmailProcessor } from "./processors/email.processor";
       }),
     }),
     BullModule.registerQueue(
-      { name: "emails" },
       { name: "campaigns" },
       { name: "imports" },
       { name: "webhooks" },
     ),
   ],
-  providers: [EmailProcessor],
-  exports: [BullModule],
+  providers: [EmailService],
+  exports: [BullModule, EmailService],
 })
 export class QueueModule {}

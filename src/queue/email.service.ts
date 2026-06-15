@@ -1,11 +1,31 @@
-import { Injectable } from "@nestjs/common";
-import { InjectQueue } from "@nestjs/bullmq";
-import { Queue } from "bullmq";
-import type { EmailJobData } from "./queue.types";
+import { Injectable, Logger } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
+import { Resend } from "resend";
 
 @Injectable()
 export class EmailService {
-  constructor(@InjectQueue("emails") private readonly emailQueue: Queue) {}
+  private readonly logger = new Logger(EmailService.name);
+
+  constructor(private readonly config: ConfigService) {}
+
+  async sendRaw(to: string, subject: string, html: string): Promise<void> {
+    const apiKey = this.config.get<string>("RESEND_API_KEY");
+    if (!apiKey) {
+      this.logger.warn(
+        `Email skipped (RESEND_API_KEY not set) → ${to}: ${subject}`,
+      );
+      return;
+    }
+    const resend = new Resend(apiKey);
+    const from =
+      this.config.get<string>("EMAIL_FROM") ?? "Macropage <noreply@macropage.in>";
+    const { error } = await resend.emails.send({ from, to, subject, html });
+    if (error) {
+      this.logger.error(`Failed to send email to ${to}`, error);
+      throw new Error(error.message);
+    }
+    this.logger.log(`Email sent → ${to}: ${subject}`);
+  }
 
   async sendVerificationEmail(
     to: string,
@@ -13,11 +33,11 @@ export class EmailService {
     token: string,
   ): Promise<void> {
     const link = `${process.env.FRONTEND_URL}/verify-email?token=${token}`;
-    await this.emailQueue.add("send_verification", {
+    await this.sendRaw(
       to,
-      subject: "Verify your Macropage Connect account",
-      html: `<p>Hi ${name},</p><p>Click <a href="${link}">here</a> to verify your email.</p>`,
-    } satisfies EmailJobData);
+      "Verify your Macropage Connect account",
+      `<p>Hi ${name},</p><p>Click <a href="${link}">here</a> to verify your email.</p>`,
+    );
   }
 
   async sendPasswordResetEmail(
@@ -26,19 +46,19 @@ export class EmailService {
     token: string,
   ): Promise<void> {
     const link = `${process.env.FRONTEND_URL}/reset-password?token=${token}`;
-    await this.emailQueue.add("send_reset", {
+    await this.sendRaw(
       to,
-      subject: "Reset your Macropage Connect password",
-      html: `<p>Hi ${name},</p><p>Click <a href="${link}">here</a> to reset your password. Link expires in 1 hour.</p>`,
-    } satisfies EmailJobData);
+      "Reset your Macropage Connect password",
+      `<p>Hi ${name},</p><p>Click <a href="${link}">here</a> to reset your password. Link expires in 1 hour.</p>`,
+    );
   }
 
   async sendWelcomeEmail(to: string, name: string): Promise<void> {
-    await this.emailQueue.add("send_welcome", {
+    await this.sendRaw(
       to,
-      subject: "Welcome to Macropage Connect!",
-      html: `<p>Hi ${name},</p><p>Welcome to Macropage Connect. Your account is ready.</p>`,
-    } satisfies EmailJobData);
+      "Welcome to Macropage Connect!",
+      `<p>Hi ${name},</p><p>Welcome to Macropage Connect. Your account is ready.</p>`,
+    );
   }
 
   async sendInviteEmail(
@@ -51,10 +71,10 @@ export class EmailService {
     const messageHtml = message
       ? `<p style="font-style:italic;color:#555;">"${message}"</p>`
       : "";
-    await this.emailQueue.add("send_invite", {
+    await this.sendRaw(
       to,
-      subject: `You've been invited to ${companyName} on Macropage Connect`,
-      html: `<p>You've been invited to join <strong>${companyName}</strong> on Macropage Connect.</p>${messageHtml}<p><a href="${link}">Accept Invitation</a></p>`,
-    } satisfies EmailJobData);
+      `You've been invited to ${companyName} on Macropage Connect`,
+      `<p>You've been invited to join <strong>${companyName}</strong> on Macropage Connect.</p>${messageHtml}<p><a href="${link}">Accept Invitation</a></p>`,
+    );
   }
 }

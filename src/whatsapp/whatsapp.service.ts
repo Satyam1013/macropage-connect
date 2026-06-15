@@ -1,8 +1,6 @@
 import { Injectable, BadRequestException } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
-import { InjectQueue } from "@nestjs/bullmq";
 import { Model } from "mongoose";
-import { Queue } from "bullmq";
 import axios from "axios";
 import { META_GRAPH_BASE as BASE } from "../meta/meta.constants";
 import {
@@ -18,7 +16,7 @@ import {
   VerifyPhoneDto,
   ConfirmPhoneDto,
 } from "./dto/whatsapp.dto";
-import type { EmailJobData } from "../queue/queue.types";
+import { EmailService } from "../queue/email.service";
 
 interface WABADetailsData {
   connected: true;
@@ -49,8 +47,7 @@ export class WhatsappService {
     private readonly userModel: Model<UserDocument>,
     @InjectModel(Message.name)
     private readonly messageModel: Model<MessageDocument>,
-    @InjectQueue("emails")
-    private readonly emailQueue: Queue,
+    private readonly emailService: EmailService,
     private readonly encryption: EncryptionService,
   ) {}
 
@@ -698,11 +695,11 @@ export class WhatsappService {
 
     const recipient = toEmail ?? user.email;
 
-    await this.emailQueue.add("send_waba_details", {
-      to: recipient,
-      subject: `WhatsApp Business Details — ${result.data.businessName ?? "Your Account"}`,
-      html: this.buildWABADetailsEmail(result.data as WABADetailsData, user),
-    } satisfies EmailJobData);
+    await this.emailService.sendRaw(
+      recipient,
+      `WhatsApp Business Details — ${result.data.businessName ?? "Your Account"}`,
+      this.buildWABADetailsEmail(result.data as WABADetailsData, user),
+    );
 
     return {
       success: true,
