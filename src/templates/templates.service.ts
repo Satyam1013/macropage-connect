@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  ConflictException,
 } from "@nestjs/common";
 import axios from "axios";
 import { InjectModel } from "@nestjs/mongoose";
@@ -109,25 +110,51 @@ export class TemplatesService {
       throw err;
     }
 
-    return this.templateModel.create({
-      ...dto,
-      category: dto.category as TemplateCategory,
-      tenantId,
-      metaTemplateId: metaId,
-      status: "PENDING" as const,
-    });
+    try {
+      return await this.templateModel.create({
+        ...dto,
+        category: dto.category as TemplateCategory,
+        tenantId,
+        metaTemplateId: metaId,
+        status: "PENDING" as const,
+      });
+    } catch (err) {
+      if ((err as { code?: number }).code === 11000) {
+        throw new ConflictException({
+          success: false,
+          error: {
+            code: "DUPLICATE_TEMPLATE",
+            message: `A template named "${dto.name}" in "${dto.language}" already exists`,
+          },
+        });
+      }
+      throw err;
+    }
   }
 
   async saveDraft(
     tenantId: string,
     dto: CreateTemplateDto,
   ): Promise<TemplateDocument> {
-    return this.templateModel.create({
-      ...dto,
-      category: dto.category as TemplateCategory,
-      tenantId,
-      status: "DRAFT" as const,
-    });
+    try {
+      return await this.templateModel.create({
+        ...dto,
+        category: dto.category as TemplateCategory,
+        tenantId,
+        status: "DRAFT" as const,
+      });
+    } catch (err) {
+      if ((err as { code?: number }).code === 11000) {
+        throw new ConflictException({
+          success: false,
+          error: {
+            code: "DUPLICATE_TEMPLATE",
+            message: `A template named "${dto.name}" in "${dto.language}" already exists`,
+          },
+        });
+      }
+      throw err;
+    }
   }
 
   async updateDraft(
