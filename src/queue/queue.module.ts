@@ -12,6 +12,12 @@ import { EmailProcessor } from "./processors/email.processor";
         connection: {
           url: config.get<string>("REDIS_URL", "redis://localhost:6379"),
         },
+        defaultJobOptions: {
+          removeOnComplete: 50,
+          removeOnFail: 20,
+          attempts: 3,
+          backoff: { type: "exponential", delay: 10000 },
+        },
       }),
     }),
     BullModule.registerQueue(

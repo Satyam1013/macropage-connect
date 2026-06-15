@@ -6,7 +6,11 @@ import { ConfigService } from "@nestjs/config";
 
 import { EmailJobData } from "../queue.types";
 
-@Processor("emails")
+@Processor("emails", {
+  stalledInterval: 300000,
+  maxStalledCount: 1,
+  concurrency: 2,
+})
 export class EmailProcessor extends WorkerHost {
   private readonly logger = new Logger(EmailProcessor.name);
 
