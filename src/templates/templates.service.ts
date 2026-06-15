@@ -39,13 +39,26 @@ export class TemplatesService {
 
     const components: Record<string, unknown>[] = [];
     if (dto.header) components.push({ type: "HEADER", ...dto.header });
-    components.push({
-      type: "BODY",
-      text: dto.body,
-      ...(dto.sampleVariables
-        ? { example: { body_text: [Object.values(dto.sampleVariables)] } }
-        : {}),
-    });
+
+    const bodyComp: Record<string, unknown> = { type: "BODY", text: dto.body };
+    const bodyHasVars = /\{\{\d+\}\}/.test(dto.body);
+    if (bodyHasVars) {
+      const values = Object.values(dto.sampleVariables ?? {}).filter(
+        (v) => typeof v === "string" && v.trim().length > 0,
+      );
+      if (values.length > 0) {
+        bodyComp.example = { body_text: [values] };
+      } else {
+        const varCount = (dto.body.match(/\{\{\d+\}\}/g) ?? []).length;
+        bodyComp.example = {
+          body_text: [
+            Array.from({ length: varCount }, (_, i) => `example${i + 1}`),
+          ],
+        };
+      }
+    }
+    components.push(bodyComp);
+
     if (dto.footer) components.push({ type: "FOOTER", text: dto.footer });
     if (dto.buttons) {
       const { buttons: btnList, ...btnRest } = dto.buttons as {
