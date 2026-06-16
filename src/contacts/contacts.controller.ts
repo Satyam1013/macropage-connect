@@ -22,6 +22,12 @@ import { UserPayload } from "../auth/dto/auth-response.interface";
 export class ContactsController {
   constructor(private readonly contactsService: ContactsService) {}
 
+  @Get("segments")
+  getSegments(@Request() req: { user: UserPayload & { tenantId?: string } }) {
+    const tenantId = req.user.tenantId ?? req.user.id;
+    return this.contactsService.getSegments(tenantId);
+  }
+
   @Get()
   findAll(
     @Request() req: { user: UserPayload & { tenantId?: string } },

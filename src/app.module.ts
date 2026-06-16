@@ -22,6 +22,7 @@ import { NotificationsModule } from "./notifications/notifications.module";
 import { UploadModule } from "./upload/upload.module";
 import { HelpModule } from "./help/help.module";
 import { OnboardingModule } from "./onboarding/onboarding.module";
+import { QuickRepliesModule } from "./quick-replies/quick-replies.module";
 
 // Infrastructure
 import { MetaModule } from "./meta/meta.module";
@@ -61,6 +62,7 @@ import { GatewayModule } from "./gateway/gateway.module";
     UploadModule,
     HelpModule,
     OnboardingModule,
+    QuickRepliesModule,
   ],
   controllers: [AppController],
   providers: [AppService],

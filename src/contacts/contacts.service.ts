@@ -109,6 +109,48 @@ export class ContactsService {
     );
   }
 
+  async getSegments(tenantId: string) {
+    const [total, subscribed, unsubscribed, tagAgg] = await Promise.all([
+      this.contactModel.countDocuments({ tenantId }),
+      this.contactModel.countDocuments({ tenantId, isOptedOut: false }),
+      this.contactModel.countDocuments({ tenantId, isOptedOut: true }),
+      this.contactModel.aggregate<{ _id: string; count: number }>([
+        { $match: { tenantId, tags: { $exists: true, $ne: [] } } },
+        { $unwind: "$tags" },
+        { $group: { _id: "$tags", count: { $sum: 1 } } },
+        { $sort: { count: -1 } },
+      ]),
+    ]);
+
+    const predefined = [
+      { id: "all", name: "All Contacts", count: total, type: "predefined" },
+      {
+        id: "subscribed",
+        name: "Subscribed",
+        count: subscribed,
+        type: "predefined",
+      },
+      {
+        id: "unsubscribed",
+        name: "Unsubscribed",
+        count: unsubscribed,
+        type: "predefined",
+      },
+    ];
+
+    const tagSegments = tagAgg.map((t) => ({
+      id: `tag:${t._id}`,
+      name: t._id,
+      count: t.count,
+      type: "tag",
+    }));
+
+    return {
+      success: true,
+      data: { segments: [...predefined, ...tagSegments] },
+    };
+  }
+
   findByPhone(
     tenantId: string,
     phone: string,
