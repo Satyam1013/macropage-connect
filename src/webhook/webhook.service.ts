@@ -8,6 +8,7 @@ import {
 } from "../schemas/waba-account.schema";
 import { ContactsService } from "../contacts/contacts.service";
 import { ConversationsService } from "../conversations/conversations.service";
+import { AutomationService } from "../automation/automation.service";
 
 @Injectable()
 export class WebhookService {
@@ -18,6 +19,7 @@ export class WebhookService {
     private readonly wabaModel: Model<WABAAccountDocument>,
     private readonly contactsService: ContactsService,
     private readonly conversationsService: ConversationsService,
+    private readonly automationService: AutomationService,
   ) {}
 
   verifyWebhook(query: Record<string, string>): string {
@@ -124,6 +126,12 @@ export class WebhookService {
         type,
         msg.timestamp as number,
       );
+
+      void this.automationService
+        .processRules(tenantId, conversation.id, contact.phone, content)
+        .catch((err: unknown) =>
+          this.logger.error("Automation processing failed", err),
+        );
     } catch (err) {
       this.logger.error("Failed to handle inbound message", err);
     }

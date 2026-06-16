@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
 import { Model } from "mongoose";
 import {
@@ -6,14 +6,24 @@ import {
   AutomationRuleDocument,
 } from "../schemas/automation-rule.schema";
 import { Flow, FlowDocument } from "../schemas/flow.schema";
+import { ConversationsService } from "../conversations/conversations.service";
+import { MetaService } from "../meta/meta.service";
+import { Message, MessageDocument } from "../schemas/message.schema";
+import type { MessageType } from "../messages/messages.types";
 
 @Injectable()
 export class AutomationService {
+  private readonly logger = new Logger(AutomationService.name);
+
   constructor(
     @InjectModel(AutomationRule.name)
     private readonly ruleModel: Model<AutomationRuleDocument>,
     @InjectModel(Flow.name)
     private readonly flowModel: Model<FlowDocument>,
+    @InjectModel(Message.name)
+    private readonly msgModel: Model<MessageDocument>,
+    private readonly conversationsService: ConversationsService,
+    private readonly metaService: MetaService,
   ) {}
 
   // ─── Rules ────────────────────────────────────────────────────────────────
@@ -108,6 +118,7 @@ export class AutomationService {
   async processRules(
     tenantId: string,
     conversationId: string,
+    contactPhone: string,
     messageContent: string,
   ): Promise<void> {
     const rules = await this.ruleModel
@@ -121,17 +132,69 @@ export class AutomationService {
         keywords?: string[];
       };
 
-      if (
-        trigger.type === "message_contains" &&
-        trigger.keywords?.some((kw) =>
-          messageContent.toLowerCase().includes(kw.toLowerCase()),
-        )
-      ) {
-        await this.ruleModel.updateOne(
-          { _id: rule._id },
-          { $inc: { totalTriggered: 1 }, lastTriggeredAt: new Date() },
-        );
-      }
+      const matched =
+        trigger.type === "inbound_message" ||
+        (trigger.type === "message_contains" &&
+          trigger.keywords?.some((kw) =>
+            messageContent.toLowerCase().includes(kw.toLowerCase()),
+          ));
+
+      if (!matched) continue;
+
+      await this.ruleModel.updateOne(
+        { _id: rule._id },
+        { $inc: { totalTriggered: 1 }, lastTriggeredAt: new Date() },
+      );
+
+      await this.executeAction(
+        tenantId,
+        conversationId,
+        contactPhone,
+        rule.actions,
+      ).catch((err: unknown) =>
+        this.logger.error(`Action failed for rule ${rule.name}`, err),
+      );
+    }
+  }
+
+  private async executeAction(
+    tenantId: string,
+    conversationId: string,
+    contactPhone: string,
+    actions: Record<string, unknown>,
+  ): Promise<void> {
+    const type = actions.type as string | undefined;
+    const message = actions.message as string | undefined;
+
+    if (type === "send_message" && message) {
+      const client = await this.metaService.getClient(tenantId);
+      const phone = contactPhone.replace("+", "");
+
+      const resp = await client.sendMessage({
+        messaging_product: "whatsapp",
+        to: phone,
+        type: "text",
+        text: { body: message },
+      });
+
+      const metaMessageId = (
+        resp.data as { messages?: Array<{ id: string }> }
+      )?.messages?.[0]?.id;
+
+      await this.msgModel.create({
+        tenantId,
+        conversationId,
+        direction: "OUTBOUND",
+        type: "TEXT" as MessageType,
+        content: message,
+        metaMessageId,
+        status: "SENT",
+        sentAt: new Date(),
+      });
+
+      this.logger.log(
+        `Auto-reply sent to ${contactPhone} in conv ${conversationId}`,
+      );
     }
   }
 }
