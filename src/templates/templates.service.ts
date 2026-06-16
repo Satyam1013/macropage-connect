@@ -179,15 +179,19 @@ export class TemplatesService {
     let updated = 0;
     for (const t of templates) {
       await this.templateModel.findOneAndUpdate(
-        { tenantId, metaTemplateId: t["id"] as string },
         {
-          name: t["name"],
-          status: t["status"],
-          category: t["category"],
-          metaTemplateId: t["id"],
           tenantId,
+          name: t["name"] as string,
+          language: t["language"] as string,
         },
-        { returnDocument: "after", upsert: true },
+        {
+          $set: {
+            status: t["status"],
+            category: t["category"],
+            metaTemplateId: t["id"],
+          },
+        },
+        { upsert: true },
       );
       updated++;
     }
