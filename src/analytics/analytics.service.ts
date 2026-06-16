@@ -292,9 +292,14 @@ export class AnalyticsService {
           { $sort: { createdAt: -1 } },
           { $limit: perType },
           {
+            $addFields: {
+              conversationObjId: { $toObjectId: "$conversationId" },
+            },
+          },
+          {
             $lookup: {
               from: "conversations",
-              localField: "conversationId",
+              localField: "conversationObjId",
               foreignField: "_id",
               as: "conversation",
             },
@@ -306,9 +311,20 @@ export class AnalyticsService {
             },
           },
           {
+            $addFields: {
+              contactObjId: {
+                $cond: {
+                  if: { $ifNull: ["$conversation.contactId", false] },
+                  then: { $toObjectId: "$conversation.contactId" },
+                  else: null,
+                },
+              },
+            },
+          },
+          {
             $lookup: {
               from: "contacts",
-              localField: "conversation.contactId",
+              localField: "contactObjId",
               foreignField: "_id",
               as: "contact",
             },
@@ -349,13 +365,13 @@ export class AnalyticsService {
     );
 
     type AnyObj = Record<string, unknown>;
-    type MsgContact = { _id?: string; name?: string };
+    type MsgContact = { _id?: string; name?: string; phone?: string };
 
     const activities = [
       ...(recentMessages as AnyObj[]).map((m) => ({
         id: String(m._id),
         type: "message",
-        title: `New message from ${(m.contact as MsgContact)?.name ?? "Unknown"}`,
+        title: `New message from ${(m.contact as MsgContact)?.name ?? (m.contact as MsgContact)?.phone ?? "Unknown"}`,
         subtitle: m.content
           ? (m.content as string).substring(0, 60)
           : "Media message",
@@ -363,7 +379,10 @@ export class AnalyticsService {
         link: `/inbox?conversationId=${String(m.conversationId)}`,
         meta: {
           contactId: String((m.contact as MsgContact)?._id ?? ""),
-          contactName: (m.contact as MsgContact)?.name ?? "",
+          contactName:
+            (m.contact as MsgContact)?.name ??
+            (m.contact as MsgContact)?.phone ??
+            "",
           conversationId: String(m.conversationId),
         },
       })),
