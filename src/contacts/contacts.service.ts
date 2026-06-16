@@ -170,6 +170,6 @@ export class ContactsService {
         { returnDocument: "after", upsert: true, sort: { _id: 1 } },
       )
       .exec();
-    return doc!;
+    return doc;
   }
 }

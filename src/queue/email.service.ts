@@ -18,7 +18,8 @@ export class EmailService {
     }
     const resend = new Resend(apiKey);
     const from =
-      this.config.get<string>("EMAIL_FROM") ?? "Macropage <noreply@macropage.in>";
+      this.config.get<string>("EMAIL_FROM") ??
+      "Macropage <noreply@macropage.in>";
     const { error } = await resend.emails.send({ from, to, subject, html });
     if (error) {
       this.logger.error(`Failed to send email to ${to}`, error);

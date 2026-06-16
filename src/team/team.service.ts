@@ -163,7 +163,7 @@ export class TeamService {
         valid: true,
         email: invite.email,
         role: invite.role,
-        invitedByName: (invite.invitedByName as string | undefined) ?? null,
+        invitedByName: invite.invitedByName ?? null,
         expiresAt: invite.expiresAt,
       },
     };
@@ -308,7 +308,7 @@ export class TeamService {
       invite.message,
     );
 
-    const newResentCount = (invite.resentCount as number) + 1;
+    const newResentCount = invite.resentCount + 1;
 
     return {
       success: true,
