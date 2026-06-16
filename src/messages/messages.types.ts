@@ -9,6 +9,10 @@ export type MessageType =
   | "TEMPLATE"
   | "INTERACTIVE"
   | "LOCATION"
+  | "STICKER"
+  | "REACTION"
+  | "CONTACTS"
+  | "ORDER"
   | "NOTE"
   | "SYSTEM";
 
