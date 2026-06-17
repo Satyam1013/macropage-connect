@@ -1,4 +1,5 @@
 import { Injectable, Inject } from "@nestjs/common";
+import { UserRole } from "../auth/dto/signup.dto";
 import { InjectModel } from "@nestjs/mongoose";
 import { Model } from "mongoose";
 import type Redis from "ioredis";
@@ -474,7 +475,10 @@ export class AnalyticsService {
     const { dateFrom, dateTo } = this.getDateRange(from, to);
 
     const agents = await this.userModel
-      .find({ tenantId, role: { $in: ["AGENT", "MANAGER", "ADMIN"] } })
+      .find({
+        tenantId,
+        role: { $in: [UserRole.AGENT, UserRole.MANAGER, UserRole.ADMIN] },
+      })
       .select("_id name avatarUrl role")
       .lean()
       .exec();

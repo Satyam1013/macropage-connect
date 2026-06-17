@@ -32,7 +32,7 @@ export class User {
     enum: Object.values(UserRole),
     required: true,
   })
-  role!: string;
+  role!: UserRole;
 
   @Prop({ default: false })
   emailVerified!: boolean;

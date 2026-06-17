@@ -12,9 +12,9 @@ import { Model } from "mongoose";
 import * as crypto from "crypto";
 import * as bcrypt from "bcryptjs";
 import { User, UserDocument } from "../users/schemas/user.schema";
-import { UserRole } from "../auth/dto/signup.dto";
 import { TeamInvite, TeamInviteDocument } from "../schemas/team-invite.schema";
 import { EmailService } from "../queue/email.service";
+import { UserRole } from "../auth/dto/signup.dto";
 
 @Injectable()
 export class TeamService {
@@ -48,7 +48,7 @@ export class TeamService {
     invitedBy: string,
     invitedByName: string,
     emails: string[],
-    role: string,
+    role: UserRole,
     message?: string,
     expiresIn?: string,
   ): Promise<{ invited: TeamInviteDocument[]; skipped: string[] }> {
@@ -79,7 +79,7 @@ export class TeamService {
       const invite = await this.inviteModel.create({
         tenantId,
         email,
-        role: role.toUpperCase() as UserRole,
+        role,
         tokenHash,
         invitedBy,
         invitedByName,
@@ -329,12 +329,12 @@ export class TeamService {
   async changeRole(
     tenantId: string,
     memberId: string,
-    role: string,
+    role: UserRole,
     requesterId: string,
   ): Promise<UserDocument> {
     if (memberId === requesterId)
       throw new BadRequestException("Cannot change your own role");
-    if (role === "OWNER")
+    if (role === UserRole.OWNER)
       throw new BadRequestException("Cannot assign OWNER role");
 
     const member = await this.userModel

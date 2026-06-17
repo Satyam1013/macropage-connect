@@ -15,6 +15,7 @@ import {
 import { TeamService } from "./team.service";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import type { AuthReq } from "../auth/dto/auth-request.interface";
+import { UserRole } from "../auth/dto/signup.dto";
 
 @Controller("team")
 export class TeamController {
@@ -35,7 +36,7 @@ export class TeamController {
     @Body()
     body: {
       emails: string[];
-      role: string;
+      role: UserRole;
       message?: string;
       expiresIn?: string;
     },
@@ -103,7 +104,7 @@ export class TeamController {
   changeRole(
     @Request() req: AuthReq,
     @Param("id") id: string,
-    @Body("role") role: string,
+    @Body("role") role: UserRole,
   ) {
     const tenantId = req.user.tenantId ?? req.user.id;
     return this.teamService.changeRole(tenantId, id, role, req.user.id);
