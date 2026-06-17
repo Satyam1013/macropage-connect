@@ -1,5 +1,6 @@
 import {
   Injectable,
+  Logger,
   NotFoundException,
   BadRequestException,
   ConflictException,
@@ -17,6 +18,8 @@ import { EmailService } from "../queue/email.service";
 
 @Injectable()
 export class TeamService {
+  private readonly logger = new Logger(TeamService.name);
+
   constructor(
     @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
     @InjectModel(TeamInvite.name)
@@ -84,12 +87,12 @@ export class TeamService {
         expiresAt,
       });
 
-      void this.emailService.sendInviteEmail(
-        email,
-        token,
-        invitedByName,
-        message,
-      );
+      this.emailService
+        .sendInviteEmail(email, token, invitedByName, message)
+        .then(() => this.logger.log(`Invite email sent → ${email}`))
+        .catch((err: unknown) =>
+          this.logger.error(`Failed to send invite email → ${email}`, err),
+        );
       invited.push(invite);
     }
 
@@ -301,12 +304,15 @@ export class TeamService {
       },
     );
 
-    void this.emailService.sendInviteEmail(
-      invite.email,
-      token,
-      invitedByName,
-      invite.message,
-    );
+    this.emailService
+      .sendInviteEmail(invite.email, token, invitedByName, invite.message)
+      .then(() => this.logger.log(`Resend invite email sent → ${invite.email}`))
+      .catch((err: unknown) =>
+        this.logger.error(
+          `Failed to resend invite email → ${invite.email}`,
+          err,
+        ),
+      );
 
     const newResentCount = invite.resentCount + 1;
 
