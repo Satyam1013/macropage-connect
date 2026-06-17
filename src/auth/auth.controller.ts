@@ -41,11 +41,10 @@ export class AuthController {
     return this.authService.oauthLogin(dto);
   }
 
-  @UseGuards(JwtAuthGuard)
   @Post("refresh")
   @HttpCode(HttpStatus.OK)
-  refresh(@Request() req: { user: UserPayload }) {
-    return this.authService.refreshToken(req.user.id);
+  refresh(@Body("refreshToken") refreshToken: string) {
+    return this.authService.refreshToken(refreshToken);
   }
 
   @Post("forgot-password")

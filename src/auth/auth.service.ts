@@ -115,8 +115,34 @@ export class AuthService {
 
   // ─── Refresh Token ────────────────────────────────────────────────────────
 
-  async refreshToken(userId: string): Promise<{ accessToken: string }> {
-    const user = await this.users.findById(userId);
+  async refreshToken(
+    token: string,
+  ): Promise<{ accessToken: string; refreshToken: string }> {
+    if (!token) {
+      throw new UnauthorizedException({
+        success: false,
+        message: "Refresh token is required",
+        code: "MISSING_REFRESH_TOKEN",
+      });
+    }
+
+    let payload: { sub: string; email: string };
+    try {
+      payload = this.jwt.verify<{ sub: string; email: string }>(token, {
+        secret: this.config.get<string>(
+          "JWT_REFRESH_SECRET",
+          "fallback-refresh",
+        ),
+      });
+    } catch {
+      throw new UnauthorizedException({
+        success: false,
+        message: "Invalid or expired refresh token",
+        code: "INVALID_REFRESH_TOKEN",
+      });
+    }
+
+    const user = await this.users.findById(payload.sub);
     if (!user) {
       throw new UnauthorizedException({
         success: false,
@@ -124,8 +150,11 @@ export class AuthService {
         code: "USER_NOT_FOUND",
       });
     }
-    const accessToken = this.signAccessToken(user.id, user.email);
-    return { accessToken };
+
+    return {
+      accessToken: this.signAccessToken(user.id, user.email),
+      refreshToken: this.signRefreshToken(user.id, user.email),
+    };
   }
 
   // ─── Forgot Password ──────────────────────────────────────────────────────
