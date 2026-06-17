@@ -123,7 +123,7 @@ async function main() {
   const user = targetEmail
     ? await userCol.findOne({ email: targetEmail.toLowerCase() })
     : ((await userCol.findOne(
-        { role: { $in: ["owner", "admin", "OWNER", "ADMIN"] } },
+        { role: { $in: ["OWNER", "ADMIN"] } },
         { sort: { createdAt: 1 } },
       )) ?? (await userCol.findOne({}, { sort: { createdAt: 1 } })));
 
