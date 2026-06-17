@@ -1,29 +1,33 @@
 import {
   Injectable,
+  Logger,
   NotFoundException,
   BadRequestException,
 } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
-import { InjectQueue } from "@nestjs/bullmq";
 import { Model } from "mongoose";
-import { Queue } from "bullmq";
 import { Campaign, CampaignDocument } from "../schemas/campaign.schema";
 import {
   CampaignRecipient,
   CampaignRecipientDocument,
 } from "../schemas/campaign-recipient.schema";
+import { Template, TemplateDocument } from "../schemas/template.schema";
 import { ContactsService } from "../contacts/contacts.service";
+import { MetaService } from "../meta/meta.service";
 
 @Injectable()
 export class CampaignsService {
+  private readonly logger = new Logger(CampaignsService.name);
+
   constructor(
     @InjectModel(Campaign.name)
     private readonly campaignModel: Model<CampaignDocument>,
     @InjectModel(CampaignRecipient.name)
     private readonly recipientModel: Model<CampaignRecipientDocument>,
-    @InjectQueue("campaigns")
-    private readonly campaignQueue: Queue,
+    @InjectModel(Template.name)
+    private readonly templateModel: Model<TemplateDocument>,
     private readonly contactsService: ContactsService,
+    private readonly metaService: MetaService,
   ) {}
 
   async findAll(tenantId: string, status?: string) {
@@ -86,9 +90,128 @@ export class CampaignsService {
       },
     );
 
-    await this.campaignQueue.add("send_campaign", { campaignId: id, tenantId });
+    // Fire-and-forget — no BullMQ worker needed
+    void this.processCampaign(id, tenantId).catch((err: unknown) =>
+      this.logger.error(`Campaign ${id} processing failed`, err),
+    );
 
     return this.findOne(tenantId, id);
+  }
+
+  private async processCampaign(
+    campaignId: string,
+    tenantId: string,
+  ): Promise<void> {
+    const campaign = await this.campaignModel.findById(campaignId).exec();
+    if (!campaign) return;
+
+    if (!campaign.templateId) {
+      await this.campaignModel.updateOne(
+        { _id: campaignId },
+        { status: "FAILED", errorMessage: "No template assigned to campaign" },
+      );
+      return;
+    }
+
+    const template = await this.templateModel
+      .findById(campaign.templateId)
+      .exec();
+    if (!template) {
+      await this.campaignModel.updateOne(
+        { _id: campaignId },
+        { status: "FAILED", errorMessage: "Template not found" },
+      );
+      return;
+    }
+
+    if (template.status !== "APPROVED") {
+      await this.campaignModel.updateOne(
+        { _id: campaignId },
+        {
+          status: "FAILED",
+          errorMessage: `Template is ${template.status}, must be APPROVED`,
+        },
+      );
+      return;
+    }
+
+    let client: Awaited<ReturnType<typeof this.metaService.getClient>>;
+    try {
+      client = await this.metaService.getClient(tenantId);
+    } catch {
+      await this.campaignModel.updateOne(
+        { _id: campaignId },
+        { status: "FAILED", errorMessage: "WhatsApp account not connected" },
+      );
+      return;
+    }
+
+    const recipients = await this.recipientModel
+      .find({ campaignId, status: "pending" })
+      .exec();
+
+    for (const recipient of recipients) {
+      const current = await this.campaignModel
+        .findById(campaignId)
+        .select("status")
+        .lean()
+        .exec();
+      if (current?.status !== "RUNNING") {
+        this.logger.log(`Campaign ${campaignId} paused/cancelled — stopping`);
+        return;
+      }
+
+      try {
+        const resp = await client.sendMessage({
+          messaging_product: "whatsapp",
+          to: recipient.phone.replace(/^\+/, ""),
+          type: "template",
+          template: {
+            name: template.name,
+            language: { code: template.language },
+          },
+        });
+
+        const metaMessageId = (
+          resp.data as { messages?: Array<{ id: string }> }
+        )?.messages?.[0]?.id;
+
+        await this.recipientModel.updateOne(
+          { _id: recipient._id },
+          { status: "sent", metaMessageId, sentAt: new Date() },
+        );
+        await this.campaignModel.updateOne(
+          { _id: campaignId },
+          { $inc: { sent: 1 } },
+        );
+      } catch (err) {
+        const reason = err instanceof Error ? err.message : "Unknown error";
+        await this.recipientModel.updateOne(
+          { _id: recipient._id },
+          { status: "failed", failedAt: new Date(), failureReason: reason },
+        );
+        await this.campaignModel.updateOne(
+          { _id: campaignId },
+          { $inc: { failed: 1 } },
+        );
+      }
+
+      // 200ms delay to respect Meta rate limits
+      await new Promise((r) => setTimeout(r, 200));
+    }
+
+    const final = await this.campaignModel
+      .findById(campaignId)
+      .select("status")
+      .lean()
+      .exec();
+    if (final?.status === "RUNNING") {
+      await this.campaignModel.updateOne(
+        { _id: campaignId },
+        { status: "COMPLETED", completedAt: new Date() },
+      );
+      this.logger.log(`Campaign ${campaignId} completed`);
+    }
   }
 
   async pause(tenantId: string, id: string): Promise<CampaignDocument> {

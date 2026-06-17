@@ -8,7 +8,6 @@ import {
 import { Template, TemplateSchema } from "../schemas/template.schema";
 import { CampaignsService } from "./campaigns.service";
 import { CampaignsController } from "./campaigns.controller";
-import { CampaignProcessor } from "./campaign.processor";
 import { ContactsModule } from "../contacts/contacts.module";
 import { MetaModule } from "../meta/meta.module";
 import { QueueModule } from "../queue/queue.module";
@@ -24,7 +23,7 @@ import { QueueModule } from "../queue/queue.module";
     MetaModule,
     QueueModule,
   ],
-  providers: [CampaignsService, CampaignProcessor],
+  providers: [CampaignsService],
   controllers: [CampaignsController],
   exports: [CampaignsService],
 })
