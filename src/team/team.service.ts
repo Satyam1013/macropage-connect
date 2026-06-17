@@ -12,7 +12,7 @@ import { Model } from "mongoose";
 import * as crypto from "crypto";
 import * as bcrypt from "bcryptjs";
 import { User, UserDocument } from "../users/schemas/user.schema";
-import type { TeamUserRole } from "./team.types";
+import { UserRole } from "../auth/dto/signup.dto";
 import { TeamInvite, TeamInviteDocument } from "../schemas/team-invite.schema";
 import { EmailService } from "../queue/email.service";
 
@@ -79,7 +79,7 @@ export class TeamService {
       const invite = await this.inviteModel.create({
         tenantId,
         email,
-        role: role.toUpperCase() as TeamUserRole,
+        role: role.toUpperCase() as UserRole,
         tokenHash,
         invitedBy,
         invitedByName,

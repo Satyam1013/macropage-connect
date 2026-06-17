@@ -1,4 +1,4 @@
-import type { InviteStatus, TeamUserRole } from "../team/team.types";
+import type { InviteStatus } from "../team/team.types";
 import { Prop, Schema, SchemaFactory } from "@nestjs/mongoose";
 import { HydratedDocument } from "mongoose";
 
@@ -16,7 +16,7 @@ export class TeamInvite {
   email!: string;
 
   @Prop({ type: String, enum: ["OWNER", "ADMIN", "MANAGER", "AGENT"] })
-  role!: TeamUserRole;
+  role!: string;
 
   @Prop({ required: true, unique: true })
   tokenHash!: string;
