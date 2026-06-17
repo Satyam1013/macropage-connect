@@ -47,6 +47,10 @@ export class CampaignsService {
     userId: string,
     dto: Partial<CampaignDocument>,
   ): Promise<CampaignDocument> {
+    // Strip accidental angle brackets from templateId e.g. "<id>" → "id"
+    if (typeof dto.templateId === "string") {
+      dto.templateId = dto.templateId.replace(/^<|>$/g, "");
+    }
     return this.campaignModel.create({
       ...dto,
       tenantId,
@@ -212,6 +216,38 @@ export class CampaignsService {
       );
       this.logger.log(`Campaign ${campaignId} completed`);
     }
+  }
+
+  async retry(tenantId: string, id: string): Promise<CampaignDocument> {
+    const campaign = await this.findOne(tenantId, id);
+    if (!["RUNNING", "FAILED"].includes(campaign.status)) {
+      throw new BadRequestException(
+        "Only RUNNING or FAILED campaigns can be retried",
+      );
+    }
+
+    // Fix templateId if it has angle brackets
+    if (
+      typeof campaign.templateId === "string" &&
+      /^<.*>$/.test(campaign.templateId)
+    ) {
+      const cleanId = campaign.templateId.replace(/^<|>$/g, "");
+      await this.campaignModel.updateOne(
+        { _id: id },
+        { templateId: cleanId },
+      );
+    }
+
+    await this.campaignModel.updateOne(
+      { _id: id },
+      { status: "RUNNING", errorMessage: undefined },
+    );
+
+    void this.processCampaign(id, tenantId).catch((err: unknown) =>
+      this.logger.error(`Campaign ${id} retry failed`, err),
+    );
+
+    return this.findOne(tenantId, id);
   }
 
   async pause(tenantId: string, id: string): Promise<CampaignDocument> {

@@ -45,6 +45,12 @@ export class CampaignsController {
     return this.campaignsService.launch(tenantId, id);
   }
 
+  @Post(":id/retry")
+  retry(@Request() req: AuthReq, @Param("id") id: string) {
+    const tenantId = req.user.tenantId ?? req.user.id;
+    return this.campaignsService.retry(tenantId, id);
+  }
+
   @Patch(":id/pause")
   pause(@Request() req: AuthReq, @Param("id") id: string) {
     const tenantId = req.user.tenantId ?? req.user.id;
