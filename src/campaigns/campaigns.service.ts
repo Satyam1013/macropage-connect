@@ -128,17 +128,6 @@ export class CampaignsService {
       return;
     }
 
-    if (template.status !== "APPROVED") {
-      await this.campaignModel.updateOne(
-        { _id: campaignId },
-        {
-          status: "FAILED",
-          errorMessage: `Template is ${template.status}, must be APPROVED`,
-        },
-      );
-      return;
-    }
-
     let client: Awaited<ReturnType<typeof this.metaService.getClient>>;
     try {
       client = await this.metaService.getClient(tenantId);
@@ -232,10 +221,7 @@ export class CampaignsService {
       /^<.*>$/.test(campaign.templateId)
     ) {
       const cleanId = campaign.templateId.replace(/^<|>$/g, "");
-      await this.campaignModel.updateOne(
-        { _id: id },
-        { templateId: cleanId },
-      );
+      await this.campaignModel.updateOne({ _id: id }, { templateId: cleanId });
     }
 
     await this.campaignModel.updateOne(
