@@ -209,9 +209,9 @@ export class CampaignsService {
 
   async retry(tenantId: string, id: string): Promise<CampaignDocument> {
     const campaign = await this.findOne(tenantId, id);
-    if (!["RUNNING", "FAILED"].includes(campaign.status)) {
+    if (!["RUNNING", "FAILED", "COMPLETED"].includes(campaign.status)) {
       throw new BadRequestException(
-        "Only RUNNING or FAILED campaigns can be retried",
+        "Only RUNNING, FAILED or COMPLETED campaigns can be retried",
       );
     }
 
