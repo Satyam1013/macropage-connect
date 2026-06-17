@@ -5,9 +5,12 @@ import {
   CampaignRecipient,
   CampaignRecipientSchema,
 } from "../schemas/campaign-recipient.schema";
+import { Template, TemplateSchema } from "../schemas/template.schema";
 import { CampaignsService } from "./campaigns.service";
 import { CampaignsController } from "./campaigns.controller";
+import { CampaignProcessor } from "./campaign.processor";
 import { ContactsModule } from "../contacts/contacts.module";
+import { MetaModule } from "../meta/meta.module";
 import { QueueModule } from "../queue/queue.module";
 
 @Module({
@@ -15,11 +18,13 @@ import { QueueModule } from "../queue/queue.module";
     MongooseModule.forFeature([
       { name: Campaign.name, schema: CampaignSchema },
       { name: CampaignRecipient.name, schema: CampaignRecipientSchema },
+      { name: Template.name, schema: TemplateSchema },
     ]),
     ContactsModule,
+    MetaModule,
     QueueModule,
   ],
-  providers: [CampaignsService],
+  providers: [CampaignsService, CampaignProcessor],
   controllers: [CampaignsController],
   exports: [CampaignsService],
 })
