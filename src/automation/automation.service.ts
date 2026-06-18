@@ -10,6 +10,8 @@ import { ConversationsService } from "../conversations/conversations.service";
 import { MetaService } from "../meta/meta.service";
 import { Message, MessageDocument } from "../schemas/message.schema";
 import type { MessageType } from "../messages/messages.types";
+import { BillingService } from "../billing/billing.service";
+import { getPlanLimits } from "./plan-limits.config";
 
 @Injectable()
 export class AutomationService {
@@ -24,6 +26,7 @@ export class AutomationService {
     private readonly msgModel: Model<MessageDocument>,
     private readonly conversationsService: ConversationsService,
     private readonly metaService: MetaService,
+    private readonly billingService: BillingService,
   ) {}
 
   // ─── Rules ────────────────────────────────────────────────────────────────
@@ -67,6 +70,28 @@ export class AutomationService {
 
   async deleteRule(tenantId: string, id: string): Promise<void> {
     await this.ruleModel.deleteOne({ _id: id, tenantId });
+  }
+
+  async countCustomRules(tenantId: string): Promise<number> {
+    return this.ruleModel.countDocuments({ tenantId, isBuiltIn: false });
+  }
+
+  async getAutomationLimits(tenantId: string) {
+    const sub = await this.billingService.getSubscription(tenantId);
+    const plan = sub?.plan ?? "STARTER";
+    const limits = getPlanLimits(plan);
+    const currentRuleCount = await this.countCustomRules(tenantId);
+    return {
+      success: true,
+      data: {
+        plan,
+        rulesEnabled: limits.rulesEnabled,
+        flowsEnabled: limits.flowsEnabled,
+        aiEnabled: limits.aiEnabled,
+        maxCustomRules: limits.maxCustomRules,
+        currentRuleCount,
+      },
+    };
   }
 
   // ─── Flows ────────────────────────────────────────────────────────────────
