@@ -82,6 +82,15 @@ export class NotificationsService {
     );
   }
 
+  async getUnreadCount(tenantId: string, userId: string) {
+    const count = await this.notifModel.countDocuments({
+      tenantId,
+      userId,
+      isRead: false,
+    });
+    return { count };
+  }
+
   async getPreferences(tenantId: string, userId: string) {
     const cacheKey = `notif-prefs:${tenantId}:${userId}`;
 

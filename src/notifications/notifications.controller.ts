@@ -41,6 +41,12 @@ export class NotificationsController {
     );
   }
 
+  @Get("unread-count")
+  getUnreadCount(@Request() req: AuthReq) {
+    const tenantId = req.user.tenantId ?? req.user.id;
+    return this.notificationsService.getUnreadCount(tenantId, req.user.id);
+  }
+
   @Get()
   findAll(@Request() req: AuthReq, @Query("page") page?: string) {
     const tenantId = req.user.tenantId ?? req.user.id;

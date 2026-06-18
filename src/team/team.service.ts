@@ -29,6 +29,15 @@ export class TeamService {
     private readonly config: ConfigService,
   ) {}
 
+  async findOne(tenantId: string, memberId: string) {
+    const member = await this.userModel
+      .findOne({ _id: memberId, tenantId })
+      .select("-password -twoFactorSecret -backupCodes")
+      .exec();
+    if (!member) throw new NotFoundException("Member not found");
+    return member;
+  }
+
   async findAll(tenantId: string, search?: string) {
     const where: Record<string, unknown> = { tenantId };
     if (search) {
