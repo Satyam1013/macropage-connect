@@ -79,12 +79,22 @@ export class AutomationService {
   async getAutomationLimits(tenantId: string) {
     const sub = await this.billingService.getSubscription(tenantId);
     const plan = sub?.plan ?? "STARTER";
-    const limits = getPlanLimits(plan);
+    const trialEndsAt = sub?.trialEndsAt ?? null;
+
+    const limits = getPlanLimits({ plan, trialEndsAt });
     const currentRuleCount = await this.countCustomRules(tenantId);
+
+    const isExpiredTrial =
+      plan === "TRIAL" &&
+      !!trialEndsAt &&
+      new Date() > new Date(trialEndsAt);
+
     return {
       success: true,
       data: {
         plan,
+        trialEndsAt,
+        isExpiredTrial,
         rulesEnabled: limits.rulesEnabled,
         flowsEnabled: limits.flowsEnabled,
         aiEnabled: limits.aiEnabled,
