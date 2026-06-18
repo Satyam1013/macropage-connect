@@ -6,6 +6,7 @@ import {
 } from "@nestjs/common";
 import axios from "axios";
 import { InjectModel } from "@nestjs/mongoose";
+import { NotificationsService } from "../notifications/notifications.service";
 import { Model } from "mongoose";
 import {
   Conversation,
@@ -37,6 +38,7 @@ export class ConversationsService {
     private readonly userModel: Model<UserDocument>,
     private readonly metaService: MetaService,
     private readonly socketService: SocketService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   async findAll(
@@ -512,5 +514,86 @@ export class ConversationsService {
         timestamp: new Date().toISOString(),
       });
     }
+  }
+
+  async assignConversation(
+    tenantId: string,
+    conversationId: string,
+    assignedByUserId: string,
+    assignedByName: string,
+    assignToUserId: string,
+  ) {
+    const conversation = await this.convModel
+      .findOne({ _id: conversationId, tenantId })
+      .exec();
+    if (!conversation) throw new NotFoundException("Conversation not found");
+
+    const assignToUser = await this.userModel
+      .findOne({ _id: assignToUserId, tenantId })
+      .select("name email")
+      .lean()
+      .exec();
+    if (!assignToUser) throw new NotFoundException("Team member not found");
+
+    const contact = await this.contactModel
+      .findById(conversation.contactId)
+      .select("name")
+      .lean()
+      .exec();
+
+    const newStatus =
+      conversation.status === "RESOLVED" ? "OPEN" : conversation.status;
+
+    await this.convModel.updateOne(
+      { _id: conversationId },
+      {
+        $set: {
+          assignedTo: assignToUserId,
+          assignedAt: new Date(),
+          assignedBy: assignedByUserId,
+          status: newStatus,
+        },
+      },
+    );
+
+    await this.notificationsService.create(
+      tenantId,
+      assignToUserId,
+      "conversation_assigned",
+      "Conversation assigned to you",
+      `${assignedByName} assigned you a conversation with ${contact?.name ?? "a contact"}`,
+      { conversationId, assignedBy: assignedByUserId },
+    );
+
+    this.socketService.conversationUpdated(tenantId, {
+      _id: conversationId,
+      assignedTo: { _id: assignToUserId, name: assignToUser.name },
+      assignedAt: new Date(),
+      status: newStatus,
+    });
+
+    return {
+      success: true,
+      data: {
+        message: `Conversation assigned to ${assignToUser.name}`,
+        assignedTo: { _id: assignToUserId, name: assignToUser.name },
+      },
+    };
+  }
+
+  async unassignConversation(tenantId: string, conversationId: string) {
+    const result = await this.convModel.updateOne(
+      { _id: conversationId, tenantId },
+      { $set: { assignedTo: null, assignedAt: null, assignedBy: null } },
+    );
+    if (!result.matchedCount)
+      throw new NotFoundException("Conversation not found");
+
+    this.socketService.conversationUpdated(tenantId, {
+      _id: conversationId,
+      assignedTo: null,
+    });
+
+    return { success: true };
   }
 }

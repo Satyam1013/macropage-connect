@@ -2,7 +2,9 @@ import {
   Controller,
   Get,
   Post,
+  Put,
   Patch,
+  Delete,
   Body,
   Param,
   Query,
@@ -18,6 +20,9 @@ import {
   UpdateConversationDto,
 } from "./dto/send-message.dto";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
+import { RolesGuard } from "../common/guards/roles.guard";
+import { Roles } from "../common/decorators/roles.decorator";
+import { UserRole } from "../auth/dto/signup.dto";
 import type { AuthReq } from "../auth/dto/auth-request.interface";
 
 @UseGuards(JwtAuthGuard)
@@ -128,5 +133,32 @@ export class ConversationsController {
   resolve(@Request() req: AuthReq, @Param("id") id: string) {
     const tenantId = req.user.tenantId ?? req.user.id;
     return this.conversationsService.resolveConversation(tenantId, id);
+  }
+
+  @Put(":id/assign")
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.MANAGER)
+  assignConversation(
+    @Request() req: AuthReq,
+    @Param("id") id: string,
+    @Body("assignToUserId") assignToUserId: string,
+  ) {
+    const tenantId = req.user.tenantId ?? req.user.id;
+    return this.conversationsService.assignConversation(
+      tenantId,
+      id,
+      req.user.id,
+      req.user.name,
+      assignToUserId,
+    );
+  }
+
+  @Delete(":id/assign")
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.MANAGER)
+  @HttpCode(HttpStatus.OK)
+  unassignConversation(@Request() req: AuthReq, @Param("id") id: string) {
+    const tenantId = req.user.tenantId ?? req.user.id;
+    return this.conversationsService.unassignConversation(tenantId, id);
   }
 }

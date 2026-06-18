@@ -22,6 +22,13 @@ export class TeamController {
   constructor(private readonly teamService: TeamService) {}
 
   @UseGuards(JwtAuthGuard)
+  @Get("assignable")
+  getAssignableMembers(@Request() req: AuthReq) {
+    const tenantId = req.user.tenantId ?? req.user.id;
+    return this.teamService.getAssignableMembers(tenantId);
+  }
+
+  @UseGuards(JwtAuthGuard)
   @Get(":id")
   findOne(@Request() req: AuthReq, @Param("id") id: string) {
     const tenantId = req.user.tenantId ?? req.user.id;

@@ -29,6 +29,26 @@ export class TeamService {
     private readonly config: ConfigService,
   ) {}
 
+  async getAssignableMembers(tenantId: string) {
+    const members = await this.userModel
+      .find({ tenantId })
+      .select("_id name email role avatarUrl onlineStatus")
+      .lean()
+      .exec();
+
+    return {
+      success: true,
+      data: members.map((m) => ({
+        _id: m._id,
+        name: m.name,
+        email: m.email,
+        role: m.role,
+        avatarUrl: m.avatarUrl ?? null,
+        status: m.onlineStatus === "online" ? "online" : "offline",
+      })),
+    };
+  }
+
   async findOne(tenantId: string, memberId: string) {
     const member = await this.userModel
       .findOne({ _id: memberId, tenantId })

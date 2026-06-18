@@ -15,8 +15,14 @@ export class Conversation {
   @Prop({ required: true, index: true })
   contactId!: string;
 
-  @Prop()
+  @Prop({ default: null })
   assignedTo?: string;
+
+  @Prop({ default: null })
+  assignedAt?: Date;
+
+  @Prop({ default: null })
+  assignedBy?: string;
 
   @Prop({
     type: String,
