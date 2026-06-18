@@ -120,6 +120,8 @@ export class UsersService {
       id: user.id,
       name: user.name,
       email: user.email,
+      role: user.role,
+      tenantId: user.tenantId,
       phone: user.phone,
       emailVerified: user.emailVerified,
       whatsappSetupDone: user.whatsappSetupDone,
