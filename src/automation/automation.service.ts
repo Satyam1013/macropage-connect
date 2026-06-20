@@ -161,6 +161,12 @@ export class AutomationService {
       .sort({ priority: 1 })
       .exec();
 
+    this.logger.log(
+      `[Rules] tenant=${tenantId} found=${rules.length} rules, msg="${messageContent}"`,
+    );
+
+    if (!rules.length) return;
+
     for (const rule of rules) {
       const trigger = rule.trigger as {
         type?: string;
@@ -173,6 +179,10 @@ export class AutomationService {
           trigger.keywords?.some((kw) =>
             messageContent.toLowerCase().includes(kw.toLowerCase()),
           ));
+
+      this.logger.log(
+        `[Rules] rule="${rule.name}" trigger=${trigger.type} keywords=${JSON.stringify(trigger.keywords ?? [])} matched=${matched}`,
+      );
 
       if (!matched) continue;
 
@@ -187,7 +197,7 @@ export class AutomationService {
         contactPhone,
         rule.actions,
       ).catch((err: unknown) =>
-        this.logger.error(`Action failed for rule ${rule.name}`, err),
+        this.logger.error(`[Rules] Action failed for rule "${rule.name}"`, err),
       );
     }
   }
@@ -201,35 +211,46 @@ export class AutomationService {
     const type = actions.type as string | undefined;
     const message = actions.message as string | undefined;
 
-    if (type === "send_message" && message) {
-      const client = await this.metaService.getClient(tenantId);
-      const phone = contactPhone.replace("+", "");
+    this.logger.log(
+      `[Rules] executeAction type=${type} hasMessage=${!!message} phone=${contactPhone}`,
+    );
 
-      const resp = await client.sendMessage({
-        messaging_product: "whatsapp",
-        to: phone,
-        type: "text",
-        text: { body: message },
-      });
-
-      const metaMessageId = (
-        resp.data as { messages?: Array<{ id: string }> }
-      )?.messages?.[0]?.id;
-
-      await this.msgModel.create({
-        tenantId,
-        conversationId,
-        direction: "OUTBOUND",
-        type: "TEXT" as MessageType,
-        content: message,
-        metaMessageId,
-        status: "SENT",
-        sentAt: new Date(),
-      });
-
-      this.logger.log(
-        `Auto-reply sent to ${contactPhone} in conv ${conversationId}`,
-      );
+    if (type !== "send_message") {
+      this.logger.warn(`[Rules] Unknown action type: "${type}" — skipping`);
+      return;
     }
+    if (!message) {
+      this.logger.warn(`[Rules] action.message is empty — skipping`);
+      return;
+    }
+
+    const client = await this.metaService.getClient(tenantId);
+    const phone = contactPhone.replace("+", "");
+
+    const resp = await client.sendMessage({
+      messaging_product: "whatsapp",
+      to: phone,
+      type: "text",
+      text: { body: message },
+    });
+
+    const metaMessageId = (
+      resp.data as { messages?: Array<{ id: string }> }
+    )?.messages?.[0]?.id;
+
+    await this.msgModel.create({
+      tenantId,
+      conversationId,
+      direction: "OUTBOUND",
+      type: "TEXT" as MessageType,
+      content: message,
+      metaMessageId,
+      status: "SENT",
+      sentAt: new Date(),
+    });
+
+    this.logger.log(
+      `[Rules] Auto-reply sent to ${contactPhone} in conv ${conversationId}`,
+    );
   }
 }
