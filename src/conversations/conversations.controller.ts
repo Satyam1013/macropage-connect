@@ -6,6 +6,7 @@ import {
   Patch,
   Delete,
   Body,
+  Header,
   Param,
   Query,
   UseGuards,
@@ -79,6 +80,8 @@ export class ConversationsController {
   }
 
   @Get(":id/messages")
+  @Header("Cache-Control", "no-cache, no-store, must-revalidate")
+  @Header("Pragma", "no-cache")
   getMessages(
     @Request() req: AuthReq,
     @Param("id") id: string,
