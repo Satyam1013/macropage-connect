@@ -292,9 +292,16 @@ export class ConversationsService {
       { lastMessageAt: new Date() },
     );
 
-    this.socketService.newMessage(tenantId, {
+    const agent = await this.userModel
+      .findById(agentId)
+      .select("_id name avatarUrl")
+      .lean()
+      .exec();
+
+    const enrichedMessage = {
       _id: String(message._id),
       conversationId: String(message.conversationId),
+      tenantId,
       direction: message.direction,
       type: message.type,
       content: message.content,
@@ -303,10 +310,13 @@ export class ConversationsService {
       status: message.status,
       isNote: false,
       agentId,
+      agent: agent ? { _id: String(agent._id), name: agent.name, avatarUrl: agent.avatarUrl ?? null } : null,
       sentAt: message.sentAt,
       createdAt: message.createdAt,
-    });
-    return message;
+    };
+
+    this.socketService.newMessage(tenantId, enrichedMessage);
+    return enrichedMessage as unknown as MessageDocument;
   }
 
   async addNote(
@@ -324,16 +334,28 @@ export class ConversationsService {
       isNote: true,
       agentId,
     });
-    this.socketService.newMessage(tenantId, {
+
+    const agent = await this.userModel
+      .findById(agentId)
+      .select("_id name avatarUrl")
+      .lean()
+      .exec();
+
+    const enrichedNote = {
       _id: String(note._id),
       conversationId: String(note.conversationId),
+      tenantId,
       direction: note.direction,
       type: note.type,
       content: note.content,
       isNote: true,
       agentId,
-    });
-    return note;
+      agent: agent ? { _id: String(agent._id), name: agent.name, avatarUrl: agent.avatarUrl ?? null } : null,
+      createdAt: note.createdAt,
+    };
+
+    this.socketService.newMessage(tenantId, enrichedNote);
+    return enrichedNote as unknown as MessageDocument;
   }
 
   async updateConversation(
