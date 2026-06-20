@@ -31,9 +31,21 @@ type Socket = BaseSocket<
 import { SocketService } from "./socket.service";
 import { User, UserDocument } from "../users/schemas/user.schema";
 
+const allowedOrigins = (
+  process.env.ALLOWED_ORIGINS ??
+  process.env.FRONTEND_URL ??
+  "*"
+)
+  .split(",")
+  .map((o) => o.trim())
+  .filter(Boolean);
+
 @WebSocketGateway({
   cors: {
-    origin: process.env.FRONTEND_URL ?? "*",
+    origin:
+      allowedOrigins.length === 1 && allowedOrigins[0] === "*"
+        ? "*"
+        : allowedOrigins,
     credentials: true,
     methods: ["GET", "POST"],
   },
