@@ -195,7 +195,7 @@ export class ConversationsService {
     const [messages, total] = await Promise.all([
       this.msgModel
         .find({ conversationId, tenantId })
-        .sort({ createdAt: 1 })
+        .sort({ createdAt: -1 })
         .skip((page - 1) * limit)
         .limit(limit)
         .lean()
@@ -215,10 +215,13 @@ export class ConversationsService {
       : [];
     const agentMap = Object.fromEntries(agents.map((a) => [String(a._id), a]));
 
-    const data = messages.map((m) => ({
-      ...m,
-      agent: m.agentId ? (agentMap[String(m.agentId)] ?? null) : null,
-    }));
+    // Return in ascending order (oldest→newest) so frontend renders correctly
+    const data = messages
+      .map((m) => ({
+        ...m,
+        agent: m.agentId ? (agentMap[String(m.agentId)] ?? null) : null,
+      }))
+      .reverse();
 
     return { data, total, page, limit };
   }
