@@ -270,10 +270,7 @@ export class ConversationsService {
       };
     }
 
-    const resp = await client.sendMessage(payload);
-    const metaMessageId = (resp.data as { messages?: Array<{ id: string }> })
-      ?.messages?.[0]?.id;
-
+    // Save first so message always appears in portal regardless of Meta outcome
     const message = await this.msgModel.create({
       tenantId,
       conversationId,
@@ -281,8 +278,7 @@ export class ConversationsService {
       type: dto.type as MessageType,
       content: dto.content,
       mediaUrl: dto.mediaUrl,
-      metaMessageId,
-      status: "SENT",
+      status: "PENDING",
       agentId,
       sentAt: new Date(),
     });
@@ -298,7 +294,11 @@ export class ConversationsService {
       .lean()
       .exec();
 
-    const enrichedMessage = {
+    const agentObj = agent
+      ? { _id: String(agent._id), name: agent.name, avatarUrl: agent.avatarUrl ?? null }
+      : null;
+
+    const buildEnriched = (status: string, metaMessageId?: string | null) => ({
       _id: String(message._id),
       conversationId: String(message.conversationId),
       tenantId,
@@ -306,17 +306,38 @@ export class ConversationsService {
       type: message.type,
       content: message.content,
       mediaUrl: message.mediaUrl ?? null,
-      metaMessageId: message.metaMessageId,
-      status: message.status,
+      metaMessageId: metaMessageId ?? null,
+      status,
       isNote: false,
       agentId,
-      agent: agent ? { _id: String(agent._id), name: agent.name, avatarUrl: agent.avatarUrl ?? null } : null,
+      agent: agentObj,
       sentAt: message.sentAt,
       createdAt: message.createdAt,
-    };
+    });
 
-    this.socketService.newMessage(tenantId, enrichedMessage);
-    return enrichedMessage as unknown as MessageDocument;
+    // Show message in portal immediately with PENDING status
+    this.socketService.newMessage(tenantId, buildEnriched("PENDING"));
+
+    try {
+      const resp = await client.sendMessage(payload);
+      const metaMessageId = (resp.data as { messages?: Array<{ id: string }> })
+        ?.messages?.[0]?.id ?? null;
+
+      await this.msgModel.updateOne(
+        { _id: message._id },
+        { status: "SENT", metaMessageId },
+      );
+
+      const enriched = buildEnriched("SENT", metaMessageId);
+      // Update message status in portal
+      this.socketService.newMessage(tenantId, { ...enriched, _update: true });
+      return enriched as unknown as MessageDocument;
+    } catch (err: unknown) {
+      await this.msgModel.updateOne({ _id: message._id }, { status: "FAILED" });
+      const enriched = buildEnriched("FAILED");
+      this.socketService.newMessage(tenantId, { ...enriched, _update: true });
+      throw err;
+    }
   }
 
   async addNote(

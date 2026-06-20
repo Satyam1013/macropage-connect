@@ -75,7 +75,7 @@ export class Message {
 
   @Prop({
     type: String,
-    enum: ["SENT", "DELIVERED", "READ", "FAILED"],
+    enum: ["PENDING", "SENT", "DELIVERED", "READ", "FAILED"],
   })
   status?: MessageStatus;
 
