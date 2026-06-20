@@ -286,10 +286,14 @@ export class ConversationsService {
       sentAt: new Date(),
     });
 
-    await this.convModel.updateOne(
-      { _id: conversationId },
-      { lastMessageAt: new Date() },
-    );
+    const updatedConv = await this.convModel
+      .findOneAndUpdate(
+        { _id: conversationId },
+        { lastMessageAt: new Date() },
+        { returnDocument: "after" },
+      )
+      .lean()
+      .exec();
 
     const agent = await this.userModel
       .findById(agentId)
@@ -321,6 +325,14 @@ export class ConversationsService {
     // Show message in portal immediately with PENDING status
     this.socketService.newMessage(tenantId, buildEnriched("PENDING"));
 
+    // Update sidebar immediately
+    if (updatedConv) {
+      this.socketService.conversationUpdated(tenantId, {
+        ...updatedConv,
+        lastMessage: { content: dto.content ?? dto.templateName ?? "", direction: "OUTBOUND", type: dto.type },
+      } as unknown as import("../schemas/conversation.schema").ConversationDocument);
+    }
+
     try {
       const resp = await client.sendMessage(payload);
       const metaMessageId = (resp.data as { messages?: Array<{ id: string }> })
@@ -332,7 +344,6 @@ export class ConversationsService {
       );
 
       const enriched = buildEnriched("SENT", metaMessageId);
-      // Update message status in portal
       this.socketService.newMessage(tenantId, { ...enriched, _update: true });
       return enriched as unknown as MessageDocument;
     } catch (err: unknown) {
@@ -518,10 +529,14 @@ export class ConversationsService {
       createdAt: new Date(timestamp * 1000),
     });
 
-    await this.convModel.updateOne(
-      { _id: conversationId },
-      { lastMessageAt: new Date(timestamp * 1000), $inc: { unreadCount: 1 } },
-    );
+    const updatedConv = await this.convModel
+      .findOneAndUpdate(
+        { _id: conversationId },
+        { lastMessageAt: new Date(timestamp * 1000), $inc: { unreadCount: 1 } },
+        { returnDocument: "after" },
+      )
+      .lean()
+      .exec();
 
     this.socketService.newMessage(tenantId, {
       _id: String(message._id),
@@ -532,6 +547,15 @@ export class ConversationsService {
       metaMessageId: message.metaMessageId,
       isNote: false,
     });
+
+    // Update sidebar in real-time
+    if (updatedConv) {
+      this.socketService.conversationUpdated(tenantId, {
+        ...updatedConv,
+        lastMessage: { content, direction: "INBOUND", type: type.toUpperCase() },
+      } as unknown as import("../schemas/conversation.schema").ConversationDocument);
+    }
+
     return message;
   }
 
