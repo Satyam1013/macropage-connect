@@ -170,18 +170,30 @@ export class AutomationService {
     for (const rule of rules) {
       const trigger = rule.trigger as {
         type?: string;
+        event?: string;
         keywords?: string[];
+        keyword?: string;
       };
 
+      // Support both "type" and "event" field names from frontend
+      const triggerType = trigger.type ?? trigger.event ?? "";
+      // Support both "keywords" array and single "keyword" string
+      const keywords = trigger.keywords ?? (trigger.keyword ? [trigger.keyword] : []);
+
       const matched =
-        trigger.type === "inbound_message" ||
-        (trigger.type === "message_contains" &&
-          trigger.keywords?.some((kw) =>
+        triggerType === "inbound_message" ||
+        triggerType === "all" ||
+        (triggerType === "message_contains" &&
+          keywords.some((kw) =>
+            messageContent.toLowerCase().includes(kw.toLowerCase()),
+          )) ||
+        (triggerType === "keyword" &&
+          keywords.some((kw) =>
             messageContent.toLowerCase().includes(kw.toLowerCase()),
           ));
 
       this.logger.log(
-        `[Rules] rule="${rule.name}" trigger=${trigger.type} keywords=${JSON.stringify(trigger.keywords ?? [])} matched=${matched}`,
+        `[Rules] rule="${rule.name}" triggerType=${triggerType} keywords=${JSON.stringify(keywords)} matched=${matched} raw=${JSON.stringify(trigger)}`,
       );
 
       if (!matched) continue;
@@ -208,14 +220,27 @@ export class AutomationService {
     contactPhone: string,
     actions: Record<string, unknown>,
   ): Promise<void> {
-    const type = actions.type as string | undefined;
-    const message = actions.message as string | undefined;
+    // Support both object { type, message } and array [{ type, message }] formats
+    const action: Record<string, unknown> = Array.isArray(actions)
+      ? (actions[0] as Record<string, unknown>) ?? {}
+      : actions;
+
+    const type = (action.type ?? action.actionType) as string | undefined;
+    const message = (action.message ?? action.text ?? action.body) as
+      | string
+      | undefined;
 
     this.logger.log(
-      `[Rules] executeAction type=${type} hasMessage=${!!message} phone=${contactPhone}`,
+      `[Rules] executeAction raw=${JSON.stringify(actions)} type=${type} hasMessage=${!!message} phone=${contactPhone}`,
     );
 
-    if (type !== "send_message") {
+    const isSendMessage =
+      type === "send_message" ||
+      type === "reply" ||
+      type === "send_text" ||
+      type === "text";
+
+    if (!isSendMessage) {
       this.logger.warn(`[Rules] Unknown action type: "${type}" — skipping`);
       return;
     }
