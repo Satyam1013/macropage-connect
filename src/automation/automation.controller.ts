@@ -37,6 +37,15 @@ export class AutomationController {
 
   // ─── Rules ────────────────────────────────────────────────────────────────
 
+  @Get("rules/test")
+  async testRules(
+    @Request() req: AuthReq,
+  ) {
+    const tenantId = req.user.tenantId ?? req.user.id;
+    const result = await this.automationService.debugRules(tenantId, "test message");
+    return result;
+  }
+
   @Get("rules")
   @RequirePlan("automation")
   findRules(@Request() req: AuthReq) {

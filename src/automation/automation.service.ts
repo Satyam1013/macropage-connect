@@ -148,6 +148,37 @@ export class AutomationService {
     await this.flowModel.deleteOne({ _id: id, tenantId });
   }
 
+  // ─── Debug ────────────────────────────────────────────────────────────────
+
+  async debugRules(tenantId: string, testMessage: string) {
+    const all = await this.ruleModel.find({ tenantId }).lean().exec();
+    const enabled = all.filter((r) => r.isEnabled);
+
+    return {
+      tenantId,
+      totalRules: all.length,
+      enabledRules: enabled.length,
+      rules: all.map((r) => ({
+        id: r._id,
+        name: r.name,
+        isEnabled: r.isEnabled,
+        trigger: r.trigger,
+        actions: r.actions,
+        triggerType:
+          (r.trigger as { type?: string; event?: string })?.type ??
+          (r.trigger as { event?: string })?.event ??
+          "UNKNOWN",
+        actionType: Array.isArray(r.actions)
+          ? (r.actions[0] as { type?: string })?.type
+          : (r.actions as { type?: string })?.type ?? "UNKNOWN",
+        actionMessage: Array.isArray(r.actions)
+          ? (r.actions[0] as { message?: string; text?: string })?.message ??
+            (r.actions[0] as { text?: string })?.text
+          : (r.actions as { message?: string })?.message ?? "MISSING",
+      })),
+    };
+  }
+
   // ─── Rule Processing ──────────────────────────────────────────────────────
 
   async processRules(
