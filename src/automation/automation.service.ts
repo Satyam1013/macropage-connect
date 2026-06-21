@@ -226,20 +226,21 @@ export class AutomationService {
             .map((k) => k.replace(/['"]/g, "").trim())
             .filter(Boolean);
 
+      // Only "inbound_message"/"all"/"any" types match every message.
+      // "message" and "message_contains" REQUIRE keywords — skip if none defined.
       const isMatchAll =
         triggerType === "inbound_message" ||
         triggerType === "all" ||
-        triggerType === "any" ||
-        (triggerType === "message" && keywordList.length === 0) ||
-        (triggerType === "message_contains" && keywordList.length === 0);
+        triggerType === "any";
 
       const isKeywordTrigger =
-        triggerType === "message_contains" ||
-        triggerType === "message_contains_keywords" ||
-        triggerType === "keyword" ||
-        triggerType === "contains" ||
-        triggerType === "keywords" ||
-        (triggerType === "message" && keywordList.length > 0);
+        (triggerType === "message_contains" ||
+          triggerType === "message_contains_keywords" ||
+          triggerType === "keyword" ||
+          triggerType === "contains" ||
+          triggerType === "keywords" ||
+          triggerType === "message") &&
+        keywordList.length > 0;
 
       const keywordsMatch = keywordList.some((kw) =>
         messageContent.toLowerCase().includes(kw.toLowerCase()),
