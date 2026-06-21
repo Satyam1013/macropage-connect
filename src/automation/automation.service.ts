@@ -280,33 +280,50 @@ export class AutomationService {
       return;
     }
 
-    const client = await this.metaService.getClient(tenantId);
-    const phone = contactPhone.replace("+", "");
-
-    const resp = await client.sendMessage({
-      messaging_product: "whatsapp",
-      to: phone,
-      type: "text",
-      text: { body: message },
-    });
-
-    const metaMessageId = (
-      resp.data as { messages?: Array<{ id: string }> }
-    )?.messages?.[0]?.id;
-
-    await this.msgModel.create({
+    // Save first so auto-reply is always visible in portal
+    const savedMsg = await this.msgModel.create({
       tenantId,
       conversationId,
       direction: "OUTBOUND",
       type: "TEXT" as MessageType,
       content: message,
-      metaMessageId,
-      status: "SENT",
+      status: "PENDING",
       sentAt: new Date(),
     });
 
-    this.logger.log(
-      `[Rules] Auto-reply sent to ${contactPhone} in conv ${conversationId}`,
-    );
+    try {
+      const client = await this.metaService.getClient(tenantId);
+      const phone = contactPhone.replace("+", "");
+
+      const resp = await client.sendMessage({
+        messaging_product: "whatsapp",
+        to: phone,
+        type: "text",
+        text: { body: message },
+      });
+
+      const metaMessageId = (
+        resp.data as { messages?: Array<{ id: string }> }
+      )?.messages?.[0]?.id;
+
+      await this.msgModel.updateOne(
+        { _id: savedMsg._id },
+        { status: "SENT", metaMessageId },
+      );
+
+      this.logger.log(
+        `[Rules] Auto-reply SENT to ${contactPhone} in conv ${conversationId}`,
+      );
+    } catch (err: unknown) {
+      await this.msgModel.updateOne(
+        { _id: savedMsg._id },
+        { status: "FAILED" },
+      );
+      this.logger.error(
+        `[Rules] Auto-reply FAILED to ${contactPhone} in conv ${conversationId}`,
+        err,
+      );
+      throw err;
+    }
   }
 }
