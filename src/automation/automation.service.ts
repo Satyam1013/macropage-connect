@@ -8,6 +8,7 @@ import {
 import { Flow, FlowDocument } from "../schemas/flow.schema";
 import { ConversationsService } from "../conversations/conversations.service";
 import { MetaService } from "../meta/meta.service";
+import { SocketService } from "../gateway/socket.service";
 import { Message, MessageDocument } from "../schemas/message.schema";
 import type { MessageType } from "../messages/messages.types";
 import { BillingService } from "../billing/billing.service";
@@ -26,6 +27,7 @@ export class AutomationService {
     private readonly msgModel: Model<MessageDocument>,
     private readonly conversationsService: ConversationsService,
     private readonly metaService: MetaService,
+    private readonly socketService: SocketService,
     private readonly billingService: BillingService,
   ) {}
 
@@ -85,9 +87,7 @@ export class AutomationService {
     const currentRuleCount = await this.countCustomRules(tenantId);
 
     const isExpiredTrial =
-      plan === "TRIAL" &&
-      !!trialEndsAt &&
-      new Date() > new Date(trialEndsAt);
+      plan === "TRIAL" && !!trialEndsAt && new Date() > new Date(trialEndsAt);
 
     return {
       success: true,
@@ -123,7 +123,9 @@ export class AutomationService {
   ): Promise<FlowDocument> {
     if (id) {
       return this.flowModel
-        .findOneAndUpdate({ _id: id, tenantId }, dto, { returnDocument: "after" })
+        .findOneAndUpdate({ _id: id, tenantId }, dto, {
+          returnDocument: "after",
+        })
         .exec() as Promise<FlowDocument>;
     }
     return this.flowModel.create({ ...dto, tenantId });
@@ -170,11 +172,11 @@ export class AutomationService {
           "UNKNOWN",
         actionType: Array.isArray(r.actions)
           ? (r.actions[0] as { type?: string })?.type
-          : (r.actions as { type?: string })?.type ?? "UNKNOWN",
+          : ((r.actions as { type?: string })?.type ?? "UNKNOWN"),
         actionMessage: Array.isArray(r.actions)
-          ? (r.actions[0] as { message?: string; text?: string })?.message ??
-            (r.actions[0] as { text?: string })?.text
-          : (r.actions as { message?: string })?.message ?? "MISSING",
+          ? ((r.actions[0] as { message?: string; text?: string })?.message ??
+            (r.actions[0] as { text?: string })?.text)
+          : ((r.actions as { message?: string })?.message ?? "MISSING"),
       })),
     };
   }
@@ -202,29 +204,45 @@ export class AutomationService {
       const trigger = rule.trigger as {
         type?: string;
         event?: string;
-        keywords?: string[];
+        keywords?: string[] | string;
         keyword?: string;
+        words?: string;
       };
 
       // Support both "type" and "event" field names from frontend
-      const triggerType = trigger.type ?? trigger.event ?? "";
-      // Support both "keywords" array and single "keyword" string
-      const keywords = trigger.keywords ?? (trigger.keyword ? [trigger.keyword] : []);
+      const triggerType = (trigger.type ?? trigger.event ?? "").toLowerCase();
+
+      // Normalize keywords: handle array, single string, OR-separated string
+      const rawKeywords: unknown =
+        trigger.keywords ?? trigger.keyword ?? trigger.words ?? [];
+      const keywordList: string[] = Array.isArray(rawKeywords)
+        ? (rawKeywords as string[])
+        : String(rawKeywords as string)
+            .split(/\s+OR\s+|,/)
+            .map((k) => k.replace(/['"]/g, "").trim())
+            .filter(Boolean);
+
+      const isKeywordTrigger =
+        triggerType === "message_contains" ||
+        triggerType === "message_contains_keywords" ||
+        triggerType === "keyword" ||
+        triggerType === "contains" ||
+        triggerType === "keywords";
+
+      const keywordsMatch =
+        keywordList.length === 0 ||
+        keywordList.some((kw) =>
+          messageContent.toLowerCase().includes(kw.toLowerCase()),
+        );
 
       const matched =
         triggerType === "inbound_message" ||
         triggerType === "all" ||
-        (triggerType === "message_contains" &&
-          keywords.some((kw) =>
-            messageContent.toLowerCase().includes(kw.toLowerCase()),
-          )) ||
-        (triggerType === "keyword" &&
-          keywords.some((kw) =>
-            messageContent.toLowerCase().includes(kw.toLowerCase()),
-          ));
+        triggerType === "any" ||
+        (isKeywordTrigger && keywordsMatch);
 
       this.logger.log(
-        `[Rules] rule="${rule.name}" triggerType=${triggerType} keywords=${JSON.stringify(keywords)} matched=${matched} raw=${JSON.stringify(trigger)}`,
+        `[Rules] rule="${rule.name}" triggerType=${triggerType} keywords=${JSON.stringify(keywordList)} matched=${matched} raw=${JSON.stringify(trigger)}`,
       );
 
       if (!matched) continue;
@@ -253,7 +271,7 @@ export class AutomationService {
   ): Promise<void> {
     // Support both object { type, message } and array [{ type, message }] formats
     const action: Record<string, unknown> = Array.isArray(actions)
-      ? (actions[0] as Record<string, unknown>) ?? {}
+      ? ((actions[0] as Record<string, unknown>) ?? {})
       : actions;
 
     const type = (action.type ?? action.actionType) as string | undefined;
@@ -291,6 +309,22 @@ export class AutomationService {
       sentAt: new Date(),
     });
 
+    const basePayload = {
+      _id: String(savedMsg._id),
+      conversationId,
+      tenantId,
+      direction: "OUTBOUND",
+      type: "TEXT",
+      content: message,
+      isNote: false,
+      agent: null,
+      sentAt: savedMsg.sentAt,
+      createdAt: savedMsg.createdAt,
+    };
+
+    // Show auto-reply in portal immediately
+    this.socketService.newMessage(tenantId, { ...basePayload, status: "PENDING" });
+
     try {
       const client = await this.metaService.getClient(tenantId);
       const phone = contactPhone.replace("+", "");
@@ -302,14 +336,20 @@ export class AutomationService {
         text: { body: message },
       });
 
-      const metaMessageId = (
-        resp.data as { messages?: Array<{ id: string }> }
-      )?.messages?.[0]?.id;
+      const metaMessageId = (resp.data as { messages?: Array<{ id: string }> })
+        ?.messages?.[0]?.id;
 
       await this.msgModel.updateOne(
         { _id: savedMsg._id },
         { status: "SENT", metaMessageId },
       );
+
+      this.socketService.newMessage(tenantId, {
+        ...basePayload,
+        status: "SENT",
+        metaMessageId: metaMessageId ?? null,
+        _update: true,
+      });
 
       this.logger.log(
         `[Rules] Auto-reply SENT to ${contactPhone} in conv ${conversationId}`,
@@ -319,6 +359,11 @@ export class AutomationService {
         { _id: savedMsg._id },
         { status: "FAILED" },
       );
+      this.socketService.newMessage(tenantId, {
+        ...basePayload,
+        status: "FAILED",
+        _update: true,
+      });
       this.logger.error(
         `[Rules] Auto-reply FAILED to ${contactPhone} in conv ${conversationId}`,
         err,

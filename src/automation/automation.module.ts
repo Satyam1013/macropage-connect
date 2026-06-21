@@ -11,6 +11,7 @@ import { AutomationController } from "./automation.controller";
 import { BillingModule } from "../billing/billing.module";
 import { ConversationsModule } from "../conversations/conversations.module";
 import { MetaModule } from "../meta/meta.module";
+import { GatewayModule } from "../gateway/gateway.module";
 import { RolesGuard } from "../common/guards/roles.guard";
 
 @Module({
@@ -23,6 +24,7 @@ import { RolesGuard } from "../common/guards/roles.guard";
     BillingModule,
     ConversationsModule,
     MetaModule,
+    GatewayModule,
   ],
   providers: [AutomationService, RolesGuard],
   controllers: [AutomationController],
