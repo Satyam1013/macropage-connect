@@ -10,7 +10,6 @@ import { ConversationsService } from "../conversations/conversations.service";
 import { MetaService } from "../meta/meta.service";
 import { SocketService } from "../gateway/socket.service";
 import { Message, MessageDocument } from "../schemas/message.schema";
-import type { MessageType } from "../messages/messages.types";
 import { BillingService } from "../billing/billing.service";
 import { getPlanLimits } from "./plan-limits.config";
 
@@ -152,7 +151,7 @@ export class AutomationService {
 
   // ─── Debug ────────────────────────────────────────────────────────────────
 
-  async debugRules(tenantId: string, testMessage: string) {
+  async debugRules(tenantId: string, _testMessage?: string) {
     const all = await this.ruleModel.find({ tenantId }).lean().exec();
     const enabled = all.filter((r) => r.isEnabled);
 
@@ -303,7 +302,7 @@ export class AutomationService {
       tenantId,
       conversationId,
       direction: "OUTBOUND",
-      type: "TEXT" as MessageType,
+      type: "TEXT",
       content: message,
       status: "PENDING",
       sentAt: new Date(),
@@ -323,7 +322,10 @@ export class AutomationService {
     };
 
     // Show auto-reply in portal immediately
-    this.socketService.newMessage(tenantId, { ...basePayload, status: "PENDING" });
+    this.socketService.newMessage(tenantId, {
+      ...basePayload,
+      status: "PENDING",
+    });
 
     try {
       const client = await this.metaService.getClient(tenantId);
