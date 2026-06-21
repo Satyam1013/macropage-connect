@@ -206,14 +206,19 @@ export class AutomationService {
         keywords?: string[] | string;
         keyword?: string;
         words?: string;
+        config?: { keywords?: string[] | string; keyword?: string };
       };
 
-      // Support both "type" and "event" field names from frontend
       const triggerType = (trigger.type ?? trigger.event ?? "").toLowerCase();
 
-      // Normalize keywords: handle array, single string, OR-separated string
+      // Keywords can live at trigger root OR inside trigger.config (frontend stores them in config)
       const rawKeywords: unknown =
-        trigger.keywords ?? trigger.keyword ?? trigger.words ?? [];
+        trigger.keywords ??
+        trigger.keyword ??
+        trigger.words ??
+        trigger.config?.keywords ??
+        trigger.config?.keyword ??
+        [];
       const keywordList: string[] = Array.isArray(rawKeywords)
         ? (rawKeywords as string[])
         : String(rawKeywords as string)
@@ -221,24 +226,26 @@ export class AutomationService {
             .map((k) => k.replace(/['"]/g, "").trim())
             .filter(Boolean);
 
+      const isMatchAll =
+        triggerType === "inbound_message" ||
+        triggerType === "all" ||
+        triggerType === "any" ||
+        (triggerType === "message" && keywordList.length === 0) ||
+        (triggerType === "message_contains" && keywordList.length === 0);
+
       const isKeywordTrigger =
         triggerType === "message_contains" ||
         triggerType === "message_contains_keywords" ||
         triggerType === "keyword" ||
         triggerType === "contains" ||
-        triggerType === "keywords";
+        triggerType === "keywords" ||
+        (triggerType === "message" && keywordList.length > 0);
 
-      const keywordsMatch =
-        keywordList.length === 0 ||
-        keywordList.some((kw) =>
-          messageContent.toLowerCase().includes(kw.toLowerCase()),
-        );
+      const keywordsMatch = keywordList.some((kw) =>
+        messageContent.toLowerCase().includes(kw.toLowerCase()),
+      );
 
-      const matched =
-        triggerType === "inbound_message" ||
-        triggerType === "all" ||
-        triggerType === "any" ||
-        (isKeywordTrigger && keywordsMatch);
+      const matched = isMatchAll || (isKeywordTrigger && keywordsMatch);
 
       this.logger.log(
         `[Rules] rule="${rule.name}" triggerType=${triggerType} keywords=${JSON.stringify(keywordList)} matched=${matched} raw=${JSON.stringify(trigger)}`,
@@ -273,10 +280,18 @@ export class AutomationService {
       ? ((actions[0] as Record<string, unknown>) ?? {})
       : actions;
 
-    const type = (action.type ?? action.actionType) as string | undefined;
-    const message = (action.message ?? action.text ?? action.body) as
+    // action.type or action.config.type (frontend stores type in both places)
+    const cfg = (action.config ?? {}) as Record<string, unknown>;
+    const type = (action.type ?? action.actionType ?? cfg.type) as
       | string
       | undefined;
+    // message lives at action.message OR action.config.message
+    const message = (action.message ??
+      action.text ??
+      action.body ??
+      cfg.message ??
+      cfg.text ??
+      cfg.body) as string | undefined;
 
     this.logger.log(
       `[Rules] executeAction raw=${JSON.stringify(actions)} type=${type} hasMessage=${!!message} phone=${contactPhone}`,
