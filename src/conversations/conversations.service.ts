@@ -18,6 +18,7 @@ import { Contact, ContactDocument } from "../schemas/contact.schema";
 import { User, UserDocument } from "../users/schemas/user.schema";
 import { MetaService } from "../meta/meta.service";
 import { SocketService } from "../gateway/socket.service";
+import { CampaignsService } from "../campaigns/campaigns.service";
 import {
   SendMessageDto,
   AddNoteDto,
@@ -39,6 +40,7 @@ export class ConversationsService {
     private readonly metaService: MetaService,
     private readonly socketService: SocketService,
     private readonly notificationsService: NotificationsService,
+    private readonly campaignsService: CampaignsService,
   ) {}
 
   async findAll(
@@ -583,6 +585,12 @@ export class ConversationsService {
         status: status.toUpperCase(),
         timestamp: new Date().toISOString(),
       });
+    }
+
+    if (status === "delivered" || status === "read") {
+      void this.campaignsService
+        .handleDeliveryUpdate(metaMessageId, status, timestamp)
+        .catch(() => undefined);
     }
   }
 

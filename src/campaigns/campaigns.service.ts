@@ -258,6 +258,33 @@ export class CampaignsService {
     return this.findOne(tenantId, id);
   }
 
+  async handleDeliveryUpdate(
+    metaMessageId: string,
+    status: "delivered" | "read",
+    timestamp: number,
+  ): Promise<void> {
+    const recipient = await this.recipientModel
+      .findOne({ metaMessageId })
+      .exec();
+    if (!recipient) return;
+
+    const update: Record<string, unknown> = { status };
+    if (status === "delivered") update.deliveredAt = new Date(timestamp * 1000);
+    if (status === "read") update.readAt = new Date(timestamp * 1000);
+
+    await this.recipientModel.updateOne({ _id: recipient._id }, update);
+
+    const field = status === "delivered" ? "delivered" : "read";
+    await this.campaignModel.updateOne(
+      { _id: recipient.campaignId },
+      { $inc: { [field]: 1 } },
+    );
+
+    this.logger.log(
+      `[Campaign] ${status} update for msg ${metaMessageId} → campaign ${recipient.campaignId}`,
+    );
+  }
+
   async getRecipients(
     tenantId: string,
     campaignId: string,
