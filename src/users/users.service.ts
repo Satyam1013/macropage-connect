@@ -47,7 +47,7 @@ export class UsersService {
       company: dto.company,
       role: dto.role ?? "OWNER",
       trialEndsAt: new Date(
-        Date.now() + 30 * 24 * 60 * 60 * 1000,
+        Date.now() + 14 * 24 * 60 * 60 * 1000,
       ).toISOString(),
       marketingOptIn: dto.marketingOptIn ?? false,
     });
