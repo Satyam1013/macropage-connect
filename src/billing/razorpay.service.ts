@@ -19,11 +19,12 @@ export class RazorpayService {
     email: string;
     phone?: string;
   }): Promise<{ id: string }> {
-    return this.razorpay.customers.create({
+    const raw = await (this.razorpay.customers.create({
       name: data.name,
       email: data.email,
       contact: data.phone ?? "",
-    }) as unknown as Promise<{ id: string }>;
+    }) as unknown as Promise<Record<string, unknown>>);
+    return { id: typeof raw.id === "string" ? raw.id : String(raw.id) };
   }
 
   async createSubscription(data: {
@@ -44,7 +45,9 @@ export class RazorpayService {
       notes: data.notes ?? {},
     } as Parameters<typeof this.razorpay.subscriptions.create>[0];
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-    const raw = await (this.razorpay.subscriptions.create(body) as unknown as Promise<Record<string, unknown>>);
+    const raw = await (this.razorpay.subscriptions.create(
+      body,
+    ) as unknown as Promise<Record<string, unknown>>);
     // Return a clean plain object so callers get a fully safe type
     return {
       id: String(raw.id ?? ""),
@@ -87,8 +90,7 @@ export class RazorpayService {
     razorpay_payment_id: string;
     razorpay_signature: string;
   }): boolean {
-    const body =
-      data.razorpay_subscription_id + "|" + data.razorpay_payment_id;
+    const body = data.razorpay_subscription_id + "|" + data.razorpay_payment_id;
     const expected = crypto
       .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET!)
       .update(body)
