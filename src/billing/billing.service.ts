@@ -101,17 +101,17 @@ export class BillingService {
     const totalCount =
       billingCycle === "yearly" ? 10 : billingCycle === "quarterly" ? 40 : 120;
 
-    const rzpSubRaw = await this.razorpayService.createSubscription({
-      planId: pricing.razorpayPlanId,
-      customerId: razorpayCustomerId,
-      totalCount,
-      quantity: 1,
-      notes: { tenantId, plan, billingCycle },
-    });
-    // Destructure into typed locals to avoid no-unsafe-assignment on rzpSubRaw
-    const rzpSubId: string = String(rzpSubRaw.id);
-    const rzpShortUrl: string | null =
-      typeof rzpSubRaw.short_url === "string" ? rzpSubRaw.short_url : null;
+    // Explicit type annotation breaks ESLint's unsafe-assignment taint from the SDK cast
+    const rzpSub: { id: string; short_url?: string } =
+      await this.razorpayService.createSubscription({
+        planId: pricing.razorpayPlanId,
+        customerId: razorpayCustomerId,
+        totalCount,
+        quantity: 1,
+        notes: { tenantId, plan, billingCycle },
+      });
+    const rzpSubId: string = rzpSub.id;
+    const rzpShortUrl: string | null = rzpSub.short_url ?? null;
 
     await this.subModel.findOneAndUpdate(
       { tenantId },
