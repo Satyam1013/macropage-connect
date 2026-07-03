@@ -574,7 +574,7 @@ export class ConversationsService {
           direction: "INBOUND",
           type: type.toUpperCase(),
         },
-      } as unknown as import("../schemas/conversation.schema").ConversationDocument);
+      });
     }
 
     return message;
