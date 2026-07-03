@@ -44,13 +44,12 @@ export class RazorpayService {
       start_at: data.startAt,
       notes: data.notes ?? {},
     } as Parameters<typeof this.razorpay.subscriptions.create>[0];
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
     const raw = await (this.razorpay.subscriptions.create(
       body,
     ) as unknown as Promise<Record<string, unknown>>);
     // Return a clean plain object so callers get a fully safe type
     return {
-      id: String(raw.id ?? ""),
+      id: typeof raw.id === "string" ? raw.id : String(raw.id),
       short_url: typeof raw.short_url === "string" ? raw.short_url : undefined,
     };
   }
