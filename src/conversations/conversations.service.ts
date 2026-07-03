@@ -304,7 +304,11 @@ export class ConversationsService {
       .exec();
 
     const agentObj = agent
-      ? { _id: String(agent._id), name: agent.name, avatarUrl: agent.avatarUrl ?? null }
+      ? {
+          _id: String(agent._id),
+          name: agent.name,
+          avatarUrl: agent.avatarUrl ?? null,
+        }
       : null;
 
     const buildEnriched = (status: string, metaMessageId?: string | null) => ({
@@ -331,14 +335,19 @@ export class ConversationsService {
     if (updatedConv) {
       this.socketService.conversationUpdated(tenantId, {
         ...updatedConv,
-        lastMessage: { content: dto.content ?? dto.templateName ?? "", direction: "OUTBOUND", type: dto.type },
-      } as unknown as import("../schemas/conversation.schema").ConversationDocument);
+        lastMessage: {
+          content: dto.content ?? dto.templateName ?? "",
+          direction: "OUTBOUND",
+          type: dto.type,
+        },
+      });
     }
 
     try {
       const resp = await client.sendMessage(payload);
-      const metaMessageId = (resp.data as { messages?: Array<{ id: string }> })
-        ?.messages?.[0]?.id ?? null;
+      const metaMessageId =
+        (resp.data as { messages?: Array<{ id: string }> })?.messages?.[0]
+          ?.id ?? null;
 
       await this.msgModel.updateOne(
         { _id: message._id },
@@ -387,7 +396,13 @@ export class ConversationsService {
       content: note.content,
       isNote: true,
       agentId,
-      agent: agent ? { _id: String(agent._id), name: agent.name, avatarUrl: agent.avatarUrl ?? null } : null,
+      agent: agent
+        ? {
+            _id: String(agent._id),
+            name: agent.name,
+            avatarUrl: agent.avatarUrl ?? null,
+          }
+        : null,
       createdAt: note.createdAt,
     };
 
@@ -554,7 +569,11 @@ export class ConversationsService {
     if (updatedConv) {
       this.socketService.conversationUpdated(tenantId, {
         ...updatedConv,
-        lastMessage: { content, direction: "INBOUND", type: type.toUpperCase() },
+        lastMessage: {
+          content,
+          direction: "INBOUND",
+          type: type.toUpperCase(),
+        },
       } as unknown as import("../schemas/conversation.schema").ConversationDocument);
     }
 
