@@ -101,13 +101,17 @@ export class BillingService {
     const totalCount =
       billingCycle === "yearly" ? 10 : billingCycle === "quarterly" ? 40 : 120;
 
-    const rzpSub = await this.razorpayService.createSubscription({
+    const rzpSubRaw = await this.razorpayService.createSubscription({
       planId: pricing.razorpayPlanId,
       customerId: razorpayCustomerId,
       totalCount,
       quantity: 1,
       notes: { tenantId, plan, billingCycle },
     });
+    // Destructure into typed locals to avoid no-unsafe-assignment on rzpSubRaw
+    const rzpSubId: string = String(rzpSubRaw.id);
+    const rzpShortUrl: string | null =
+      typeof rzpSubRaw.short_url === "string" ? rzpSubRaw.short_url : null;
 
     await this.subModel.findOneAndUpdate(
       { tenantId },
@@ -117,7 +121,7 @@ export class BillingService {
           plan,
           billingCycle,
           status: "TRIALING",
-          razorpaySubId: rzpSub.id,
+          razorpaySubId: rzpSubId,
           razorpayCustomerId,
           razorpayPlanId: pricing.razorpayPlanId,
         },
@@ -126,20 +130,19 @@ export class BillingService {
     );
 
     this.logger.log(
-      `[Billing] Created subscription ${rzpSub.id} for tenant ${tenantId}`,
+      `[Billing] Created subscription ${rzpSubId} for tenant ${tenantId}`,
     );
 
     return {
       success: true,
       data: {
-        subscriptionId: rzpSub.id,
+        subscriptionId: rzpSubId,
         razorpayKeyId: process.env.RAZORPAY_KEY_ID,
         plan,
         billingCycle,
         amount: pricing.amount,
         currency: "INR",
-        shortUrl:
-          (rzpSub as unknown as Record<string, unknown>).short_url ?? null,
+        shortUrl: rzpShortUrl,
       },
     };
   }
