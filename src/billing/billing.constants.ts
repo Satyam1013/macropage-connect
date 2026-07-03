@@ -10,22 +10,22 @@ export type PlanFeature =
 
 // Which plans can access each feature
 export const FEATURE_PLANS: Record<PlanFeature, Plan[]> = {
-  automation:        ["TRIAL", "GROWTH", "BUSINESS", "ENTERPRISE"],
-  flowBuilder:       ["TRIAL", "GROWTH", "BUSINESS", "ENTERPRISE"],
-  aiChatbot:         ["TRIAL", "GROWTH", "BUSINESS", "ENTERPRISE"],
-  apiAccess:         ["TRIAL", "GROWTH", "BUSINESS", "ENTERPRISE"],
+  automation: ["TRIAL", "GROWTH", "BUSINESS", "ENTERPRISE"],
+  flowBuilder: ["TRIAL", "GROWTH", "BUSINESS", "ENTERPRISE"],
+  aiChatbot: ["TRIAL", "GROWTH", "BUSINESS", "ENTERPRISE"],
+  apiAccess: ["TRIAL", "GROWTH", "BUSINESS", "ENTERPRISE"],
   advancedAnalytics: ["TRIAL", "GROWTH", "BUSINESS", "ENTERPRISE"],
-  teamManagement:    ["TRIAL", "STARTER", "GROWTH", "BUSINESS", "ENTERPRISE"],
+  teamManagement: ["TRIAL", "STARTER", "GROWTH", "BUSINESS", "ENTERPRISE"],
 };
 
 // Human-readable upgrade message per feature
 export const FEATURE_UPGRADE_MESSAGE: Record<PlanFeature, string> = {
-  automation:        "Automation rules require Growth plan or above",
-  flowBuilder:       "Flow Builder requires Growth plan or above",
-  aiChatbot:         "AI Chatbot requires Growth plan or above",
-  apiAccess:         "API access requires Growth plan or above",
+  automation: "Automation rules require Growth plan or above",
+  flowBuilder: "Flow Builder requires Growth plan or above",
+  aiChatbot: "AI Chatbot requires Growth plan or above",
+  apiAccess: "API access requires Growth plan or above",
   advancedAnalytics: "Advanced analytics require Growth plan or above",
-  teamManagement:    "Team management is available on all plans",
+  teamManagement: "Team management is available on all plans",
 };
 
 export const PLAN_LIMITS = {
@@ -88,7 +88,11 @@ export const PLAN_PRICING = [
     currency: "INR",
     pricing: {
       monthly: { price: 1999, billedAs: "₹1,999/month" },
-      quarterly: { price: 1799, billedAs: "₹5,397 every 3 months", savings: "Save 10%" },
+      quarterly: {
+        price: 1799,
+        billedAs: "₹5,397 every 3 months",
+        savings: "Save 10%",
+      },
       yearly: { price: 1499, billedAs: "₹17,988/year", savings: "Save 25%" },
     },
     features: [
@@ -118,7 +122,11 @@ export const PLAN_PRICING = [
     currency: "INR",
     pricing: {
       monthly: { price: 3499, billedAs: "₹3,499/month" },
-      quarterly: { price: 3149, billedAs: "₹9,447 every 3 months", savings: "Save 10%" },
+      quarterly: {
+        price: 3149,
+        billedAs: "₹9,447 every 3 months",
+        savings: "Save 10%",
+      },
       yearly: { price: 2624, billedAs: "₹31,488/year", savings: "Save 25%" },
     },
     features: [
@@ -145,7 +153,11 @@ export const PLAN_PRICING = [
     currency: "INR",
     pricing: {
       monthly: { price: 8999, billedAs: "₹8,999/month" },
-      quarterly: { price: 8099, billedAs: "₹24,297 every 3 months", savings: "Save 10%" },
+      quarterly: {
+        price: 8099,
+        billedAs: "₹24,297 every 3 months",
+        savings: "Save 10%",
+      },
       yearly: { price: 6749, billedAs: "₹80,988/year", savings: "Save 25%" },
     },
     features: [
