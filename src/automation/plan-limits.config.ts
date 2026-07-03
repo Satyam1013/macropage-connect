@@ -54,5 +54,7 @@ export function getPlanLimits(tenant: {
     return AUTOMATION_PLAN_LIMITS.TRIAL;
   }
 
-  return AUTOMATION_PLAN_LIMITS[plan as PlanKey] ?? AUTOMATION_PLAN_LIMITS.STARTER;
+  return (
+    AUTOMATION_PLAN_LIMITS[plan as PlanKey] ?? AUTOMATION_PLAN_LIMITS.STARTER
+  );
 }

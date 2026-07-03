@@ -51,7 +51,10 @@ export class BillingController {
   @HttpCode(HttpStatus.CREATED)
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.OWNER)
-  createSubscription(@Request() req: AuthReq, @Body() dto: CreateSubscriptionDto) {
+  createSubscription(
+    @Request() req: AuthReq,
+    @Body() dto: CreateSubscriptionDto,
+  ) {
     const tenantId = req.user.tenantId ?? req.user.id;
     return this.billingService.createRazorpaySubscription(
       tenantId,
@@ -116,8 +119,7 @@ export class BillingController {
     @Req() req: Request & { rawBody?: string },
     @Body() body: { event: string; payload: unknown },
   ) {
-    const rawBody =
-      req.rawBody ?? JSON.stringify(body);
+    const rawBody = req.rawBody ?? JSON.stringify(body);
 
     const secret = process.env.RAZORPAY_WEBHOOK_SECRET;
     if (!secret) throw new BadRequestException("Webhook secret not configured");

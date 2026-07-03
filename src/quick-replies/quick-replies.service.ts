@@ -5,10 +5,7 @@ import {
 } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
 import { Model } from "mongoose";
-import {
-  QuickReply,
-  QuickReplyDocument,
-} from "../schemas/quick-reply.schema";
+import { QuickReply, QuickReplyDocument } from "../schemas/quick-reply.schema";
 import { CreateQuickReplyDto } from "./dto/create-quick-reply.dto";
 
 @Injectable()

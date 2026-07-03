@@ -151,7 +151,7 @@ export class AutomationService {
 
   // ─── Debug ────────────────────────────────────────────────────────────────
 
-  async debugRules(tenantId: string, _testMessage?: string) {
+  async debugRules(tenantId: string) {
     const all = await this.ruleModel.find({ tenantId }).lean().exec();
     const enabled = all.filter((r) => r.isEnabled);
 
