@@ -86,7 +86,7 @@ export class BillingService {
       .exec();
     if (!user) throw new NotFoundException("User not found");
 
-    let sub = await this.subModel.findOne({ tenantId }).lean().exec();
+    const sub = await this.subModel.findOne({ tenantId }).lean().exec();
     let razorpayCustomerId = sub?.razorpayCustomerId;
 
     if (!razorpayCustomerId) {
@@ -95,7 +95,7 @@ export class BillingService {
         email: user.email,
         phone: user.phone,
       });
-      razorpayCustomerId = customer.id;
+      razorpayCustomerId = String(customer.id);
     }
 
     const totalCount =
@@ -103,7 +103,7 @@ export class BillingService {
 
     const rzpSub = await this.razorpayService.createSubscription({
       planId: pricing.razorpayPlanId,
-      customerId: razorpayCustomerId as string,
+      customerId: razorpayCustomerId,
       totalCount,
       quantity: 1,
       notes: { tenantId, plan, billingCycle },
