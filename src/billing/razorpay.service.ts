@@ -54,14 +54,11 @@ export class RazorpayService {
     };
   }
 
-  async cancelSubscription(
+  cancelSubscription(
     subscriptionId: string,
     cancelAtCycleEnd = true,
   ): Promise<unknown> {
-    return this.razorpay.subscriptions.cancel(
-      subscriptionId,
-      cancelAtCycleEnd,
-    ) as unknown;
+    return this.razorpay.subscriptions.cancel(subscriptionId, cancelAtCycleEnd);
   }
 
   async fetchSubscription(
