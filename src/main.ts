@@ -5,9 +5,27 @@ import { NestFactory } from "@nestjs/core";
 import { ValidationPipe } from "@nestjs/common";
 import { AppModule } from "./app.module";
 import { HttpExceptionFilter } from "./common/filters/http-exception.filter";
+import * as express from "express";
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+
+  // Preserve raw body for Razorpay webhook signature verification
+  app.use(
+    "/api/v1/billing/webhook",
+    express.raw({ type: "application/json" }),
+    (
+      req: express.Request & { rawBody?: string },
+      _res: express.Response,
+      next: express.NextFunction,
+    ) => {
+      if (Buffer.isBuffer(req.body)) {
+        req.rawBody = req.body.toString("utf8");
+        req.body = JSON.parse(req.rawBody) as unknown;
+      }
+      next();
+    },
+  );
 
   // Global prefix
   app.setGlobalPrefix("api/v1");

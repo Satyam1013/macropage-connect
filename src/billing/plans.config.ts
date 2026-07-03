@@ -1,0 +1,106 @@
+export const PLANS = {
+  STARTER: {
+    name: "Starter",
+    description: "For small teams getting started",
+    features: {
+      maxTeamMembers: 3,
+      maxContacts: 5000,
+      automationRules: 5,
+      flowsEnabled: false,
+      aiEnabled: false,
+    },
+    pricing: {
+      monthly: {
+        amount: 199900,
+        razorpayPlanId: process.env.RAZORPAY_STARTER_MONTHLY_PLAN_ID ?? "",
+        interval: 1,
+        period: "monthly",
+      },
+      quarterly: {
+        amount: 539700,
+        razorpayPlanId: process.env.RAZORPAY_STARTER_QUARTERLY_PLAN_ID ?? "",
+        interval: 3,
+        period: "monthly",
+      },
+      yearly: {
+        amount: 1798800,
+        razorpayPlanId: process.env.RAZORPAY_STARTER_YEARLY_PLAN_ID ?? "",
+        interval: 1,
+        period: "yearly",
+      },
+    },
+  },
+  GROWTH: {
+    name: "Growth",
+    description: "For growing businesses",
+    features: {
+      maxTeamMembers: 10,
+      maxContacts: 25000,
+      automationRules: -1,
+      flowsEnabled: true,
+      aiEnabled: false,
+    },
+    pricing: {
+      monthly: {
+        amount: 349900,
+        razorpayPlanId: process.env.RAZORPAY_GROWTH_MONTHLY_PLAN_ID ?? "",
+        interval: 1,
+        period: "monthly",
+      },
+      quarterly: {
+        amount: 944730,
+        razorpayPlanId: process.env.RAZORPAY_GROWTH_QUARTERLY_PLAN_ID ?? "",
+        interval: 3,
+        period: "monthly",
+      },
+      yearly: {
+        amount: 3148800,
+        razorpayPlanId: process.env.RAZORPAY_GROWTH_YEARLY_PLAN_ID ?? "",
+        interval: 1,
+        period: "yearly",
+      },
+    },
+  },
+  BUSINESS: {
+    name: "Business",
+    description: "For scaling businesses",
+    features: {
+      maxTeamMembers: 25,
+      maxContacts: 100000,
+      automationRules: -1,
+      flowsEnabled: true,
+      aiEnabled: true,
+    },
+    pricing: {
+      monthly: {
+        amount: 899900,
+        razorpayPlanId: process.env.RAZORPAY_BUSINESS_MONTHLY_PLAN_ID ?? "",
+        interval: 1,
+        period: "monthly",
+      },
+      quarterly: {
+        amount: 2429730,
+        razorpayPlanId: process.env.RAZORPAY_BUSINESS_QUARTERLY_PLAN_ID ?? "",
+        interval: 3,
+        period: "monthly",
+      },
+      yearly: {
+        amount: 8098800,
+        razorpayPlanId: process.env.RAZORPAY_BUSINESS_YEARLY_PLAN_ID ?? "",
+        interval: 1,
+        period: "yearly",
+      },
+    },
+  },
+} as const;
+
+export type PlanKey = keyof typeof PLANS;
+export type BillingCycle = "monthly" | "quarterly" | "yearly";
+
+export function getPlanConfig(plan: PlanKey) {
+  return PLANS[plan];
+}
+
+export function getPlanPricing(plan: PlanKey, billingCycle: BillingCycle) {
+  return PLANS[plan]?.pricing[billingCycle];
+}

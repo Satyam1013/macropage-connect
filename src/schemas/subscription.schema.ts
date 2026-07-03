@@ -29,11 +29,14 @@ export class Subscription {
   @Prop()
   billingCycle?: string;
 
-  @Prop()
+  @Prop({ index: true })
   razorpaySubId?: string;
 
   @Prop()
   razorpayCustomerId?: string;
+
+  @Prop()
+  razorpayPlanId?: string;
 
   @Prop()
   trialEndsAt?: Date;
@@ -46,6 +49,9 @@ export class Subscription {
 
   @Prop({ default: false })
   cancelAtPeriodEnd!: boolean;
+
+  @Prop()
+  cancelledAt?: Date;
 
   @Prop()
   paymentFailedAt?: Date;
