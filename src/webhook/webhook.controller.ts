@@ -11,11 +11,15 @@ import {
   Req,
 } from "@nestjs/common";
 import { WebhookService } from "./webhook.service";
+import { BillingService } from "../billing/billing.service";
 import type { Response } from "express";
 
 @Controller("webhook")
 export class WebhookController {
-  constructor(private readonly webhookService: WebhookService) {}
+  constructor(
+    private readonly webhookService: WebhookService,
+    private readonly billingService: BillingService,
+  ) {}
 
   @Get("meta")
   verifyMeta(@Query() query: Record<string, string>, @Res() res: Response) {
@@ -36,10 +40,10 @@ export class WebhookController {
 
   @Post("razorpay")
   @HttpCode(HttpStatus.OK)
-  handleRazorpay(
+  async handleRazorpay(
     @Req() req: { rawBody?: Buffer },
     @Headers("x-razorpay-signature") signature: string,
-    @Body() body: Record<string, unknown>,
+    @Body() body: { event: string; payload: unknown },
   ) {
     const rawBody = req.rawBody?.toString() ?? JSON.stringify(body);
     const valid = this.webhookService.verifyRazorpaySignature(
@@ -47,6 +51,7 @@ export class WebhookController {
       signature,
     );
     if (!valid) return { status: "ignored" };
-    return { status: "ok", event: body.event };
+    await this.billingService.handleWebhook(body.event, body.payload);
+    return { status: "ok" };
   }
 }

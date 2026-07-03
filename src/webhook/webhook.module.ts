@@ -7,6 +7,7 @@ import { ContactsModule } from "../contacts/contacts.module";
 import { ConversationsModule } from "../conversations/conversations.module";
 import { GatewayModule } from "../gateway/gateway.module";
 import { AutomationModule } from "../automation/automation.module";
+import { BillingModule } from "../billing/billing.module";
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { AutomationModule } from "../automation/automation.module";
     ConversationsModule,
     GatewayModule,
     AutomationModule,
+    BillingModule,
   ],
   providers: [WebhookService],
   controllers: [WebhookController],

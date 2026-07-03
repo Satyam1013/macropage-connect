@@ -11,8 +11,7 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
   // Preserve raw body for Razorpay webhook signature verification
-  app.use(
-    "/api/v1/billing/webhook",
+  const rawBodyMiddleware = [
     express.raw({ type: "application/json" }),
     (
       req: express.Request & { rawBody?: string },
@@ -25,7 +24,9 @@ async function bootstrap() {
       }
       next();
     },
-  );
+  ];
+  app.use("/api/v1/billing/webhook", ...rawBodyMiddleware);
+  app.use("/api/v1/webhook/razorpay", ...rawBodyMiddleware);
 
   // Global prefix
   app.setGlobalPrefix("api/v1");
