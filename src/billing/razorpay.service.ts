@@ -86,7 +86,7 @@ export class RazorpayService {
     razorpay_payment_id: string;
     razorpay_signature: string;
   }): boolean {
-    const body = data.razorpay_subscription_id + "|" + data.razorpay_payment_id;
+    const body = data.razorpay_payment_id + "|" + data.razorpay_subscription_id;
     const expected = crypto
       .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET!)
       .update(body)
