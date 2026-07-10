@@ -455,7 +455,9 @@ export class WhatsappService {
     }
 
     const token = this.encryption.decrypt(waba.accessToken);
-    const toNumber = user.phone.replace("+", "");
+    // Normalise to E.164 without '+': ensure country code is present
+    const digits = user.phone.replace(/\D/g, "");
+    const toNumber = digits.startsWith("91") ? digits : `91${digits}`;
 
     let messageId: string | undefined;
     try {
@@ -464,8 +466,10 @@ export class WhatsappService {
         {
           messaging_product: "whatsapp",
           to: toNumber,
-          type: "template",
-          template: { name: "hello_world", language: { code: "en_US" } },
+          type: "text",
+          text: {
+            body: "✅ Your Macropage Connect WhatsApp integration is working! This is a test message.",
+          },
         },
         { headers: { Authorization: `Bearer ${token}` } },
       );
@@ -477,22 +481,48 @@ export class WhatsappService {
           err.response?.data as { error?: { message?: string; code?: number } }
         )?.error;
         this.logger.error(
-          `[sendTest] Meta API error: ${JSON.stringify(metaError ?? err.message)}`,
+          `[sendTest] Meta error: ${JSON.stringify(metaError ?? err.message)}`,
         );
+
+        // 131026 = outside 24h window — user needs to message WABA first
+        if (metaError?.code === 131026) {
+          throw new BadRequestException({
+            success: false,
+            error: {
+              code: "OUTSIDE_WINDOW",
+              message:
+                "To receive a test message, first send a WhatsApp message to your business number from your personal WhatsApp. Then try again.",
+            },
+          });
+        }
+
+        // 133010 = recipient not on WhatsApp
+        if (metaError?.code === 133010) {
+          throw new BadRequestException({
+            success: false,
+            error: {
+              code: "NOT_ON_WHATSAPP",
+              message: `The phone number +${toNumber} is not registered on WhatsApp. Update your profile with the correct WhatsApp number.`,
+            },
+          });
+        }
+
         throw new BadRequestException({
           success: false,
           error: {
             code: "META_SEND_FAIL",
             message:
-              metaError?.message ??
-              "Meta rejected the message — check token and phone number",
+              metaError?.message ?? "Meta rejected the message — check token",
           },
         });
       }
       this.logger.error("[sendTest] Unexpected error", err);
       throw new BadRequestException({
         success: false,
-        error: { code: "META_SEND_FAIL", message: "Meta rejected the message" },
+        error: {
+          code: "META_SEND_FAIL",
+          message: "Unexpected error sending test message",
+        },
       });
     }
 
