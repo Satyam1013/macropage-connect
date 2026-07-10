@@ -31,13 +31,15 @@ export class EmailService {
   async sendVerificationEmail(
     to: string,
     name: string,
-    token: string,
+    otp: string,
   ): Promise<void> {
-    const link = `${process.env.FRONTEND_URL}/verify-email?token=${token}`;
     await this.sendRaw(
       to,
-      "Verify your Macropage Connect account",
-      `<p>Hi ${name},</p><p>Click <a href="${link}">here</a> to verify your email.</p>`,
+      "Your Macropage Connect verification code",
+      `<p>Hi ${name},</p>
+<p>Use the code below to verify your email address. It expires in <strong>10 minutes</strong>.</p>
+<h2 style="letter-spacing:8px;font-size:32px;font-weight:700;">${otp}</h2>
+<p>If you did not sign up, you can safely ignore this email.</p>`,
     );
   }
 

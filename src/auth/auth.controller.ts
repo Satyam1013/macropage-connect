@@ -10,6 +10,7 @@ import {
   Param,
   Delete,
 } from "@nestjs/common";
+
 import { AuthService } from "./auth.service";
 import { LoginDto } from "./dto/login.dto";
 import { SignupDto } from "./dto/signup.dto";
@@ -59,9 +60,10 @@ export class AuthController {
     return this.authService.resetPassword(dto);
   }
 
-  @Get("verify-email/:token")
-  verifyEmail(@Param("token") token: string) {
-    return this.authService.verifyEmail(token);
+  @Post("verify-otp")
+  @HttpCode(HttpStatus.OK)
+  verifyOtp(@Body("email") email: string, @Body("otp") otp: string) {
+    return this.authService.verifyEmail(email, otp);
   }
 
   @Post("resend-verification")

@@ -59,18 +59,11 @@ export class AuthService {
 
     const user = await this.users.create(dto);
 
-    const verifyToken = crypto.randomBytes(32).toString("hex");
-    const verifyHash = crypto
-      .createHash("sha256")
-      .update(verifyToken)
-      .digest("hex");
-    await this.users.setEmailVerifyToken(user.id, verifyHash);
+    const otp = String(Math.floor(100000 + Math.random() * 900000));
+    const otpHash = crypto.createHash("sha256").update(otp).digest("hex");
+    await this.users.setEmailVerifyToken(user.id, otpHash);
 
-    void this.emailService.sendVerificationEmail(
-      user.email,
-      user.name,
-      verifyToken,
-    );
+    void this.emailService.sendVerificationEmail(user.email, user.name, otp);
 
     return this.buildAuthResponse(user, "Account created successfully");
   }
@@ -206,11 +199,10 @@ export class AuthService {
 
   // ─── Email Verification ───────────────────────────────────────────────────
 
-  async verifyEmail(token: string): Promise<{ message: string }> {
-    const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
-    const user = await this.users.findByEmailVerifyToken(tokenHash);
-    if (!user)
-      throw new BadRequestException("Invalid or expired verification link");
+  async verifyEmail(email: string, otp: string): Promise<{ message: string }> {
+    const otpHash = crypto.createHash("sha256").update(otp).digest("hex");
+    const user = await this.users.findByEmailAndOtp(email, otpHash);
+    if (!user) throw new BadRequestException("Invalid or expired OTP");
     await this.users.markEmailVerified(user.id);
     return { message: "Email verified successfully" };
   }
@@ -218,15 +210,15 @@ export class AuthService {
   async resendVerification(email: string): Promise<{ message: string }> {
     const user = await this.users.findByEmail(email);
     if (!user)
-      return { message: "If this email exists, a verification link was sent" };
+      return { message: "If this email exists, a verification OTP was sent" };
     if (user.emailVerified)
       throw new BadRequestException("Email already verified");
 
-    const token = crypto.randomBytes(32).toString("hex");
-    const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
-    await this.users.setEmailVerifyToken(user.id, tokenHash);
-    void this.emailService.sendVerificationEmail(user.email, user.name, token);
-    return { message: "Verification email sent" };
+    const otp = String(Math.floor(100000 + Math.random() * 900000));
+    const otpHash = crypto.createHash("sha256").update(otp).digest("hex");
+    await this.users.setEmailVerifyToken(user.id, otpHash);
+    void this.emailService.sendVerificationEmail(user.email, user.name, otp);
+    return { message: "Verification OTP sent" };
   }
 
   // ─── Sessions ─────────────────────────────────────────────────────────────

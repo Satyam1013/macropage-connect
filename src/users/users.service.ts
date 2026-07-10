@@ -22,10 +22,14 @@ export class UsersService {
     return this.userModel.findById(id).exec();
   }
 
-  findByEmailVerifyToken(tokenHash: string): Promise<UserDocument | null> {
+  findByEmailAndOtp(
+    email: string,
+    otpHash: string,
+  ): Promise<UserDocument | null> {
     return this.userModel
       .findOne({
-        emailVerifyToken: tokenHash,
+        email,
+        emailVerifyToken: otpHash,
         emailVerifyExpires: { $gt: new Date() },
       })
       .exec();
@@ -59,12 +63,12 @@ export class UsersService {
     return bcrypt.compare(plain, hashed);
   }
 
-  async setEmailVerifyToken(userId: string, tokenHash: string): Promise<void> {
+  async setEmailVerifyToken(userId: string, otpHash: string): Promise<void> {
     await this.userModel.updateOne(
       { _id: userId },
       {
-        emailVerifyToken: tokenHash,
-        emailVerifyExpires: new Date(Date.now() + 24 * 60 * 60 * 1000),
+        emailVerifyToken: otpHash,
+        emailVerifyExpires: new Date(Date.now() + 10 * 60 * 1000), // 10 minutes
       },
     );
   }
