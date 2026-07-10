@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException } from "@nestjs/common";
+import { Injectable, BadRequestException, Logger } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
 import { Model } from "mongoose";
 import axios from "axios";
@@ -40,6 +40,8 @@ interface WABADetailsData {
 
 @Injectable()
 export class WhatsappService {
+  private readonly logger = new Logger(WhatsappService.name);
+
   constructor(
     @InjectModel(WABAAccount.name)
     private readonly wabaModel: Model<WABAAccountDocument>,
@@ -471,18 +473,23 @@ export class WhatsappService {
         .messages?.[0]?.id;
     } catch (err) {
       if (axios.isAxiosError(err)) {
-        const errMsg = (err.response?.data as { error?: { message?: string } })
-          ?.error?.message;
-        if (errMsg?.toLowerCase().includes("template")) {
-          throw new BadRequestException({
-            success: false,
-            error: {
-              code: "TEMPLATE_ERROR",
-              message: "hello_world template not available on this WABA",
-            },
-          });
-        }
+        const metaError = (
+          err.response?.data as { error?: { message?: string; code?: number } }
+        )?.error;
+        this.logger.error(
+          `[sendTest] Meta API error: ${JSON.stringify(metaError ?? err.message)}`,
+        );
+        throw new BadRequestException({
+          success: false,
+          error: {
+            code: "META_SEND_FAIL",
+            message:
+              metaError?.message ??
+              "Meta rejected the message — check token and phone number",
+          },
+        });
       }
+      this.logger.error("[sendTest] Unexpected error", err);
       throw new BadRequestException({
         success: false,
         error: { code: "META_SEND_FAIL", message: "Meta rejected the message" },
