@@ -1,5 +1,5 @@
 import { Injectable, Inject } from "@nestjs/common";
-import { UserRole } from "../auth/dto/signup.dto";
+import { UserRole } from "../auth/auth.constants";
 import { InjectModel } from "@nestjs/mongoose";
 import { Model } from "mongoose";
 import type Redis from "ioredis";

@@ -18,7 +18,7 @@ import { RazorpayService } from "./razorpay.service";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { RolesGuard } from "../common/guards/roles.guard";
 import { Roles } from "../common/decorators/roles.decorator";
-import { UserRole } from "../auth/dto/signup.dto";
+import { UserRole } from "../auth/auth.constants";
 import type { AuthReq } from "../auth/dto/auth-request.interface";
 import { CreateSubscriptionDto } from "./dto/create-subscription.dto";
 import { VerifyPaymentDto } from "./dto/verify-payment.dto";

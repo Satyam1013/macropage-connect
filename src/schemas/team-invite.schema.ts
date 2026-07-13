@@ -1,5 +1,5 @@
 import type { InviteStatus } from "../team/team.types";
-import { UserRole } from "../auth/dto/signup.dto";
+import { UserRole } from "../auth/auth.constants";
 import { Prop, Schema, SchemaFactory } from "@nestjs/mongoose";
 import { HydratedDocument } from "mongoose";
 

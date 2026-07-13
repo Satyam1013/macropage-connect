@@ -18,7 +18,7 @@ import { NotificationsService } from "../notifications/notifications.service";
 import { RazorpayService } from "./razorpay.service";
 import type { BillingCycle, PlanKey } from "./billing.types";
 import { getPlanPricing } from "./plans.config";
-import { UserRole } from "../auth/dto/signup.dto";
+import { UserRole } from "../auth/auth.constants";
 
 @Injectable()
 export class BillingService {

@@ -10,10 +10,8 @@ import {
   NotificationPreferences,
   NotificationPreferencesSchema,
 } from "./notification-preferences.schema";
-import {
-  NotificationsService,
-  NOTIF_PREFS_REDIS,
-} from "./notifications.service";
+import { NotificationsService } from "./notifications.service";
+import { NOTIF_PREFS_REDIS } from "./notifications.constants";
 import { NotificationsController } from "./notifications.controller";
 import { GatewayModule } from "../gateway/gateway.module";
 

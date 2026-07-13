@@ -19,7 +19,7 @@ import { PlanGuard } from "../billing/guards/plan.guard";
 import { RequirePlan } from "../common/decorators/require-plan.decorator";
 import { RolesGuard } from "../common/guards/roles.guard";
 import { Roles } from "../common/decorators/roles.decorator";
-import { UserRole } from "../auth/dto/signup.dto";
+import { UserRole } from "../auth/auth.constants";
 import type { AuthReq } from "../auth/dto/auth-request.interface";
 
 @UseGuards(JwtAuthGuard, RolesGuard, PlanGuard)

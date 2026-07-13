@@ -14,7 +14,7 @@ import * as bcrypt from "bcryptjs";
 import { User, UserDocument } from "../users/schemas/user.schema";
 import { TeamInvite, TeamInviteDocument } from "../schemas/team-invite.schema";
 import { EmailService } from "../queue/email.service";
-import { UserRole } from "../auth/dto/signup.dto";
+import { UserRole } from "../auth/auth.constants";
 
 @Injectable()
 export class TeamService {

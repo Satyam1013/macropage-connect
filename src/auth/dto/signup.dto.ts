@@ -9,13 +9,7 @@ import {
   IsNotEmpty,
   Equals,
 } from "class-validator";
-
-export enum UserRole {
-  OWNER = "OWNER",
-  ADMIN = "ADMIN",
-  MANAGER = "MANAGER",
-  AGENT = "AGENT",
-}
+import { UserRole } from "../auth.constants";
 
 export class SignupDto {
   @IsString()

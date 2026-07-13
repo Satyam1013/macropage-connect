@@ -15,7 +15,7 @@ import {
 import { TeamService } from "./team.service";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import type { AuthReq } from "../auth/dto/auth-request.interface";
-import { UserRole } from "../auth/dto/signup.dto";
+import { UserRole } from "../auth/auth.constants";
 
 @Controller("team")
 export class TeamController {

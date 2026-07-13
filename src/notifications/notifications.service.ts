@@ -13,7 +13,7 @@ import {
 import { UpdatePreferencesDto } from "./dto/update-preferences.dto";
 import { EventsGateway } from "../gateway/events.gateway";
 
-export const NOTIF_PREFS_REDIS = "NOTIF_PREFS_REDIS";
+import { NOTIF_PREFS_REDIS } from "./notifications.constants";
 
 @Injectable()
 export class NotificationsService {

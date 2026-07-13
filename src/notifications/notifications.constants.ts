@@ -1,0 +1,1 @@
+export const NOTIF_PREFS_REDIS = "NOTIF_PREFS_REDIS";
