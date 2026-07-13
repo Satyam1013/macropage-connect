@@ -429,10 +429,7 @@ export class WhatsappService {
   }
 
   async sendTestMessage(tenantId: string, toPhone?: string) {
-    const [waba, user] = await Promise.all([
-      this.wabaModel.findOne({ tenantId }).exec(),
-      this.userModel.findById(tenantId).exec(),
-    ]);
+    const waba = await this.wabaModel.findOne({ tenantId }).exec();
 
     if (!waba || !waba.metaConnected) {
       throw new BadRequestException({
@@ -444,18 +441,16 @@ export class WhatsappService {
       });
     }
 
-    // Use payload phone if provided, else fall back to profile phone
-    const rawPhone = toPhone ?? user?.phone ?? "";
-    if (!rawPhone) {
+    if (!toPhone) {
       throw new BadRequestException({
         success: false,
         error: {
           code: "NO_PHONE",
-          message:
-            "Provide a toPhone in the request body or save a phone number in your profile.",
+          message: "toPhone is required in the request body.",
         },
       });
     }
+    const rawPhone = toPhone;
 
     const token = this.encryption.decrypt(waba.accessToken);
     // Normalise to E.164 without '+': ensure country code is present
