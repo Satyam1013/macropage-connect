@@ -200,10 +200,12 @@ export class BillingService {
       .exec();
 
     if (!exists) {
+      /* eslint-disable @typescript-eslint/no-unsafe-argument */
       const pricing = getPlanPricing(
         sub.plan as PlanKey,
         (sub.billingCycle ?? "monthly") as BillingCycle,
       );
+      /* eslint-enable @typescript-eslint/no-unsafe-argument */
       await this.paymentModel.create({
         tenantId,
         razorpayPaymentId: data.razorpay_payment_id,

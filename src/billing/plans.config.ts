@@ -96,10 +96,20 @@ export const PLANS = {
 
 import type { PlanKey, BillingCycle } from "./billing.types";
 
+export interface PricingConfig {
+  amount: number;
+  razorpayPlanId: string;
+  interval: number;
+  period: string;
+}
+
 export function getPlanConfig(plan: PlanKey) {
   return PLANS[plan];
 }
 
-export function getPlanPricing(plan: PlanKey, billingCycle: BillingCycle) {
-  return PLANS[plan]?.pricing[billingCycle];
+export function getPlanPricing(
+  plan: PlanKey,
+  billingCycle: BillingCycle,
+): PricingConfig | undefined {
+  return PLANS[plan]?.pricing[billingCycle] as PricingConfig | undefined;
 }
