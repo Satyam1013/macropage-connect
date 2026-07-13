@@ -428,7 +428,7 @@ export class WhatsappService {
     };
   }
 
-  async sendTestMessage(tenantId: string) {
+  async sendTestMessage(tenantId: string, toPhone?: string) {
     const [waba, user] = await Promise.all([
       this.wabaModel.findOne({ tenantId }).exec(),
       this.userModel.findById(tenantId).exec(),
@@ -443,20 +443,23 @@ export class WhatsappService {
         },
       });
     }
-    if (!user?.phone) {
+
+    // Use payload phone if provided, else fall back to profile phone
+    const rawPhone = toPhone ?? user?.phone ?? "";
+    if (!rawPhone) {
       throw new BadRequestException({
         success: false,
         error: {
-          code: "NO_OWNER_PHONE",
+          code: "NO_PHONE",
           message:
-            "Owner has no phone number saved. Update your profile with a phone number first.",
+            "Provide a toPhone in the request body or save a phone number in your profile.",
         },
       });
     }
 
     const token = this.encryption.decrypt(waba.accessToken);
     // Normalise to E.164 without '+': ensure country code is present
-    const digits = user.phone.replace(/\D/g, "");
+    const digits = rawPhone.replace(/\D/g, "");
     const toNumber = digits.startsWith("91") ? digits : `91${digits}`;
 
     let messageId: string | undefined;
@@ -531,9 +534,9 @@ export class WhatsappService {
     return {
       success: true,
       data: {
-        message: `Test message sent to ${user.phone}`,
+        message: `Test message sent to +${toNumber}`,
         messageId,
-        sentTo: user.phone,
+        sentTo: `+${toNumber}`,
         nextStep: 5,
       },
     };

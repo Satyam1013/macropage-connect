@@ -61,9 +61,9 @@ export class WhatsappController {
 
   @Post("setup/send-test")
   @HttpCode(HttpStatus.OK)
-  sendTestMessage(@Request() req: AuthReq) {
+  sendTestMessage(@Request() req: AuthReq, @Body("toPhone") toPhone?: string) {
     const tenantId = req.user.tenantId ?? req.user.id;
-    return this.whatsappService.sendTestMessage(tenantId);
+    return this.whatsappService.sendTestMessage(tenantId, toPhone);
   }
 
   @Post("setup/complete")
