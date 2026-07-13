@@ -1,5 +1,5 @@
 import { SetMetadata } from "@nestjs/common";
-import type { PlanFeature } from "../../billing/billing.constants";
+import type { PlanFeature } from "../../billing/billing.types";
 
 export const PLAN_FEATURE_KEY = "planFeature";
 export const RequirePlan = (feature: PlanFeature) =>

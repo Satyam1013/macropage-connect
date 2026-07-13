@@ -16,7 +16,8 @@ import { Payment, PaymentDocument } from "../schemas/payment.schema";
 import { User, UserDocument } from "../users/schemas/user.schema";
 import { NotificationsService } from "../notifications/notifications.service";
 import { RazorpayService } from "./razorpay.service";
-import { BillingCycle, PlanKey, getPlanPricing } from "./plans.config";
+import type { BillingCycle, PlanKey } from "./billing.types";
+import { getPlanPricing } from "./plans.config";
 import { UserRole } from "../auth/dto/signup.dto";
 
 @Injectable()

@@ -1,5 +1,5 @@
 import { IsIn } from "class-validator";
-import type { BillingCycle, PlanKey } from "../plans.config";
+import type { BillingCycle, PlanKey } from "../billing.types";
 
 export class CreateSubscriptionDto {
   @IsIn(["STARTER", "GROWTH", "BUSINESS"])

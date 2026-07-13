@@ -5,11 +5,8 @@ import {
   ForbiddenException,
 } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
-import {
-  FEATURE_PLANS,
-  FEATURE_UPGRADE_MESSAGE,
-  type PlanFeature,
-} from "../billing.constants";
+import { FEATURE_PLANS, FEATURE_UPGRADE_MESSAGE } from "../billing.constants";
+import type { PlanFeature } from "../billing.types";
 import { PLAN_FEATURE_KEY } from "../../common/decorators/require-plan.decorator";
 import { BillingService } from "../billing.service";
 import type { Plan } from "../billing.types";

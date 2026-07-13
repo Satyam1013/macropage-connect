@@ -14,21 +14,16 @@ import { ConfigService } from "@nestjs/config";
 import { InjectModel } from "@nestjs/mongoose";
 import { Model } from "mongoose";
 import { Server, Socket as BaseSocket, DefaultEventsMap } from "socket.io";
+import { SocketService } from "./socket.service";
+import { SocketData } from "./gateway.types";
 
-interface SocketData {
-  userId: string;
-  tenantId: string;
-  role: string;
-  name: string;
-}
-
-type Socket = BaseSocket<
+// Local alias needed: cross-module type aliases break emitDecoratorMetadata in decorated params
+type AppSocket = BaseSocket<
   DefaultEventsMap,
   DefaultEventsMap,
   DefaultEventsMap,
   SocketData
 >;
-import { SocketService } from "./socket.service";
 import { User, UserDocument } from "../users/schemas/user.schema";
 
 const allowedOrigins = (
@@ -85,7 +80,7 @@ export class EventsGateway
 
   // ── CONNECTION ────────────────────────────────────────────────────────────
 
-  async handleConnection(client: Socket): Promise<void> {
+  async handleConnection(client: AppSocket): Promise<void> {
     try {
       const token =
         (client.handshake.auth as { token?: string }).token ??
@@ -180,7 +175,7 @@ export class EventsGateway
 
   // ── DISCONNECTION ─────────────────────────────────────────────────────────
 
-  async handleDisconnect(client: Socket): Promise<void> {
+  async handleDisconnect(client: AppSocket): Promise<void> {
     const meta = this.socketMeta.get(client.id);
     if (!meta) return;
 
@@ -215,7 +210,7 @@ export class EventsGateway
 
   @SubscribeMessage("join:conversation")
   async handleJoinConversation(
-    @ConnectedSocket() client: Socket,
+    @ConnectedSocket() client: AppSocket,
     @MessageBody() payload: { conversationId: string } | string,
   ) {
     const convId =
@@ -227,7 +222,7 @@ export class EventsGateway
 
   @SubscribeMessage("leave:conversation")
   async handleLeaveConversation(
-    @ConnectedSocket() client: Socket,
+    @ConnectedSocket() client: AppSocket,
     @MessageBody() payload: { conversationId: string } | string,
   ) {
     const convId =
@@ -241,7 +236,7 @@ export class EventsGateway
 
   @SubscribeMessage("typing:start")
   handleTypingStart(
-    @ConnectedSocket() client: Socket,
+    @ConnectedSocket() client: AppSocket,
     @MessageBody() body: { conversationId: string },
   ) {
     client.to(`conv:${body.conversationId}`).emit("agent:typing", {
@@ -253,7 +248,7 @@ export class EventsGateway
 
   @SubscribeMessage("typing:stop")
   handleTypingStop(
-    @ConnectedSocket() client: Socket,
+    @ConnectedSocket() client: AppSocket,
     @MessageBody() body: { conversationId: string },
   ) {
     client.to(`conv:${body.conversationId}`).emit("agent:typing:stop", {
@@ -265,7 +260,7 @@ export class EventsGateway
   // ── PRESENCE ──────────────────────────────────────────────────────────────
 
   @SubscribeMessage("presence:away")
-  async handlePresenceAway(@ConnectedSocket() client: Socket) {
+  async handlePresenceAway(@ConnectedSocket() client: AppSocket) {
     const { userId, tenantId, name } = client.data as {
       userId: string;
       tenantId: string;
@@ -283,7 +278,7 @@ export class EventsGateway
   }
 
   @SubscribeMessage("presence:active")
-  async handlePresenceActive(@ConnectedSocket() client: Socket) {
+  async handlePresenceActive(@ConnectedSocket() client: AppSocket) {
     const { userId, tenantId, name } = client.data as {
       userId: string;
       tenantId: string;
@@ -306,7 +301,7 @@ export class EventsGateway
   // ── ONLINE AGENTS ─────────────────────────────────────────────────────────
 
   @SubscribeMessage("get:online-agents")
-  async handleGetOnlineAgents(@ConnectedSocket() client: Socket) {
+  async handleGetOnlineAgents(@ConnectedSocket() client: AppSocket) {
     const { tenantId } = client.data as { tenantId: string };
     const agents = await this.userModel
       .find({ tenantId, onlineStatus: { $in: ["online", "away"] } })
@@ -319,7 +314,7 @@ export class EventsGateway
   // ── PING KEEPALIVE ────────────────────────────────────────────────────────
 
   @SubscribeMessage("ping")
-  handlePing(@ConnectedSocket() client: Socket) {
+  handlePing(@ConnectedSocket() client: AppSocket) {
     void this.userModel
       .findByIdAndUpdate(client.data.userId, {
         lastActiveAt: new Date(),

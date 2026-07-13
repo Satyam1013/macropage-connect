@@ -94,8 +94,7 @@ export const PLANS = {
   },
 } as const;
 
-export type PlanKey = keyof typeof PLANS;
-export type BillingCycle = "monthly" | "quarterly" | "yearly";
+import type { PlanKey, BillingCycle } from "./billing.types";
 
 export function getPlanConfig(plan: PlanKey) {
   return PLANS[plan];

@@ -37,7 +37,7 @@ export const AUTOMATION_PLAN_LIMITS = {
   },
 } as const;
 
-export type PlanKey = keyof typeof AUTOMATION_PLAN_LIMITS;
+import type { AutomationPlanKey } from "./automation.types";
 
 export function getPlanLimits(tenant: {
   plan?: string;
@@ -55,6 +55,7 @@ export function getPlanLimits(tenant: {
   }
 
   return (
-    AUTOMATION_PLAN_LIMITS[plan as PlanKey] ?? AUTOMATION_PLAN_LIMITS.STARTER
+    AUTOMATION_PLAN_LIMITS[plan as AutomationPlanKey] ??
+    AUTOMATION_PLAN_LIMITS.STARTER
   );
 }

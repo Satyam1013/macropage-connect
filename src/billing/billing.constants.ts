@@ -1,12 +1,4 @@
-import type { Plan } from "./billing.types";
-
-export type PlanFeature =
-  | "automation"
-  | "flowBuilder"
-  | "aiChatbot"
-  | "apiAccess"
-  | "advancedAnalytics"
-  | "teamManagement";
+import type { Plan, PlanFeature } from "./billing.types";
 
 // Which plans can access each feature
 export const FEATURE_PLANS: Record<PlanFeature, Plan[]> = {
