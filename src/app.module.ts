@@ -1,8 +1,6 @@
 import { Module } from "@nestjs/common";
 import { ConfigModule, ConfigService } from "@nestjs/config";
 import { MongooseModule } from "@nestjs/mongoose";
-import { AppController } from "./app.controller";
-import { AppService } from "./app.service";
 
 // Feature modules
 import { AuthModule } from "./auth/auth.module";
@@ -64,7 +62,5 @@ import { GatewayModule } from "./gateway/gateway.module";
     OnboardingModule,
     QuickRepliesModule,
   ],
-  controllers: [AppController],
-  providers: [AppService],
 })
 export class AppModule {}
