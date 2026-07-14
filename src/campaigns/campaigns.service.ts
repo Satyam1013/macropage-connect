@@ -5,7 +5,7 @@ import {
   BadRequestException,
 } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
-import { Model } from "mongoose";
+import { Model, Types } from "mongoose";
 import { Campaign, CampaignDocument } from "../schemas/campaign.schema";
 import {
   CampaignRecipient,
@@ -37,9 +37,17 @@ export class CampaignsService {
   }
 
   async findOne(tenantId: string, id: string): Promise<CampaignDocument> {
+    if (!Types.ObjectId.isValid(id)) throw new NotFoundException("Campaign not found");
     const c = await this.campaignModel.findOne({ _id: id, tenantId }).exec();
     if (!c) throw new NotFoundException("Campaign not found");
     return c;
+  }
+
+  async getTemplates(tenantId: string) {
+    return this.templateModel
+      .find({ tenantId, status: { $in: ["APPROVED", "PENDING"] } })
+      .sort({ createdAt: -1 })
+      .exec();
   }
 
   async create(

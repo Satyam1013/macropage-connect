@@ -26,6 +26,12 @@ export class CampaignsController {
     return this.campaignsService.findAll(tenantId, status);
   }
 
+  @Get("templates")
+  getTemplates(@Request() req: AuthReq) {
+    const tenantId = req.user.tenantId ?? req.user.id;
+    return this.campaignsService.getTemplates(tenantId);
+  }
+
   @Get(":id")
   findOne(@Request() req: AuthReq, @Param("id") id: string) {
     const tenantId = req.user.tenantId ?? req.user.id;
