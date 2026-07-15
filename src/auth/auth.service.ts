@@ -7,7 +7,6 @@ import {
 } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { ConfigService } from "@nestjs/config";
-import { OAuth2Client } from "google-auth-library";
 import { InjectModel } from "@nestjs/mongoose";
 import { Model } from "mongoose";
 import * as bcrypt from "bcryptjs";
@@ -121,31 +120,45 @@ export class AuthService {
       });
     }
 
-    const client = new OAuth2Client(clientId);
-
+    // Verify via Google's tokeninfo endpoint — no JWKS fetch needed
     let payload: {
       sub: string;
+      aud: string;
       email?: string;
       name?: string;
       picture?: string;
-      email_verified?: boolean;
+      email_verified?: string;
+      exp?: string;
     };
     try {
-      const ticket = await client.verifyIdToken({
-        idToken: credential,
-        audience: clientId,
-      });
-      const p = ticket.getPayload();
-      if (!p) throw new Error("Empty payload");
-      payload = p;
+      const res = await fetch(
+        `https://oauth2.googleapis.com/tokeninfo?id_token=${credential}`,
+      );
+      if (!res.ok) {
+        const body = await res.text();
+        this.logger.error(`Google tokeninfo rejected: ${res.status} ${body}`);
+        throw new Error(`Google rejected token: ${res.status}`);
+      }
+      payload = (await res.json()) as typeof payload;
     } catch (err) {
       this.logger.error(
-        "Google verifyIdToken failed:",
+        "Google tokeninfo failed:",
         err instanceof Error ? err.message : String(err),
       );
       throw new UnauthorizedException({
         success: false,
         message: "Invalid or expired Google credential",
+        code: "INVALID_GOOGLE_CREDENTIAL",
+      });
+    }
+
+    if (payload.aud !== clientId) {
+      this.logger.error(
+        `Google token audience mismatch: got ${payload.aud}, expected ${clientId}`,
+      );
+      throw new UnauthorizedException({
+        success: false,
+        message: "Invalid Google credential",
         code: "INVALID_GOOGLE_CREDENTIAL",
       });
     }
@@ -160,7 +173,7 @@ export class AuthService {
 
     const { user, isNew } = await this.users.findOrCreateByGoogle({
       email: payload.email,
-      name: payload.name ?? payload.email.split("@")[0],
+      name: payload.name ?? payload.email!.split("@")[0],
       avatarUrl: payload.picture,
     });
 
