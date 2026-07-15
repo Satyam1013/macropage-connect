@@ -8,6 +8,8 @@ export interface UserPayload {
   emailVerified?: boolean;
   whatsappSetupDone?: boolean;
   plan?: "FREE" | "PRO";
+  billingPlan?: string;
+  billingCycle?: string;
   trialEndsAt?: string;
   subscriptionType?: "free" | "pro" | "business";
   paidUser?: boolean;

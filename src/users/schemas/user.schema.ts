@@ -91,6 +91,12 @@ export class User {
   @Prop({ type: String, enum: ["FREE", "PRO"], default: "FREE" })
   plan!: "FREE" | "PRO";
 
+  @Prop({ type: String, enum: ["TRIAL", "STARTER", "GROWTH", "BUSINESS", "ENTERPRISE"] })
+  billingPlan?: string;
+
+  @Prop({ type: String, enum: ["monthly", "quarterly", "yearly"] })
+  billingCycle?: string;
+
   @Prop()
   trialEndsAt?: string;
 

@@ -163,6 +163,8 @@ export class UsersService {
       emailVerified: user.emailVerified,
       whatsappSetupDone: user.whatsappSetupDone,
       plan: user.plan,
+      billingPlan: user.billingPlan,
+      billingCycle: user.billingCycle,
       trialEndsAt: user.trialEndsAt,
       subscriptionType: user.subscriptionType,
       paidUser: user.paidUser,

@@ -130,6 +130,11 @@ export class BillingService {
       { upsert: true, new: true },
     );
 
+    await this.userModel.updateMany(
+      { tenantId },
+      { $set: { billingPlan: plan, billingCycle } },
+    );
+
     this.logger.log(
       `[Billing] Created subscription ${rzpSubId} for tenant ${tenantId}`,
     );
@@ -465,6 +470,7 @@ export class BillingService {
       {
         $set: {
           plan: isPaid ? "PRO" : "FREE",
+          billingPlan: subPlan,
           subscriptionType,
           paidUser: isPaid,
         },
