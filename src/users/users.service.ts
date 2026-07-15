@@ -2,6 +2,8 @@ import { Injectable, ConflictException } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
 import { Model } from "mongoose";
 import * as bcrypt from "bcryptjs";
+import * as crypto from "crypto";
+import { UserRole } from "../auth/auth.constants";
 import { SignupDto } from "../auth/dto/signup.dto";
 import { UserPayload } from "../auth/dto/auth-response.interface";
 import { User, UserDocument } from "./schemas/user.schema";
@@ -117,6 +119,37 @@ export class UsersService {
     return this.userModel
       .findByIdAndUpdate(userId, data, { returnDocument: "after" })
       .exec();
+  }
+
+  async findOrCreateByGoogle(profile: {
+    email: string;
+    name: string;
+    avatarUrl?: string;
+  }): Promise<{ user: UserDocument; isNew: boolean }> {
+    const existing = await this.findByEmail(profile.email);
+    if (existing) {
+      if (!existing.emailVerified) {
+        await this.markEmailVerified(existing.id);
+        existing.emailVerified = true;
+      }
+      return { user: existing, isNew: false };
+    }
+
+    const randomPassword = crypto.randomBytes(32).toString("hex");
+    const hashed = await bcrypt.hash(randomPassword, 12);
+
+    const user = await this.userModel.create({
+      name: profile.name,
+      email: profile.email,
+      password: hashed,
+      avatarUrl: profile.avatarUrl,
+      role: UserRole.OWNER,
+      emailVerified: true,
+      trialEndsAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
+      marketingOptIn: false,
+    });
+
+    return { user, isNew: true };
   }
 
   toPublicProfile(user: UserDocument): UserPayload {

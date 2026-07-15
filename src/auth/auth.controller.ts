@@ -36,6 +36,12 @@ export class AuthController {
     return this.authService.login(dto);
   }
 
+  @Post("google")
+  @HttpCode(HttpStatus.OK)
+  googleLogin(@Body("credential") credential: string) {
+    return this.authService.googleLogin(credential);
+  }
+
   @Post("oauth")
   @HttpCode(HttpStatus.OK)
   oauthLogin(@Body() dto: OAuthDto) {

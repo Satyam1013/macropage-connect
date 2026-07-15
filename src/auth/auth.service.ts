@@ -6,6 +6,7 @@ import {
 } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { ConfigService } from "@nestjs/config";
+import { OAuth2Client } from "google-auth-library";
 import { InjectModel } from "@nestjs/mongoose";
 import { Model } from "mongoose";
 import * as bcrypt from "bcryptjs";
@@ -96,7 +97,58 @@ export class AuthService {
     return this.buildAuthResponse(user, "Authenticated");
   }
 
-  // ─── OAuth ────────────────────────────────────────────────────────────────
+  // ─── Google OAuth ─────────────────────────────────────────────────────────
+
+  async googleLogin(credential: string): Promise<AuthResponse> {
+    const clientId = this.config.get<string>("GOOGLE_CLIENT_ID");
+    const client = new OAuth2Client(clientId);
+
+    let payload: {
+      sub: string;
+      email?: string;
+      name?: string;
+      picture?: string;
+      email_verified?: boolean;
+    };
+    try {
+      const ticket = await client.verifyIdToken({
+        idToken: credential,
+        audience: clientId,
+      });
+      const p = ticket.getPayload();
+      if (!p) throw new Error("Empty payload");
+      payload = p;
+    } catch {
+      throw new UnauthorizedException({
+        success: false,
+        message: "Invalid Google credential",
+        code: "INVALID_GOOGLE_CREDENTIAL",
+      });
+    }
+
+    if (!payload.email) {
+      throw new BadRequestException({
+        success: false,
+        message: "Google account has no email",
+        code: "GOOGLE_NO_EMAIL",
+      });
+    }
+
+    const { user, isNew } = await this.users.findOrCreateByGoogle({
+      email: payload.email,
+      name: payload.name ?? payload.email.split("@")[0],
+      avatarUrl: payload.picture,
+    });
+
+    await this.users.updateLastLogin(user.id);
+
+    return this.buildAuthResponse(
+      user,
+      isNew ? "Account created via Google" : "Authenticated via Google",
+    );
+  }
+
+  // ─── OAuth (legacy stub) ──────────────────────────────────────────────────
 
   oauthLogin(dto: OAuthDto): Promise<AuthResponse> {
     throw new BadRequestException({
