@@ -111,5 +111,5 @@ export function getPlanPricing(
   plan: PlanKey,
   billingCycle: BillingCycle,
 ): PricingConfig | undefined {
-  return PLANS[plan]?.pricing[billingCycle] as PricingConfig | undefined;
+  return PLANS[plan]?.pricing[billingCycle];
 }
