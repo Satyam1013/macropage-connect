@@ -3,6 +3,7 @@ import {
   UnauthorizedException,
   BadRequestException,
   ConflictException,
+  Logger,
 } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { ConfigService } from "@nestjs/config";
@@ -31,6 +32,8 @@ import { EmailService } from "../queue/email.service";
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private readonly users: UsersService,
     private readonly jwt: JwtService,
@@ -100,7 +103,24 @@ export class AuthService {
   // ─── Google OAuth ─────────────────────────────────────────────────────────
 
   async googleLogin(credential: string): Promise<AuthResponse> {
+    if (!credential) {
+      throw new BadRequestException({
+        success: false,
+        message: "credential is required",
+        code: "MISSING_CREDENTIAL",
+      });
+    }
+
     const clientId = this.config.get<string>("GOOGLE_CLIENT_ID");
+    if (!clientId) {
+      this.logger.error("GOOGLE_CLIENT_ID env var is not set");
+      throw new BadRequestException({
+        success: false,
+        message: "Google login is not configured on this server",
+        code: "GOOGLE_NOT_CONFIGURED",
+      });
+    }
+
     const client = new OAuth2Client(clientId);
 
     let payload: {
@@ -118,10 +138,14 @@ export class AuthService {
       const p = ticket.getPayload();
       if (!p) throw new Error("Empty payload");
       payload = p;
-    } catch {
+    } catch (err) {
+      this.logger.error(
+        "Google verifyIdToken failed:",
+        err instanceof Error ? err.message : String(err),
+      );
       throw new UnauthorizedException({
         success: false,
-        message: "Invalid Google credential",
+        message: "Invalid or expired Google credential",
         code: "INVALID_GOOGLE_CREDENTIAL",
       });
     }
