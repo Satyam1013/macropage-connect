@@ -133,7 +133,7 @@ export class AutomationService {
   async publishFlow(tenantId: string, id: string): Promise<FlowDocument> {
     const flow = await this.findOneFlow(tenantId, id);
     const hasStart = flow.nodes.some(
-      (n) => (n as { type?: string }).type === "START",
+      (n) => (n as { type?: string }).type?.toUpperCase() === "START",
     );
     if (!hasStart) throw new NotFoundException("Flow must have a START node");
     return this.flowModel
