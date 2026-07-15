@@ -193,6 +193,8 @@ export class BillingService {
       },
     );
 
+    await this.syncUserPlan(tenantId, sub.plan);
+
     // Save payment record (idempotent)
     const exists = await this.paymentModel
       .findOne({ razorpayPaymentId: data.razorpay_payment_id })
@@ -331,6 +333,13 @@ export class BillingService {
             },
           },
         );
+        const activatedSub = await this.subModel
+          .findOne({ razorpaySubId: sub.id as string })
+          .lean()
+          .exec();
+        if (activatedSub) {
+          await this.syncUserPlan(activatedSub.tenantId, activatedSub.plan);
+        }
         break;
       }
 
@@ -374,6 +383,8 @@ export class BillingService {
           .lean()
           .exec();
         if (dbSub) {
+          await this.syncUserPlan(dbSub.tenantId, dbSub.plan);
+
           const owner = await this.userModel
             .findOne({ tenantId: dbSub.tenantId, role: UserRole.OWNER })
             .select("_id")
@@ -434,6 +445,34 @@ export class BillingService {
       default:
         this.logger.log(`[Webhook] Unhandled event: ${event}`);
     }
+  }
+
+  // ── Sync plan fields back to User documents ──────────────────────────────
+
+  private async syncUserPlan(tenantId: string, subPlan: string): Promise<void> {
+    const isPaid = ["STARTER", "GROWTH", "BUSINESS", "ENTERPRISE"].includes(
+      subPlan,
+    );
+    const subscriptionType =
+      subPlan === "BUSINESS" || subPlan === "ENTERPRISE"
+        ? "business"
+        : isPaid
+          ? "pro"
+          : "free";
+
+    await this.userModel.updateMany(
+      { tenantId },
+      {
+        $set: {
+          plan: isPaid ? "PRO" : "FREE",
+          subscriptionType,
+          paidUser: isPaid,
+        },
+      },
+    );
+    this.logger.log(
+      `[Billing] Synced users for tenant ${tenantId} → plan=${subPlan}`,
+    );
   }
 
   // ── Legacy helpers (used by other modules) ────────────────────────────────
