@@ -25,6 +25,20 @@ export class MetaService {
 
     const token = this.encryption.decrypt(waba.accessToken);
     const { phoneNumberId, wabaId } = waba;
+
+    if (!phoneNumberId) {
+      this.logger.error(
+        `[Meta] phoneNumberId is missing for tenant ${tenantId} — wabaId=${wabaId ?? "none"}`,
+      );
+      throw new BadRequestException(
+        "WhatsApp phone number ID not configured. Please reconnect your WhatsApp account.",
+      );
+    }
+
+    this.logger.debug(
+      `[Meta] getClient tenant=${tenantId} phoneNumberId=${phoneNumberId} wabaId=${wabaId}`,
+    );
+
     const headers = { Authorization: `Bearer ${token}` };
     const http: AxiosInstance = axios.create({ baseURL: BASE, headers });
 

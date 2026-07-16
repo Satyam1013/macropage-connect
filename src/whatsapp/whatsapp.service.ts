@@ -238,7 +238,18 @@ export class WhatsappService {
       .catch(() => null);
 
     const encrypted = this.encryption.encrypt(longToken);
-    const phoneNumberId = dto.phoneNumberId ?? phone.id;
+    const phoneNumberId = (dto.phoneNumberId ?? phone.id)?.trim();
+
+    if (!phoneNumberId) {
+      throw new BadRequestException({
+        success: false,
+        error: {
+          code: "NO_PHONE_NUMBER_ID",
+          message:
+            "Could not determine Phone Number ID from Meta. Please provide it manually.",
+        },
+      });
+    }
 
     await this.wabaModel
       .findOneAndUpdate(
