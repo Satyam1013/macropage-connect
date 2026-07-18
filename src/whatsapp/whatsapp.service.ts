@@ -560,8 +560,7 @@ export class WhatsappService {
     if (
       !user?.businessInfoSaved ||
       !waba?.metaConnected ||
-      !waba?.phoneVerified ||
-      !waba?.testMessageSent
+      !waba?.phoneVerified
     ) {
       throw new BadRequestException({
         success: false,
@@ -572,9 +571,11 @@ export class WhatsappService {
       });
     }
 
-    await this.userModel.findByIdAndUpdate(tenantId, {
-      whatsappSetupDone: true,
-    });
+    await Promise.all([
+      this.userModel.findByIdAndUpdate(tenantId, { whatsappSetupDone: true }),
+      // Mark testMessageSent so status shows step 5 even if skipped
+      this.wabaModel.updateOne({ tenantId }, { testMessageSent: true }),
+    ]);
 
     return {
       success: true,
