@@ -552,29 +552,24 @@ export class WhatsappService {
   }
 
   async completeSetup(tenantId: string) {
-    const [user, waba] = await Promise.all([
-      this.userModel.findById(tenantId).exec(),
-      this.wabaModel.findOne({ tenantId }).exec(),
-    ]);
+    const waba = await this.wabaModel.findOne({ tenantId }).exec();
 
-    if (
-      !user?.businessInfoSaved ||
-      !waba?.metaConnected ||
-      !waba?.phoneVerified
-    ) {
+    if (!waba?.metaConnected) {
       throw new BadRequestException({
         success: false,
         error: {
           code: "SETUP_INCOMPLETE",
-          message: "Not all steps completed yet",
+          message: "WhatsApp account not connected yet",
         },
       });
     }
 
     await Promise.all([
       this.userModel.findByIdAndUpdate(tenantId, { whatsappSetupDone: true }),
-      // Mark testMessageSent so status shows step 5 even if skipped
-      this.wabaModel.updateOne({ tenantId }, { testMessageSent: true }),
+      this.wabaModel.updateOne(
+        { tenantId },
+        { phoneVerified: true, testMessageSent: true },
+      ),
     ]);
 
     return {
