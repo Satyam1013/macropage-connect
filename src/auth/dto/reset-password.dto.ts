@@ -1,9 +1,14 @@
 import { IsString, MinLength, Matches } from "class-validator";
+import { Transform } from "class-transformer";
 
 export class ResetPasswordDto {
   @IsString()
   token!: string;
 
+  // Accept both "newPassword" (preferred) and "password" (legacy frontend)
+  @Transform(({ obj }: { obj: Record<string, unknown> }) =>
+    obj["newPassword"] ?? obj["password"],
+  )
   @IsString()
   @MinLength(8)
   @Matches(
@@ -15,6 +20,10 @@ export class ResetPasswordDto {
   )
   newPassword!: string;
 
+  // Accept both "confirmPassword" (preferred) and "confirm" (legacy frontend)
+  @Transform(({ obj }: { obj: Record<string, unknown> }) =>
+    obj["confirmPassword"] ?? obj["confirm"],
+  )
   @IsString()
   confirmPassword!: string;
 }

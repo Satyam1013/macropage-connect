@@ -9,6 +9,7 @@ import {
   Get,
   Param,
   Delete,
+  NotFoundException,
 } from "@nestjs/common";
 
 import { AuthService } from "./auth.service";
@@ -95,7 +96,9 @@ export class AuthController {
 
   @UseGuards(JwtAuthGuard)
   @Get("me")
-  me(@Request() req: { user: UserPayload }) {
-    return { success: true, data: { user: req.user } };
+  async me(@Request() req: { user: UserPayload }) {
+    const user = await this.authService.getMe(req.user.id);
+    if (!user) throw new NotFoundException("User not found");
+    return { success: true, data: { user } };
   }
 }

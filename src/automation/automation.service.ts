@@ -145,6 +145,18 @@ export class AutomationService {
       .exec() as Promise<FlowDocument>;
   }
 
+  async toggleFlow(tenantId: string, id: string): Promise<FlowDocument> {
+    const flow = await this.findOneFlow(tenantId, id);
+    const next = flow.status === "active" ? "inactive" : "active";
+    return this.flowModel
+      .findOneAndUpdate(
+        { _id: id, tenantId },
+        { status: next },
+        { returnDocument: "after" },
+      )
+      .exec() as Promise<FlowDocument>;
+  }
+
   async deleteFlow(tenantId: string, id: string): Promise<void> {
     await this.flowModel.deleteOne({ _id: id, tenantId });
   }

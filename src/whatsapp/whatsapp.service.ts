@@ -433,6 +433,20 @@ export class WhatsappService {
       });
     }
 
+    if (!waba.phoneNumberId) {
+      this.logger.error(
+        `[sendTest] phoneNumberId missing for tenant ${tenantId} — reconnect WhatsApp`,
+      );
+      throw new BadRequestException({
+        success: false,
+        error: {
+          code: "MISSING_PHONE_NUMBER_ID",
+          message:
+            "WhatsApp phone number ID not configured. Please disconnect and reconnect your WhatsApp account.",
+        },
+      });
+    }
+
     if (!toPhone) {
       throw new BadRequestException({
         success: false,

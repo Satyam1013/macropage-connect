@@ -175,6 +175,16 @@ export class AutomationController {
     );
   }
 
+  @Patch("flows/:id/toggle")
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.MANAGER)
+  @RequirePlan("flowBuilder")
+  toggleFlow(@Request() req: AuthReq, @Param("id") id: string) {
+    return this.automationService.toggleFlow(
+      req.user.tenantId ?? req.user.id,
+      id,
+    );
+  }
+
   @Delete("flows/:id")
   @HttpCode(HttpStatus.NO_CONTENT)
   @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.MANAGER)

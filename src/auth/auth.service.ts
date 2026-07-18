@@ -17,7 +17,7 @@ import { SignupDto } from "./dto/signup.dto";
 import { OAuthDto } from "./dto/oauth.dto";
 import { ForgotPasswordDto } from "./dto/forgot-password.dto";
 import { ResetPasswordDto } from "./dto/reset-password.dto";
-import { AuthResponse } from "./dto/auth-response.interface";
+import { AuthResponse, UserPayload } from "./dto/auth-response.interface";
 import {
   RefreshToken,
   RefreshTokenDocument,
@@ -152,9 +152,13 @@ export class AuthService {
       });
     }
 
-    if (payload.aud !== clientId) {
+    // aud can be a comma-separated list (web + mobile clients)
+    const audiences = String(payload.aud)
+      .split(",")
+      .map((a) => a.trim());
+    if (!audiences.includes(clientId)) {
       this.logger.error(
-        `Google token audience mismatch: got ${payload.aud}, expected ${clientId}`,
+        `Google token audience mismatch: got [${payload.aud}], expected ${clientId}`,
       );
       throw new UnauthorizedException({
         success: false,
@@ -183,6 +187,14 @@ export class AuthService {
       user,
       isNew ? "Account created via Google" : "Authenticated via Google",
     );
+  }
+
+  // ─── Get fresh profile ───────────────────────────────────────────────────
+
+  async getMe(userId: string): Promise<UserPayload | null> {
+    const user = await this.users.findById(userId);
+    if (!user) return null;
+    return this.users.toPublicProfile(user);
   }
 
   // ─── OAuth (legacy stub) ──────────────────────────────────────────────────

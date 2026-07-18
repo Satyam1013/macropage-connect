@@ -110,6 +110,14 @@ export class BillingController {
     return this.billingService.getInvoices(tenantId);
   }
 
+  @Get("payment-method")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.OWNER)
+  getPaymentMethod(@Request() req: AuthReq) {
+    const tenantId = req.user.tenantId ?? req.user.id;
+    return this.billingService.getPaymentMethod(tenantId);
+  }
+
   // ── Webhook (PUBLIC — Razorpay calls this directly) ────────────────────────
 
   @Post("webhook")

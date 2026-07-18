@@ -481,6 +481,45 @@ export class BillingService {
     );
   }
 
+  // ── Payment method ────────────────────────────────────────────────────────
+
+  async getPaymentMethod(tenantId: string) {
+    const sub = await this.subModel
+      .findOne({ tenantId })
+      .select("razorpaySubId razorpayCustomerId plan billingCycle status")
+      .lean()
+      .exec();
+
+    if (!sub?.razorpaySubId) {
+      return { success: true, data: { paymentMethod: null } };
+    }
+
+    let rzpSub: Record<string, unknown> = {};
+    try {
+      rzpSub = await this.razorpayService.fetchSubscription(sub.razorpaySubId);
+    } catch {
+      return { success: true, data: { paymentMethod: null } };
+    }
+
+    const paymentMethod = rzpSub.payment_method as string | undefined;
+    const bankAccount = rzpSub.bank_account as
+      | Record<string, unknown>
+      | undefined;
+
+    return {
+      success: true,
+      data: {
+        paymentMethod: paymentMethod ?? null,
+        bankAccount: bankAccount ?? null,
+        subscriptionId: sub.razorpaySubId,
+        customerId: sub.razorpayCustomerId ?? null,
+        plan: sub.plan,
+        billingCycle: sub.billingCycle ?? null,
+        status: sub.status,
+      },
+    };
+  }
+
   // ── Legacy helpers (used by other modules) ────────────────────────────────
 
   async updatePlan(
