@@ -3,6 +3,7 @@ import {
   NotFoundException,
   ForbiddenException,
   BadRequestException,
+  HttpException,
 } from "@nestjs/common";
 import axios from "axios";
 import { InjectModel } from "@nestjs/mongoose";
@@ -470,6 +471,9 @@ export class ConversationsService {
       metaMessageId = (resp.data as { messages?: Array<{ id: string }> })
         ?.messages?.[0]?.id;
     } catch (err) {
+      // handleMetaError already throws a well-formed HttpException — rethrow as-is
+      if (err instanceof HttpException) throw err;
+
       const metaError = axios.isAxiosError(err)
         ? (
             err.response?.data as {
