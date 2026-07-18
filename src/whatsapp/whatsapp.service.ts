@@ -9,6 +9,7 @@ import {
 } from "../schemas/waba-account.schema";
 import { User, UserDocument } from "../users/schemas/user.schema";
 import { Message, MessageDocument } from "../schemas/message.schema";
+import { Template, TemplateDocument } from "../schemas/template.schema";
 import { EncryptionService } from "../meta/encryption.service";
 import {
   BusinessInfoDto,
@@ -30,14 +31,18 @@ export class WhatsappService {
     private readonly userModel: Model<UserDocument>,
     @InjectModel(Message.name)
     private readonly messageModel: Model<MessageDocument>,
+    @InjectModel(Template.name)
+    private readonly templateModel: Model<TemplateDocument>,
     private readonly emailService: EmailService,
     private readonly encryption: EncryptionService,
   ) {}
 
   async getStatus(tenantId: string) {
-    const [user, waba] = await Promise.all([
+    const [user, waba, approvedTemplates, totalTemplates] = await Promise.all([
       this.userModel.findById(tenantId).exec(),
       this.wabaModel.findOne({ tenantId }).exec(),
+      this.templateModel.countDocuments({ tenantId, status: "APPROVED" }),
+      this.templateModel.countDocuments({ tenantId }),
     ]);
 
     const businessInfoSaved = user?.businessInfoSaved ?? false;
@@ -73,6 +78,9 @@ export class WhatsappService {
                 messagingTier: waba.messagingTier,
               }
             : null,
+        approvedTemplates,
+        totalTemplates,
+        readyToSend: approvedTemplates > 0,
       },
     };
   }
