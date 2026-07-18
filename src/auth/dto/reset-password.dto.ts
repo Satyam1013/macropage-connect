@@ -1,14 +1,10 @@
-import { IsString, MinLength, Matches } from "class-validator";
-import { Transform } from "class-transformer";
+import { IsString, MinLength, Matches, IsOptional } from "class-validator";
 
 export class ResetPasswordDto {
   @IsString()
   token!: string;
 
-  // Accept both "newPassword" (preferred) and "password" (legacy frontend)
-  @Transform(({ obj }: { obj: Record<string, unknown> }) =>
-    obj["newPassword"] ?? obj["password"],
-  )
+  // Primary field — frontend sends "password"
   @IsString()
   @MinLength(8)
   @Matches(
@@ -18,12 +14,10 @@ export class ResetPasswordDto {
         "Password must contain uppercase, lowercase, number and special character",
     },
   )
-  newPassword!: string;
+  password!: string;
 
-  // Accept both "confirmPassword" (preferred) and "confirm" (legacy frontend)
-  @Transform(({ obj }: { obj: Record<string, unknown> }) =>
-    obj["confirmPassword"] ?? obj["confirm"],
-  )
+  // Optional confirm — skip mismatch check if frontend doesn't send it
+  @IsOptional()
   @IsString()
-  confirmPassword!: string;
+  confirmPassword?: string;
 }

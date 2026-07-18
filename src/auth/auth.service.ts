@@ -270,7 +270,7 @@ export class AuthService {
   // ─── Reset Password ───────────────────────────────────────────────────────
 
   async resetPassword(dto: ResetPasswordDto): Promise<{ message: string }> {
-    if (dto.newPassword !== dto.confirmPassword) {
+    if (dto.confirmPassword && dto.password !== dto.confirmPassword) {
       throw new BadRequestException("Passwords do not match");
     }
     const tokenHash = crypto
@@ -283,7 +283,7 @@ export class AuthService {
       throw new BadRequestException("Token expired");
     if (record.usedAt) throw new BadRequestException("Token already used");
 
-    const hashed = await bcrypt.hash(dto.newPassword, 12);
+    const hashed = await bcrypt.hash(dto.password, 12);
     await this.users.updatePassword(record.userId, hashed);
     await this.resetTokenModel.updateOne(
       { _id: record._id },
