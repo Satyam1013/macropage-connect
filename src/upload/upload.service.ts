@@ -16,20 +16,23 @@ export class UploadService {
   private readonly bucket: string;
   private readonly endpoint: string;
 
+  private readonly region: string;
+  private readonly cdnBase: string;
+
   constructor(private readonly config: ConfigService) {
     this.bucket = this.config.get("DO_SPACES_BUCKET", "macropage-media");
-    this.endpoint = this.config.get(
-      "DO_SPACES_ENDPOINT",
-      "https://blr1.digitaloceanspaces.com",
-    );
+    this.region = this.config.get("DO_SPACES_REGION", "blr1");
+    this.endpoint = `https://${this.region}.digitaloceanspaces.com`;
+    this.cdnBase = `https://${this.bucket}.${this.region}.digitaloceanspaces.com`;
 
     this.s3 = new S3Client({
-      region: this.config.get("DO_SPACES_REGION", "blr1"),
+      region: this.region,
       endpoint: this.endpoint,
       credentials: {
         accessKeyId: this.config.get("DO_SPACES_KEY", ""),
         secretAccessKey: this.config.get("DO_SPACES_SECRET", ""),
       },
+      forcePathStyle: false,
     });
   }
 
@@ -55,7 +58,7 @@ export class UploadService {
       }),
     );
 
-    return { url: `${this.endpoint}/${this.bucket}/${key}` };
+    return { url: `${this.cdnBase}/${key}` };
   }
 
   async uploadDocument(
@@ -111,11 +114,12 @@ export class UploadService {
       }),
     );
 
-    return { url: `${this.endpoint}/${this.bucket}/${key}` };
+    return { url: `${this.cdnBase}/${key}` };
   }
 
   async deleteFile(tenantId: string, key: string): Promise<void> {
-    if (!key.startsWith(`${tenantId}/`)) {
+    // Keys are stored as media/{tenantId}/..., documents/{tenantId}/..., audio/{tenantId}/...
+    if (!key.includes(`/${tenantId}/`)) {
       throw new BadRequestException("Invalid file key");
     }
     await this.s3.send(
