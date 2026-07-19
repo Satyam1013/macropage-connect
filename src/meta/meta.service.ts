@@ -106,6 +106,17 @@ export class MetaService {
         });
       }
 
+      if (code === 133010) {
+        throw new BadRequestException({
+          success: false,
+          error: {
+            code: "NOT_ON_WHATSAPP",
+            message:
+              "This phone number is not registered on WhatsApp. Please update the contact's phone number.",
+          },
+        });
+      }
+
       throw new BadRequestException({
         success: false,
         error: { code: "META_SEND_FAIL", message },
