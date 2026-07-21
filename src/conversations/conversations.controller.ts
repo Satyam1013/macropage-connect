@@ -35,7 +35,12 @@ export class ConversationsController {
   @HttpCode(HttpStatus.CREATED)
   initiate(
     @Request() req: AuthReq,
-    @Body() body: { contactId: string; templateName?: string },
+    @Body()
+    body: {
+      contactId: string;
+      templateName?: string;
+      templateVars?: Record<string, string>;
+    },
   ) {
     const tenantId = req.user.tenantId ?? req.user.id;
     return this.conversationsService.initiateConversation(
@@ -43,6 +48,7 @@ export class ConversationsController {
       body.contactId,
       body.templateName ?? "hello_world",
       req.user.id,
+      body.templateVars,
     );
   }
 

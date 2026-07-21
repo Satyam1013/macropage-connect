@@ -466,6 +466,7 @@ export class ConversationsService {
     contactId: string,
     templateName: string,
     agentId: string,
+    templateVars?: Record<string, string>,
   ) {
     const contact = await this.contactModel
       .findOne({ _id: contactId, tenantId })
@@ -482,7 +483,21 @@ export class ConversationsService {
         messaging_product: "whatsapp",
         to: toNumber,
         type: "template",
-        template: { name: templateName, language: { code: "en_US" } },
+        template: {
+          name: templateName,
+          language: { code: "en_US" },
+          ...(templateVars &&
+            Object.keys(templateVars).length > 0 && {
+              components: [
+                {
+                  type: "body",
+                  parameters: Object.keys(templateVars)
+                    .sort((a, b) => Number(a) - Number(b))
+                    .map((k) => ({ type: "text", text: templateVars[k] })),
+                },
+              ],
+            }),
+        },
       });
       metaMessageId = (resp.data as { messages?: Array<{ id: string }> })
         ?.messages?.[0]?.id;
