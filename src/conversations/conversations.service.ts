@@ -258,6 +258,12 @@ export class ConversationsService {
         text: { body: dto.content },
       };
     } else if (dto.type === "TEMPLATE") {
+      const bodyParams =
+        dto.templateVars && Object.keys(dto.templateVars).length > 0
+          ? Object.keys(dto.templateVars)
+              .sort((a, b) => Number(a) - Number(b))
+              .map((k) => ({ type: "text", text: dto.templateVars![k] }))
+          : [];
       payload = {
         messaging_product: "whatsapp",
         to: contactPhone,
@@ -265,6 +271,9 @@ export class ConversationsService {
         template: {
           name: dto.templateName,
           language: { code: "en_US" },
+          ...(bodyParams.length > 0 && {
+            components: [{ type: "body", parameters: bodyParams }],
+          }),
         },
       };
     } else {
