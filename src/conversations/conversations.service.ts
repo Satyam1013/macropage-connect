@@ -268,11 +268,27 @@ export class ConversationsService {
         text: { body: dto.content },
       };
     } else if (dto.type === "TEMPLATE") {
+      let resolvedVars = dto.templateVars;
+      if (!resolvedVars || Object.keys(resolvedVars).length === 0) {
+        const tpl = await this.templateModel
+          .findOne({ tenantId, name: dto.templateName })
+          .lean()
+          .exec();
+        const sampleKeys = Object.keys(
+          (tpl?.sampleVariables as Record<string, string> | undefined) ?? {},
+        );
+        if (sampleKeys.length > 0) {
+          resolvedVars = {};
+          for (const k of sampleKeys) {
+            resolvedVars[k] = contact.name ?? contact.phone;
+          }
+        }
+      }
       const bodyParams =
-        dto.templateVars && Object.keys(dto.templateVars).length > 0
-          ? Object.keys(dto.templateVars)
+        resolvedVars && Object.keys(resolvedVars).length > 0
+          ? Object.keys(resolvedVars)
               .sort((a, b) => Number(a) - Number(b))
-              .map((k) => ({ type: "text", text: dto.templateVars![k] }))
+              .map((k) => ({ type: "text", text: resolvedVars![k] }))
           : [];
       payload = {
         messaging_product: "whatsapp",
