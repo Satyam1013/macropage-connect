@@ -7,6 +7,7 @@ import {
 import { Message, MessageSchema } from "../schemas/message.schema";
 import { Contact, ContactSchema } from "../schemas/contact.schema";
 import { User, UserSchema } from "../users/schemas/user.schema";
+import { Template, TemplateSchema } from "../schemas/template.schema";
 import { ConversationsService } from "./conversations.service";
 import { ConversationsController } from "./conversations.controller";
 import { MetaModule } from "../meta/meta.module";
@@ -21,6 +22,7 @@ import { CampaignsModule } from "../campaigns/campaigns.module";
       { name: Message.name, schema: MessageSchema },
       { name: Contact.name, schema: ContactSchema },
       { name: User.name, schema: UserSchema },
+      { name: Template.name, schema: TemplateSchema },
     ]),
     MetaModule,
     GatewayModule,

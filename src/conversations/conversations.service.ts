@@ -17,6 +17,7 @@ import { Message, MessageDocument } from "../schemas/message.schema";
 import type { MessageType } from "../messages/messages.types";
 import { Contact, ContactDocument } from "../schemas/contact.schema";
 import { User, UserDocument } from "../users/schemas/user.schema";
+import { Template, TemplateDocument } from "../schemas/template.schema";
 import { MetaService } from "../meta/meta.service";
 import { SocketService } from "../gateway/socket.service";
 import { CampaignsService } from "../campaigns/campaigns.service";
@@ -45,6 +46,8 @@ export class ConversationsService {
     private readonly contactModel: Model<ContactDocument>,
     @InjectModel(User.name)
     private readonly userModel: Model<UserDocument>,
+    @InjectModel(Template.name)
+    private readonly templateModel: Model<TemplateDocument>,
     private readonly metaService: MetaService,
     private readonly socketService: SocketService,
     private readonly notificationsService: NotificationsService,
@@ -476,6 +479,24 @@ export class ConversationsService {
     const conv = await this.findOrCreate(tenantId, contactId);
     const client = await this.metaService.getClient(tenantId);
 
+    // Auto-fill templateVars from contact name if caller didn't supply them
+    let resolvedVars = templateVars;
+    if (!resolvedVars || Object.keys(resolvedVars).length === 0) {
+      const tpl = await this.templateModel
+        .findOne({ tenantId, name: templateName })
+        .lean()
+        .exec();
+      const sampleKeys = Object.keys(
+        (tpl?.sampleVariables as Record<string, string> | undefined) ?? {},
+      );
+      if (sampleKeys.length > 0) {
+        resolvedVars = {};
+        for (const k of sampleKeys) {
+          resolvedVars[k] = contact.name ?? contact.phone;
+        }
+      }
+    }
+
     const toNumber = normalizePhone(contact.phone);
     let metaMessageId: string | undefined;
     try {
@@ -486,14 +507,14 @@ export class ConversationsService {
         template: {
           name: templateName,
           language: { code: "en_US" },
-          ...(templateVars &&
-            Object.keys(templateVars).length > 0 && {
+          ...(resolvedVars &&
+            Object.keys(resolvedVars).length > 0 && {
               components: [
                 {
                   type: "body",
-                  parameters: Object.keys(templateVars)
+                  parameters: Object.keys(resolvedVars)
                     .sort((a, b) => Number(a) - Number(b))
-                    .map((k) => ({ type: "text", text: templateVars[k] })),
+                    .map((k) => ({ type: "text", text: resolvedVars![k] })),
                 },
               ],
             }),
