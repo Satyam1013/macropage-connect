@@ -1,4 +1,10 @@
-import { Injectable, BadRequestException, Logger } from "@nestjs/common";
+import {
+  Injectable,
+  BadRequestException,
+  NotFoundException,
+  InternalServerErrorException,
+  Logger,
+} from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
 import { Model } from "mongoose";
 import axios from "axios";
@@ -17,6 +23,7 @@ import {
   VerifyPhoneDto,
   ConfirmPhoneDto,
 } from "./dto/whatsapp.dto";
+import { RegisterPhoneDto } from "./dto/register-phone.dto";
 import { EmailService } from "../queue/email.service";
 import { WABADetailsData } from "./whatsapp.types";
 
@@ -49,6 +56,8 @@ export class WhatsappService {
     const metaConnected = waba?.metaConnected ?? false;
     const phoneVerified = waba?.phoneVerified ?? false;
     const testMessageSent = waba?.testMessageSent ?? false;
+    const phoneRegistered: boolean = Boolean(waba?.phoneRegistered);
+    const setupComplete: boolean = Boolean(waba?.setupComplete);
 
     let currentStep: number;
     if (!businessInfoSaved) currentStep = 1;
@@ -65,7 +74,6 @@ export class WhatsappService {
         metaConnected,
         phoneVerified,
         testMessageSent,
-        setupComplete: currentStep === 5,
         tokenExpired: waba?.tokenExpired ?? false,
         wabaAccount:
           waba && metaConnected
@@ -81,6 +89,8 @@ export class WhatsappService {
         approvedTemplates,
         totalTemplates,
         readyToSend: approvedTemplates > 0,
+        phoneRegistered,
+        setupComplete,
       },
     };
   }
@@ -815,6 +825,131 @@ export class WhatsappService {
   <div class="footer"><p>Sent from Macropage Connect · ${new Date().toLocaleDateString("en-IN")}</p></div>
 </body>
 </html>`;
+  }
+
+  async registerPhoneNumber(tenantId: string, dto: RegisterPhoneDto) {
+    const waba = await this.wabaModel.findOne({ tenantId }).exec();
+    if (!waba?.metaConnected) {
+      throw new BadRequestException({
+        success: false,
+        error: {
+          code: "META_NOT_CONNECTED",
+          message: "WhatsApp not connected",
+        },
+      });
+    }
+
+    if (!waba.phoneNumberId) {
+      throw new BadRequestException({
+        success: false,
+        error: {
+          code: "MISSING_PHONE_NUMBER_ID",
+          message:
+            "Phone Number ID not configured — disconnect and reconnect your WhatsApp account",
+        },
+      });
+    }
+
+    const systemToken = process.env.META_SYSTEM_USER_TOKEN;
+    if (!systemToken) {
+      this.logger.error("[registerPhone] META_SYSTEM_USER_TOKEN is not set");
+      throw new InternalServerErrorException({
+        success: false,
+        error: {
+          code: "SERVER_CONFIG_ERROR",
+          message: "System token not configured — contact support",
+        },
+      });
+    }
+
+    try {
+      await axios.post(
+        `https://graph.facebook.com/v25.0/${waba.phoneNumberId}/register`,
+        { messaging_product: "whatsapp", pin: dto.pin },
+        { headers: { Authorization: `Bearer ${systemToken}` } },
+      );
+    } catch (err) {
+      if (axios.isAxiosError(err)) {
+        const metaErr = (
+          err.response?.data as {
+            error?: { message?: string; code?: number; error_subcode?: number };
+          }
+        )?.error;
+
+        // 2388056 = phone already registered — treat as success
+        if (metaErr?.error_subcode === 2388056) {
+          await this.wabaModel.updateOne(
+            { tenantId },
+            {
+              phoneRegistered: true,
+              phoneRegisteredAt: new Date(),
+              setupComplete: true,
+            },
+          );
+          return {
+            success: true,
+            data: {
+              message: "Phone number was already registered",
+              alreadyRegistered: true,
+            },
+          };
+        }
+
+        throw new BadRequestException({
+          success: false,
+          error: {
+            code: "META_REGISTER_FAIL",
+            message:
+              metaErr?.message ?? "Meta rejected the registration request",
+          },
+        });
+      }
+      throw new InternalServerErrorException({
+        success: false,
+        error: {
+          code: "META_REGISTER_FAIL",
+          message: "Unexpected error during phone registration",
+        },
+      });
+    }
+
+    await this.wabaModel.updateOne(
+      { tenantId },
+      {
+        phoneRegistered: true,
+        phoneRegisteredAt: new Date(),
+        setupComplete: true,
+      },
+    );
+
+    return {
+      success: true,
+      data: {
+        message: "Phone number registered successfully",
+        phoneRegistered: true,
+      },
+    };
+  }
+
+  async getRegistrationStatus(tenantId: string) {
+    const waba = await this.wabaModel.findOne({ tenantId }).lean().exec();
+    if (!waba) {
+      throw new NotFoundException({
+        success: false,
+        error: {
+          code: "WABA_NOT_FOUND",
+          message: "WhatsApp account not found",
+        },
+      });
+    }
+    return {
+      success: true,
+      data: {
+        phoneRegistered: Boolean(waba.phoneRegistered),
+        phoneRegisteredAt: (waba.phoneRegisteredAt as Date | undefined) ?? null,
+        setupComplete: Boolean(waba.setupComplete),
+      },
+    };
   }
 
   async disconnect(tenantId: string): Promise<void> {

@@ -53,6 +53,15 @@ export class WABAAccount {
   @Prop({ default: false })
   testMessageSent!: boolean;
 
+  @Prop({ default: false })
+  phoneRegistered!: boolean;
+
+  @Prop()
+  phoneRegisteredAt?: Date;
+
+  @Prop({ default: false })
+  setupComplete!: boolean;
+
   @Prop()
   connectedAt?: Date;
 }

@@ -19,6 +19,7 @@ import {
   ConnectMetaDto,
   VerifyPhoneDto,
 } from "./dto/whatsapp.dto";
+import { RegisterPhoneDto } from "./dto/register-phone.dto";
 
 @UseGuards(JwtAuthGuard)
 @Controller("whatsapp")
@@ -110,6 +111,19 @@ export class WhatsappController {
     const tenantId = req.user.tenantId ?? req.user.id;
     const user = { name: req.user.name ?? "User", email: req.user.email };
     return this.whatsappService.shareWABADetails(tenantId, user, body.email);
+  }
+
+  @Post("register-phone")
+  @HttpCode(HttpStatus.OK)
+  registerPhone(@Request() req: AuthReq, @Body() dto: RegisterPhoneDto) {
+    const tenantId = req.user.tenantId ?? req.user.id;
+    return this.whatsappService.registerPhoneNumber(tenantId, dto);
+  }
+
+  @Get("registration-status")
+  getRegistrationStatus(@Request() req: AuthReq) {
+    const tenantId = req.user.tenantId ?? req.user.id;
+    return this.whatsappService.getRegistrationStatus(tenantId);
   }
 
   @Delete("disconnect")
