@@ -27,6 +27,13 @@ import {
 } from "./dto/send-message.dto";
 import type { ConversationFilters } from "./conversations.types";
 
+function normalizePhone(raw: string): string {
+  const digits = raw.replace(/\D/g, "");
+  // 10-digit Indian mobile (6–9 prefix) stored without country code
+  if (digits.length === 10 && /^[6-9]/.test(digits)) return `91${digits}`;
+  return digits;
+}
+
 @Injectable()
 export class ConversationsService {
   constructor(
@@ -247,7 +254,7 @@ export class ConversationsService {
 
     const client = await this.metaService.getClient(tenantId);
 
-    const contactPhone = contact.phone.replace("+", "");
+    const contactPhone = normalizePhone(contact.phone);
     let payload: Record<string, unknown>;
 
     if (dto.type === "TEXT") {
@@ -468,7 +475,7 @@ export class ConversationsService {
     const conv = await this.findOrCreate(tenantId, contactId);
     const client = await this.metaService.getClient(tenantId);
 
-    const toNumber = contact.phone.replace("+", "");
+    const toNumber = normalizePhone(contact.phone);
     let metaMessageId: string | undefined;
     try {
       const resp = await client.sendMessage({

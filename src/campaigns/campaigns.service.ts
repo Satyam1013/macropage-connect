@@ -15,6 +15,12 @@ import { Template, TemplateDocument } from "../schemas/template.schema";
 import { ContactsService } from "../contacts/contacts.service";
 import { MetaService } from "../meta/meta.service";
 
+function normalizePhone(raw: string): string {
+  const digits = raw.replace(/\D/g, "");
+  if (digits.length === 10 && /^[6-9]/.test(digits)) return `91${digits}`;
+  return digits;
+}
+
 @Injectable()
 export class CampaignsService {
   private readonly logger = new Logger(CampaignsService.name);
@@ -165,7 +171,7 @@ export class CampaignsService {
       try {
         const resp = await client.sendMessage({
           messaging_product: "whatsapp",
-          to: recipient.phone.replace(/^\+/, ""),
+          to: normalizePhone(recipient.phone),
           type: "template",
           template: {
             name: template.name,
