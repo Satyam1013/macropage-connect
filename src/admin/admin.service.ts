@@ -18,6 +18,33 @@ export class AdminService {
     private readonly userModel: Model<UserDocument>,
   ) {}
 
+  async disconnectWabaByTenantId(tenantId: string) {
+    const waba = await this.wabaModel.findOne({ tenantId }).lean().exec();
+    if (!waba) {
+      return {
+        success: true,
+        data: { message: "No WABAAccount found — nothing to delete", tenantId },
+      };
+    }
+    this.logger.log(
+      `[Admin] Deleting WABAAccount for tenantId=${tenantId}, phoneNumberId=${waba.phoneNumberId ?? "empty"}`,
+    );
+    await this.wabaModel.deleteOne({ tenantId });
+    await this.userModel.updateOne(
+      { $or: [{ _id: tenantId }, { tenantId }] },
+      { $set: { whatsappSetupDone: false } },
+    );
+    return {
+      success: true,
+      data: {
+        message: "WABAAccount deleted",
+        tenantId,
+        deletedPhoneNumberId: waba.phoneNumberId ?? "(was empty)",
+        deletedWabaId: waba.wabaId,
+      },
+    };
+  }
+
   async disconnectWaba(email: string) {
     const user = await this.userModel.findOne({ email }).lean().exec();
     if (!user) throw new NotFoundException(`User not found: ${email}`);

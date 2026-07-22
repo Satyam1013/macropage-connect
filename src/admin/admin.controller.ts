@@ -22,9 +22,11 @@ export class AdminController {
   disconnectWaba(
     @Headers("x-admin-secret") secret: string | undefined,
     @Query("email") email: string | undefined,
+    @Query("tenantId") tenantId: string | undefined,
   ) {
     this.checkSecret(secret);
-    if (!email) throw new BadRequestException("email query param required");
+    if (tenantId) return this.adminService.disconnectWabaByTenantId(tenantId);
+    if (!email) throw new BadRequestException("email or tenantId query param required");
     return this.adminService.disconnectWaba(email);
   }
 }
