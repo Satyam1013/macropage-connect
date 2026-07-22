@@ -14,6 +14,7 @@ import { MetaModule } from "../meta/meta.module";
 import { GatewayModule } from "../gateway/gateway.module";
 import { NotificationsModule } from "../notifications/notifications.module";
 import { CampaignsModule } from "../campaigns/campaigns.module";
+import { AnalyticsModule } from "../analytics/analytics.module";
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { CampaignsModule } from "../campaigns/campaigns.module";
     GatewayModule,
     NotificationsModule,
     CampaignsModule,
+    AnalyticsModule,
   ],
   providers: [ConversationsService],
   controllers: [ConversationsController],

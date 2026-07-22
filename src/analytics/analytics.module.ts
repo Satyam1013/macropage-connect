@@ -16,6 +16,8 @@ import { AnalyticsService } from "./analytics.service";
 import { AnalyticsController } from "./analytics.controller";
 import { DashboardController } from "./dashboard.controller";
 import { ANALYTICS_REDIS } from "./analytics.constants";
+import { MessageUsage, MessageUsageSchema } from "./message-usage.schema";
+import { MessageUsageService } from "./message-usage.service";
 
 @Module({
   imports: [
@@ -27,6 +29,7 @@ import { ANALYTICS_REDIS } from "./analytics.constants";
       { name: Contact.name, schema: ContactSchema },
       { name: WABAAccount.name, schema: WABAAccountSchema },
       { name: User.name, schema: UserSchema },
+      { name: MessageUsage.name, schema: MessageUsageSchema },
     ]),
     BillingModule,
   ],
@@ -42,7 +45,9 @@ import { ANALYTICS_REDIS } from "./analytics.constants";
         }),
     },
     AnalyticsService,
+    MessageUsageService,
   ],
   controllers: [AnalyticsController, DashboardController],
+  exports: [MessageUsageService],
 })
 export class AnalyticsModule {}

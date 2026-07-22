@@ -117,6 +117,33 @@ export class UploadService {
     return { url: `${this.cdnBase}/${key}` };
   }
 
+  // Inbound WhatsApp media (image/video/audio/document/sticker) already
+  // validated by Meta — stored permanently and publicly, same as
+  // uploadImage/uploadAudio, but without the narrow user-upload mimetype
+  // allowlist so video/GIF and other Meta-supported types aren't rejected.
+  async uploadWhatsAppMedia(
+    tenantId: string,
+    file: Express.Multer.File,
+  ): Promise<{ url: string }> {
+    if (file.size > 100 * 1024 * 1024) {
+      throw new BadRequestException("Media must be under 100MB");
+    }
+
+    const ext = file.originalname.split(".").pop() ?? "bin";
+    const key = `whatsapp-media/${tenantId}/${randomUUID()}.${ext}`;
+    await this.s3.send(
+      new PutObjectCommand({
+        Bucket: this.bucket,
+        Key: key,
+        Body: file.buffer,
+        ContentType: file.mimetype,
+        ACL: "public-read",
+      }),
+    );
+
+    return { url: `${this.cdnBase}/${key}` };
+  }
+
   async deleteFile(tenantId: string, key: string): Promise<void> {
     // Keys are stored as media/{tenantId}/..., documents/{tenantId}/..., audio/{tenantId}/...
     if (!key.includes(`/${tenantId}/`)) {

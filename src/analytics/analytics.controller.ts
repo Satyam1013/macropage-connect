@@ -1,14 +1,59 @@
 import { Controller, Get, Query, UseGuards, Request } from "@nestjs/common";
 import { AnalyticsService } from "./analytics.service";
+import { MessageUsageService } from "./message-usage.service";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { PlanGuard } from "../billing/guards/plan.guard";
 import { RequirePlan } from "../common/decorators/require-plan.decorator";
 import type { AuthReq } from "../auth/dto/auth-request.interface";
 
+// Meta rates shown to frontend for display — keep in sync with META_RATES
+// in message-usage.service.ts (paise there, rupees here for the UI)
+const META_RATES_DISPLAY = {
+  marketing: 0.86,
+  utility: 0.115,
+  authentication: 0.115,
+  service: 0,
+  currency: "INR",
+  lastUpdated: "January 1, 2026",
+};
+
 @UseGuards(JwtAuthGuard)
 @Controller("analytics")
 export class AnalyticsController {
-  constructor(private readonly analyticsService: AnalyticsService) {}
+  constructor(
+    private readonly analyticsService: AnalyticsService,
+    private readonly messageUsageService: MessageUsageService,
+  ) {}
+
+  @Get("usage")
+  async getUsage(@Request() req: AuthReq, @Query("months") months?: string) {
+    const tenantId = req.user.tenantId ?? req.user.id;
+    const [current, history] = await Promise.all([
+      this.messageUsageService.getCurrentMonthUsage(tenantId),
+      this.messageUsageService.getUsageHistory(
+        tenantId,
+        parseInt(months ?? "6", 10),
+      ),
+    ]);
+
+    const estimatedCostRupees = current.estimatedCostPaise / 100;
+
+    return {
+      success: true,
+      data: {
+        currentMonth: {
+          ...current,
+          estimatedCostRupees,
+          estimatedCostFormatted: new Intl.NumberFormat("en-IN", {
+            style: "currency",
+            currency: "INR",
+          }).format(estimatedCostRupees),
+        },
+        history,
+        metaRates: META_RATES_DISPLAY,
+      },
+    };
+  }
 
   @Get("dashboard")
   getDashboard(

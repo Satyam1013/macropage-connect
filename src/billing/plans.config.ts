@@ -8,6 +8,8 @@ export const PLANS = {
       automationRules: 5,
       flowsEnabled: false,
       aiEnabled: false,
+      // Messages: unlimited on all plans — Meta charges apply directly to the customer
+      messagesUnlimited: true,
     },
     pricing: {
       monthly: {
@@ -39,6 +41,7 @@ export const PLANS = {
       automationRules: -1,
       flowsEnabled: true,
       aiEnabled: false,
+      messagesUnlimited: true,
     },
     pricing: {
       monthly: {
@@ -70,6 +73,7 @@ export const PLANS = {
       automationRules: -1,
       flowsEnabled: true,
       aiEnabled: true,
+      messagesUnlimited: true,
     },
     pricing: {
       monthly: {

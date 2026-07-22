@@ -9,6 +9,14 @@ import {
 import { ContactsService } from "../contacts/contacts.service";
 import { ConversationsService } from "../conversations/conversations.service";
 import { AutomationService } from "../automation/automation.service";
+import { MediaDownloadService } from "../whatsapp/media-download.service";
+
+interface InboundMediaField {
+  id?: string;
+  caption?: string;
+  mime_type?: string;
+  filename?: string;
+}
 
 @Injectable()
 export class WebhookService {
@@ -20,6 +28,7 @@ export class WebhookService {
     private readonly contactsService: ContactsService,
     private readonly conversationsService: ConversationsService,
     private readonly automationService: AutomationService,
+    private readonly mediaDownloadService: MediaDownloadService,
   ) {}
 
   verifyWebhook(query: Record<string, string>): string {
@@ -110,11 +119,69 @@ export class WebhookService {
       );
       this.logger.log(`Conversation resolved: ${conversation.id}`);
 
-      const content =
-        (msg.text as { body?: string })?.body ?? (msg.caption as string) ?? "";
-      const type = (msg.type as string) ?? "TEXT";
+      const type = (msg.type as string) ?? "text";
+      let content = "";
+      let mediaId: string | undefined;
+      let mimeType: string | undefined;
+      let fileName: string | undefined;
+
+      switch (type) {
+        case "text":
+          content = (msg.text as { body?: string })?.body ?? "";
+          break;
+        case "image":
+        case "video":
+        case "sticker": {
+          const field = msg[type] as InboundMediaField | undefined;
+          content = field?.caption ?? "";
+          mediaId = field?.id;
+          mimeType =
+            field?.mime_type ?? (type === "sticker" ? "image/webp" : undefined);
+          break;
+        }
+        case "audio": {
+          const field = msg.audio as InboundMediaField | undefined;
+          mediaId = field?.id;
+          mimeType = field?.mime_type ?? "audio/ogg";
+          break;
+        }
+        case "document": {
+          const field = msg.document as InboundMediaField | undefined;
+          content = field?.caption ?? "";
+          mediaId = field?.id;
+          mimeType = field?.mime_type ?? "application/pdf";
+          fileName = field?.filename;
+          break;
+        }
+        case "location": {
+          const loc = msg.location as {
+            latitude?: number;
+            longitude?: number;
+            name?: string;
+            address?: string;
+          };
+          content = JSON.stringify(loc ?? {});
+          break;
+        }
+        case "reaction":
+          content = (msg.reaction as { emoji?: string })?.emoji ?? "";
+          break;
+        default:
+          content = (msg.caption as string) ?? "";
+      }
+
+      let mediaUrl: string | null = null;
+      if (mediaId && mimeType) {
+        mediaUrl = await this.mediaDownloadService.downloadAndStore(
+          tenantId,
+          mediaId,
+          mimeType,
+          fileName,
+        );
+      }
+
       this.logger.log(
-        `Saving inbound msg: "${content}" type=${type} to conv=${conversation.id}`,
+        `Saving inbound msg: "${content}" type=${type} media=${mediaUrl ?? "none"} to conv=${conversation.id}`,
       );
 
       await this.conversationsService.handleInboundMessage(
@@ -125,6 +192,7 @@ export class WebhookService {
         content,
         type,
         msg.timestamp as number,
+        { mediaUrl, mediaId, mimeType, fileName },
       );
 
       void this.automationService

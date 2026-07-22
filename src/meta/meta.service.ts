@@ -70,6 +70,14 @@ export class MetaService {
     };
   }
 
+  async getAccessToken(tenantId: string): Promise<string> {
+    const waba = await this.wabaModel.findOne({ tenantId }).exec();
+    if (!waba) throw new BadRequestException("WhatsApp account not connected");
+    if (waba.tokenExpired)
+      throw new BadRequestException("WhatsApp token expired");
+    return this.encryption.decrypt(waba.accessToken);
+  }
+
   private readonly logger = new Logger(MetaService.name);
 
   private handleMetaError(tenantId: string) {

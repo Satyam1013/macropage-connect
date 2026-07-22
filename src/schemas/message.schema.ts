@@ -50,6 +50,12 @@ export class Message {
   mediaUrl?: string;
 
   @Prop()
+  mediaId?: string;
+
+  @Prop()
+  mimeType?: string;
+
+  @Prop()
   mediaType?: string;
 
   @Prop()

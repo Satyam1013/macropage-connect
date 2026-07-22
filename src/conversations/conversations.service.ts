@@ -21,6 +21,7 @@ import { Template, TemplateDocument } from "../schemas/template.schema";
 import { MetaService } from "../meta/meta.service";
 import { SocketService } from "../gateway/socket.service";
 import { CampaignsService } from "../campaigns/campaigns.service";
+import { MessageUsageService } from "../analytics/message-usage.service";
 import {
   SendMessageDto,
   AddNoteDto,
@@ -52,6 +53,7 @@ export class ConversationsService {
     private readonly socketService: SocketService,
     private readonly notificationsService: NotificationsService,
     private readonly campaignsService: CampaignsService,
+    private readonly messageUsageService: MessageUsageService,
   ) {}
 
   async findAll(
@@ -259,6 +261,10 @@ export class ConversationsService {
 
     const contactPhone = normalizePhone(contact.phone);
     let payload: Record<string, unknown>;
+    // Free-form text/media replies are only allowed inside the 24hr
+    // customer service window, so they're billed as "service" (free).
+    let usageCategory: "marketing" | "utility" | "authentication" | "service" =
+      "service";
 
     if (dto.type === "TEXT") {
       payload = {
@@ -268,12 +274,16 @@ export class ConversationsService {
         text: { body: dto.content },
       };
     } else if (dto.type === "TEMPLATE") {
+      const tpl = await this.templateModel
+        .findOne({ tenantId, name: dto.templateName })
+        .lean()
+        .exec();
+      if (tpl?.category) {
+        usageCategory = tpl.category.toLowerCase() as typeof usageCategory;
+      }
+
       let resolvedVars = dto.templateVars;
       if (!resolvedVars || Object.keys(resolvedVars).length === 0) {
-        const tpl = await this.templateModel
-          .findOne({ tenantId, name: dto.templateName })
-          .lean()
-          .exec();
         const sampleKeys = Object.keys(
           (tpl?.sampleVariables as Record<string, string> | undefined) ?? {},
         );
@@ -392,6 +402,15 @@ export class ConversationsService {
 
       const enriched = buildEnriched("SENT", metaMessageId);
       this.socketService.newMessage(tenantId, { ...enriched, _update: true });
+
+      // Fire and forget — usage tracking must never block/delay the send path
+      void this.messageUsageService.trackOutbound(
+        tenantId,
+        usageCategory,
+        1,
+        "inbox",
+      );
+
       return enriched as unknown as MessageDocument;
     } catch (err: unknown) {
       await this.msgModel.updateOne({ _id: message._id }, { status: "FAILED" });
@@ -607,6 +626,12 @@ export class ConversationsService {
     content: string,
     type: string,
     timestamp: number,
+    media?: {
+      mediaUrl?: string | null;
+      mediaId?: string | null;
+      mimeType?: string | null;
+      fileName?: string | null;
+    },
   ): Promise<MessageDocument> {
     const message = await this.msgModel.create({
       tenantId,
@@ -614,9 +639,16 @@ export class ConversationsService {
       direction: "INBOUND",
       type: type.toUpperCase() as MessageType,
       content,
+      mediaUrl: media?.mediaUrl ?? undefined,
+      mediaId: media?.mediaId ?? undefined,
+      mimeType: media?.mimeType ?? undefined,
+      fileName: media?.fileName ?? undefined,
       metaMessageId: metaMsgId,
       createdAt: new Date(timestamp * 1000),
     });
+
+    // Fire and forget — usage tracking must never block the inbound path
+    void this.messageUsageService.trackInbound(tenantId);
 
     const updatedConv = await this.convModel
       .findOneAndUpdate(
@@ -633,6 +665,9 @@ export class ConversationsService {
       direction: "INBOUND",
       type: message.type,
       content: message.content,
+      mediaUrl: message.mediaUrl ?? null,
+      mimeType: message.mimeType ?? null,
+      fileName: message.fileName ?? null,
       metaMessageId: message.metaMessageId,
       isNote: false,
     });

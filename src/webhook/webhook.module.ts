@@ -8,6 +8,9 @@ import { ConversationsModule } from "../conversations/conversations.module";
 import { GatewayModule } from "../gateway/gateway.module";
 import { AutomationModule } from "../automation/automation.module";
 import { BillingModule } from "../billing/billing.module";
+import { MetaModule } from "../meta/meta.module";
+import { UploadModule } from "../upload/upload.module";
+import { MediaDownloadService } from "../whatsapp/media-download.service";
 
 @Module({
   imports: [
@@ -19,8 +22,10 @@ import { BillingModule } from "../billing/billing.module";
     GatewayModule,
     AutomationModule,
     BillingModule,
+    MetaModule,
+    UploadModule,
   ],
-  providers: [WebhookService],
+  providers: [WebhookService, MediaDownloadService],
   controllers: [WebhookController],
 })
 export class WebhookModule {}

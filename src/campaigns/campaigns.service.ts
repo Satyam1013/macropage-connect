@@ -14,6 +14,7 @@ import {
 import { Template, TemplateDocument } from "../schemas/template.schema";
 import { ContactsService } from "../contacts/contacts.service";
 import { MetaService } from "../meta/meta.service";
+import { MessageUsageService } from "../analytics/message-usage.service";
 
 function normalizePhone(raw: string): string {
   const digits = raw.replace(/\D/g, "");
@@ -34,6 +35,7 @@ export class CampaignsService {
     private readonly templateModel: Model<TemplateDocument>,
     private readonly contactsService: ContactsService,
     private readonly metaService: MetaService,
+    private readonly messageUsageService: MessageUsageService,
   ) {}
 
   async findAll(tenantId: string, status?: string) {
@@ -43,7 +45,8 @@ export class CampaignsService {
   }
 
   async findOne(tenantId: string, id: string): Promise<CampaignDocument> {
-    if (!Types.ObjectId.isValid(id)) throw new NotFoundException("Campaign not found");
+    if (!Types.ObjectId.isValid(id))
+      throw new NotFoundException("Campaign not found");
     const c = await this.campaignModel.findOne({ _id: id, tenantId }).exec();
     if (!c) throw new NotFoundException("Campaign not found");
     return c;
@@ -190,6 +193,17 @@ export class CampaignsService {
         await this.campaignModel.updateOne(
           { _id: campaignId },
           { $inc: { sent: 1 } },
+        );
+
+        // Fire and forget — usage tracking must never block campaign sending
+        void this.messageUsageService.trackOutbound(
+          tenantId,
+          template.category.toLowerCase() as
+            | "marketing"
+            | "utility"
+            | "authentication",
+          1,
+          "campaign",
         );
       } catch (err) {
         const reason = err instanceof Error ? err.message : "Unknown error";
