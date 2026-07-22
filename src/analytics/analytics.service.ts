@@ -105,12 +105,14 @@ export class AnalyticsService {
         tenantId,
         direction: "OUTBOUND",
         isNote: { $ne: true },
+        status: { $ne: "FAILED" },
         createdAt: { $gte: dateFrom, $lte: dateTo },
       }),
       this.msgModel.countDocuments({
         tenantId,
         direction: "OUTBOUND",
         isNote: { $ne: true },
+        status: { $ne: "FAILED" },
         createdAt: { $gte: prevFrom, $lte: prevTo },
       }),
       this.contactModel.countDocuments({
