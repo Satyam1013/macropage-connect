@@ -298,7 +298,7 @@ export class ConversationsService {
         resolvedVars && Object.keys(resolvedVars).length > 0
           ? Object.keys(resolvedVars)
               .sort((a, b) => Number(a) - Number(b))
-              .map((k) => ({ type: "text", text: resolvedVars![k] }))
+              .map((k) => ({ type: "text", text: resolvedVars[k] }))
           : [];
       payload = {
         messaging_product: "whatsapp",
@@ -553,7 +553,7 @@ export class ConversationsService {
                   type: "body",
                   parameters: Object.keys(resolvedVars)
                     .sort((a, b) => Number(a) - Number(b))
-                    .map((k) => ({ type: "text", text: resolvedVars![k] })),
+                    .map((k) => ({ type: "text", text: resolvedVars[k] })),
                 },
               ],
             }),
