@@ -103,6 +103,78 @@ export class AutomationService {
     };
   }
 
+  // ─── Stats ────────────────────────────────────────────────────────────────
+
+  async getStats(tenantId: string) {
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
+    // Rule-based auto-replies are OUTBOUND, non-note messages saved by
+    // executeAction() — the one place that creates a message without an
+    // agentId (every human/agent send always sets one), so this is a
+    // reliable signal without needing a dedicated "source" field.
+    const automatedFilter = {
+      tenantId,
+      direction: "OUTBOUND" as const,
+      isNote: { $ne: true },
+      agentId: { $exists: false },
+    };
+
+    const [
+      totalRules,
+      activeRules,
+      automatedConvIdsOverall,
+      automatedConvIdsToday,
+      activeConvIdsToday,
+    ] = await Promise.all([
+      this.ruleModel.countDocuments({ tenantId }),
+      this.ruleModel.countDocuments({ tenantId, isEnabled: true }),
+      this.msgModel.distinct("conversationId", automatedFilter),
+      this.msgModel.distinct("conversationId", {
+        ...automatedFilter,
+        createdAt: { $gte: todayStart },
+      }),
+      this.msgModel.distinct("conversationId", {
+        tenantId,
+        isNote: { $ne: true },
+        createdAt: { $gte: todayStart },
+      }),
+    ]);
+
+    const automatedToday = automatedConvIdsToday.length;
+    const activeToday = activeConvIdsToday.length;
+    const automatedTodayPercent =
+      activeToday > 0 ? Math.round((automatedToday / activeToday) * 100) : 0;
+
+    // No AI-reply pipeline is wired up yet anywhere in this backend
+    // (AIConfig schema exists but nothing sends AI-generated messages),
+    // so these are honestly 0 until that feature is built — not a bug.
+    const aiResponsesOverall = 0;
+    const aiResponsesToday = 0;
+    const aiResponsesTodayPercent = 0;
+
+    return {
+      success: true,
+      data: {
+        automatedConversations: {
+          overall: automatedConvIdsOverall.length,
+          today: automatedToday,
+          todayPercent: automatedTodayPercent,
+        },
+        rules: {
+          total: totalRules,
+          active: activeRules,
+        },
+        aiResponses: {
+          overall: aiResponsesOverall,
+          today: aiResponsesToday,
+          todayPercent: aiResponsesTodayPercent,
+          avgConfidence: 0,
+        },
+      },
+    };
+  }
+
   // ─── Flows ────────────────────────────────────────────────────────────────
 
   async findAllFlows(tenantId: string) {

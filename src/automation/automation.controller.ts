@@ -35,6 +35,12 @@ export class AutomationController {
     return this.automationService.getAutomationLimits(tenantId);
   }
 
+  @Get("stats")
+  getStats(@Request() req: AuthReq) {
+    const tenantId = req.user.tenantId ?? req.user.id;
+    return this.automationService.getStats(tenantId);
+  }
+
   // ─── Rules ────────────────────────────────────────────────────────────────
 
   @Get("rules/test")
