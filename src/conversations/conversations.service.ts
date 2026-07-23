@@ -342,6 +342,10 @@ export class ConversationsService {
       )
       .lean()
       .exec();
+    await this.contactModel.updateOne(
+      { _id: contact._id },
+      { lastMessageAt: new Date() },
+    );
 
     const agent = await this.userModel
       .findById(agentId)
@@ -595,6 +599,10 @@ export class ConversationsService {
       { _id: conv.id },
       { lastMessageAt: new Date() },
     );
+    await this.contactModel.updateOne(
+      { _id: contact._id },
+      { lastMessageAt: new Date() },
+    );
 
     this.socketService.newMessage(tenantId, {
       _id: String(message._id),
@@ -621,7 +629,7 @@ export class ConversationsService {
   async handleInboundMessage(
     tenantId: string,
     metaMsgId: string,
-    _contactId: string,
+    contactId: string,
     conversationId: string,
     content: string,
     type: string,
@@ -658,6 +666,10 @@ export class ConversationsService {
       )
       .lean()
       .exec();
+    await this.contactModel.updateOne(
+      { _id: contactId },
+      { lastMessageAt: new Date(timestamp * 1000) },
+    );
 
     this.socketService.newMessage(tenantId, {
       _id: String(message._id),
