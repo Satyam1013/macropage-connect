@@ -22,6 +22,7 @@ import { HelpModule } from "./help/help.module";
 import { OnboardingModule } from "./onboarding/onboarding.module";
 import { QuickRepliesModule } from "./quick-replies/quick-replies.module";
 import { AdminModule } from "./admin/admin.module";
+import { SampleTemplatesModule } from "./sample-templates/sample-templates.module";
 
 // Infrastructure
 import { MetaModule } from "./meta/meta.module";
@@ -63,6 +64,7 @@ import { GatewayModule } from "./gateway/gateway.module";
     OnboardingModule,
     QuickRepliesModule,
     AdminModule,
+    SampleTemplatesModule,
   ],
 })
 export class AppModule {}
