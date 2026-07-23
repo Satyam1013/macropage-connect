@@ -65,6 +65,17 @@ export class TemplatesController {
     return this.templatesService.updateDraft(tenantId, id, dto);
   }
 
+  @Patch(":id")
+  @HttpCode(HttpStatus.OK)
+  update(
+    @Request() req: AuthReq,
+    @Param("id") id: string,
+    @Body() dto: Partial<CreateTemplateDto>,
+  ) {
+    const tenantId = req.user.tenantId ?? req.user.id;
+    return this.templatesService.update(tenantId, id, dto);
+  }
+
   @Delete(":id")
   @HttpCode(HttpStatus.NO_CONTENT)
   remove(@Request() req: AuthReq, @Param("id") id: string) {

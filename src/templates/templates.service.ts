@@ -32,12 +32,9 @@ export class TemplatesService {
     return t;
   }
 
-  async create(
-    tenantId: string,
-    dto: CreateTemplateDto,
-  ): Promise<TemplateDocument> {
-    const client = await this.metaService.getClient(tenantId);
-
+  private buildComponents(
+    dto: Partial<CreateTemplateDto> & Pick<CreateTemplateDto, "body">,
+  ): Record<string, unknown>[] {
     const components: Record<string, unknown>[] = [];
     if (dto.header) components.push({ type: "HEADER", ...dto.header });
 
@@ -73,6 +70,47 @@ export class TemplatesService {
       });
     }
 
+    return components;
+  }
+
+  private throwMetaTemplateError(
+    err: unknown,
+    components: Record<string, unknown>[],
+  ): never {
+    if (axios.isAxiosError(err)) {
+      const metaError = err.response?.data as {
+        error?: {
+          message?: string;
+          error_user_title?: string;
+          error_user_msg?: string;
+          error_data?: unknown;
+        };
+      };
+      const detail =
+        metaError?.error?.error_user_msg ??
+        metaError?.error?.error_user_title ??
+        metaError?.error?.message ??
+        "Meta rejected the template";
+      throw new BadRequestException({
+        success: false,
+        error: {
+          code: "META_TEMPLATE_ERROR",
+          message: detail,
+          meta: metaError?.error,
+          sentComponents: components,
+        },
+      });
+    }
+    throw err as Error;
+  }
+
+  async create(
+    tenantId: string,
+    dto: CreateTemplateDto,
+  ): Promise<TemplateDocument> {
+    const client = await this.metaService.getClient(tenantId);
+    const components = this.buildComponents(dto);
+
     let metaId: string | undefined;
     try {
       const metaResp = await client.createTemplate({
@@ -83,31 +121,7 @@ export class TemplatesService {
       });
       metaId = (metaResp.data as { id?: string }).id;
     } catch (err) {
-      if (axios.isAxiosError(err)) {
-        const metaError = err.response?.data as {
-          error?: {
-            message?: string;
-            error_user_title?: string;
-            error_user_msg?: string;
-            error_data?: unknown;
-          };
-        };
-        const detail =
-          metaError?.error?.error_user_msg ??
-          metaError?.error?.error_user_title ??
-          metaError?.error?.message ??
-          "Meta rejected the template";
-        throw new BadRequestException({
-          success: false,
-          error: {
-            code: "META_TEMPLATE_ERROR",
-            message: detail,
-            meta: metaError?.error,
-            sentComponents: components,
-          },
-        });
-      }
-      throw err;
+      this.throwMetaTemplateError(err, components);
     }
 
     try {
@@ -167,6 +181,56 @@ export class TemplatesService {
       .exec();
     if (!t) throw new NotFoundException("Draft template not found");
     Object.assign(t, dto);
+    return t.save();
+  }
+
+  async update(
+    tenantId: string,
+    id: string,
+    dto: Partial<CreateTemplateDto>,
+  ): Promise<TemplateDocument> {
+    const t = await this.findOne(tenantId, id);
+
+    // Never-submitted drafts: just save locally, same as updateDraft.
+    if (!t.metaTemplateId) {
+      Object.assign(t, dto);
+      return t.save();
+    }
+
+    // Already-submitted templates: Meta's edit API can't change name or
+    // language, only content/category — those two are ignored here even
+    // if sent. Editing content sends it back for re-review.
+    const body = dto.body ?? t.body;
+    const header = dto.header ?? t.header;
+    const footer = dto.footer ?? t.footer;
+    const buttons = dto.buttons ?? t.buttons;
+    const sampleVariables = dto.sampleVariables ?? t.sampleVariables;
+    const category =
+      (dto.category as TemplateCategory | undefined) ?? t.category;
+
+    const components = this.buildComponents({
+      body,
+      header,
+      footer,
+      buttons,
+      sampleVariables,
+    });
+
+    const client = await this.metaService.getClient(tenantId);
+    try {
+      await client.editTemplate(t.metaTemplateId, { category, components });
+    } catch (err) {
+      this.throwMetaTemplateError(err, components);
+    }
+
+    t.body = body;
+    t.header = header;
+    t.footer = footer;
+    t.buttons = buttons;
+    t.sampleVariables = sampleVariables;
+    t.category = category;
+    t.status = "PENDING";
+    t.rejectionReason = undefined;
     return t.save();
   }
 

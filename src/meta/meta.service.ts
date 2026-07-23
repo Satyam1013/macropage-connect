@@ -67,6 +67,10 @@ export class MetaService {
         }),
       deleteTemplate: (metaTemplateId: string) =>
         http.delete(`/${metaTemplateId}`),
+      editTemplate: (
+        metaTemplateId: string,
+        template: Record<string, unknown>,
+      ) => http.post(`/${metaTemplateId}`, template),
     };
   }
 
