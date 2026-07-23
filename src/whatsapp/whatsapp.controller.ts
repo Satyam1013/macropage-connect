@@ -126,7 +126,7 @@ export class WhatsappController {
     return this.whatsappService.getRegistrationStatus(tenantId);
   }
 
-  @Delete("disconnect")
+  @Delete(["disconnect", "setup/disconnect"])
   @HttpCode(HttpStatus.NO_CONTENT)
   disconnect(@Request() req: AuthReq) {
     const tenantId = req.user.tenantId ?? req.user.id;
