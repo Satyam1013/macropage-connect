@@ -14,6 +14,7 @@ import {
 } from "@nestjs/common";
 import { ContactsService } from "./contacts.service";
 import { CreateContactDto } from "./dto/create-contact.dto";
+import { CreateSegmentDto } from "./dto/create-segment.dto";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { UserPayload } from "../auth/dto/auth-response.interface";
 
@@ -26,6 +27,16 @@ export class ContactsController {
   getSegments(@Request() req: { user: UserPayload & { tenantId?: string } }) {
     const tenantId = req.user.tenantId ?? req.user.id;
     return this.contactsService.getSegments(tenantId);
+  }
+
+  @Post("segments")
+  @HttpCode(HttpStatus.CREATED)
+  createSegment(
+    @Request() req: { user: UserPayload & { tenantId?: string } },
+    @Body() dto: CreateSegmentDto,
+  ) {
+    const tenantId = req.user.tenantId ?? req.user.id;
+    return this.contactsService.createSegment(tenantId, dto);
   }
 
   @Get()

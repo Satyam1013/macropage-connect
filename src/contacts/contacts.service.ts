@@ -6,7 +6,12 @@ import {
 import { InjectModel } from "@nestjs/mongoose";
 import { Model } from "mongoose";
 import { Contact, ContactDocument } from "../schemas/contact.schema";
+import {
+  ContactSegment,
+  ContactSegmentDocument,
+} from "../schemas/contact-segment.schema";
 import { CreateContactDto } from "./dto/create-contact.dto";
+import { CreateSegmentDto } from "./dto/create-segment.dto";
 import type { ContactFilters } from "./contacts.types";
 
 @Injectable()
@@ -14,10 +19,15 @@ export class ContactsService {
   constructor(
     @InjectModel(Contact.name)
     private readonly contactModel: Model<ContactDocument>,
+    @InjectModel(ContactSegment.name)
+    private readonly segmentModel: Model<ContactSegmentDocument>,
   ) {}
 
-  async findAll(tenantId: string, filters: ContactFilters = {}) {
-    const { search, tags, isOptedOut, page = 1, limit = 20 } = filters;
+  private buildWhere(
+    tenantId: string,
+    filters: Pick<ContactFilters, "search" | "tags" | "isOptedOut">,
+  ): Record<string, unknown> {
+    const { search, tags, isOptedOut } = filters;
     const where: Record<string, unknown> = { tenantId };
 
     if (search) {
@@ -29,6 +39,13 @@ export class ContactsService {
     }
     if (tags?.length) where.tags = { $in: tags };
     if (isOptedOut !== undefined) where.isOptedOut = isOptedOut;
+
+    return where;
+  }
+
+  async findAll(tenantId: string, filters: ContactFilters = {}) {
+    const { page = 1, limit = 20 } = filters;
+    const where = this.buildWhere(tenantId, filters);
 
     const [data, total] = await Promise.all([
       this.contactModel
@@ -110,17 +127,19 @@ export class ContactsService {
   }
 
   async getSegments(tenantId: string) {
-    const [total, subscribed, unsubscribed, tagAgg] = await Promise.all([
-      this.contactModel.countDocuments({ tenantId }),
-      this.contactModel.countDocuments({ tenantId, isOptedOut: false }),
-      this.contactModel.countDocuments({ tenantId, isOptedOut: true }),
-      this.contactModel.aggregate<{ _id: string; count: number }>([
-        { $match: { tenantId, tags: { $exists: true, $ne: [] } } },
-        { $unwind: "$tags" },
-        { $group: { _id: "$tags", count: { $sum: 1 } } },
-        { $sort: { count: -1 } },
-      ]),
-    ]);
+    const [total, subscribed, unsubscribed, tagAgg, customSegments] =
+      await Promise.all([
+        this.contactModel.countDocuments({ tenantId }),
+        this.contactModel.countDocuments({ tenantId, isOptedOut: false }),
+        this.contactModel.countDocuments({ tenantId, isOptedOut: true }),
+        this.contactModel.aggregate<{ _id: string; count: number }>([
+          { $match: { tenantId, tags: { $exists: true, $ne: [] } } },
+          { $unwind: "$tags" },
+          { $group: { _id: "$tags", count: { $sum: 1 } } },
+          { $sort: { count: -1 } },
+        ]),
+        this.segmentModel.find({ tenantId }).sort({ createdAt: -1 }).exec(),
+      ]);
 
     const predefined = [
       { id: "all", name: "All Contacts", count: total, type: "predefined" },
@@ -145,10 +164,38 @@ export class ContactsService {
       type: "tag",
     }));
 
+    const customSegmentsWithCount = await Promise.all(
+      customSegments.map(async (s) => {
+        const where = this.buildWhere(tenantId, s.filters);
+        return {
+          id: String(s._id),
+          name: s.name,
+          color: s.color,
+          filters: s.filters,
+          count: await this.contactModel.countDocuments(where),
+          type: "custom",
+        };
+      }),
+    );
+
     return {
       success: true,
-      data: { segments: [...predefined, ...tagSegments] },
+      data: {
+        segments: [...predefined, ...tagSegments, ...customSegmentsWithCount],
+      },
     };
+  }
+
+  async createSegment(
+    tenantId: string,
+    dto: CreateSegmentDto,
+  ): Promise<ContactSegmentDocument> {
+    return this.segmentModel.create({
+      tenantId,
+      name: dto.name,
+      color: dto.color,
+      filters: dto.filters ?? {},
+    });
   }
 
   findByPhone(
