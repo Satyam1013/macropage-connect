@@ -8,6 +8,7 @@ import {
   Request,
   HttpCode,
   HttpStatus,
+  Header,
 } from "@nestjs/common";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { UsersService } from "./users.service";
@@ -38,6 +39,7 @@ export class UsersController {
   ) {}
 
   @Get("me")
+  @Header("Cache-Control", "no-cache, no-store, must-revalidate")
   async getMe(@Request() req: AuthReq) {
     const user = await this.usersService.findById(req.user.id);
     return { success: true, data: { user } };
