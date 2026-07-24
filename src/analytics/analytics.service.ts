@@ -15,6 +15,10 @@ import {
   WABAAccountDocument,
 } from "../schemas/waba-account.schema";
 import { User, UserDocument } from "../users/schemas/user.schema";
+import {
+  AutomationRule,
+  AutomationRuleDocument,
+} from "../schemas/automation-rule.schema";
 import { ANALYTICS_REDIS } from "./analytics.constants";
 import {
   MESSAGING_TIER_LIMITS,
@@ -37,6 +41,8 @@ export class AnalyticsService {
     private readonly wabaModel: Model<WABAAccountDocument>,
     @InjectModel(User.name)
     private readonly userModel: Model<UserDocument>,
+    @InjectModel(AutomationRule.name)
+    private readonly ruleModel: Model<AutomationRuleDocument>,
     @Inject(ANALYTICS_REDIS) private readonly redis: Redis,
   ) {}
 
@@ -56,6 +62,118 @@ export class AnalyticsService {
   private calcTrend(current: number, previous: number): number {
     if (previous === 0) return current > 0 ? 100 : 0;
     return Math.round(((current - previous) / previous) * 100);
+  }
+
+  // ─── Contacts-created-by-month (backs /analytics/usage) ───────────────────
+
+  async getContactsCreatedStats(tenantId: string, months: number) {
+    const now = new Date();
+    const periods: { year: number; month: number }[] = [];
+    for (let i = 0; i < months; i++) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      periods.push({ year: d.getFullYear(), month: d.getMonth() + 1 });
+    }
+    const oldest = periods[periods.length - 1];
+    const earliest = new Date(oldest.year, oldest.month - 1, 1);
+
+    const [totalContacts, agg] = await Promise.all([
+      this.contactModel.countDocuments({ tenantId }),
+      this.contactModel.aggregate<{
+        _id: { year: number; month: number };
+        count: number;
+      }>([
+        { $match: { tenantId, createdAt: { $gte: earliest } } },
+        {
+          $group: {
+            _id: {
+              year: { $year: "$createdAt" },
+              month: { $month: "$createdAt" },
+            },
+            count: { $sum: 1 },
+          },
+        },
+      ]),
+    ]);
+
+    const countByPeriod = new Map(
+      agg.map((a) => [`${a._id.year}-${a._id.month}`, a.count]),
+    );
+
+    const history = periods.map(({ year, month }) => ({
+      year,
+      month,
+      period: `${year}-${String(month).padStart(2, "0")}`,
+      contactsCreated: countByPeriod.get(`${year}-${month}`) ?? 0,
+    }));
+
+    return {
+      totalContacts,
+      currentMonthContactsCreated: history[0]?.contactsCreated ?? 0,
+      history,
+    };
+  }
+
+  // ─── All-time usage summary (backs /analytics/usage/all-time) ─────────────
+
+  async getAllTimeStats(tenantId: string) {
+    const automatedFilter = {
+      tenantId,
+      direction: "OUTBOUND" as const,
+      isNote: { $ne: true },
+      agentId: { $exists: false },
+    };
+
+    const [
+      totalOutbound,
+      totalInbound,
+      totalContacts,
+      totalConversations,
+      campaigns,
+      totalRules,
+      activeRules,
+      automatedConvIds,
+    ] = await Promise.all([
+      this.msgModel.countDocuments({
+        tenantId,
+        direction: "OUTBOUND",
+        isNote: { $ne: true },
+      }),
+      this.msgModel.countDocuments({ tenantId, direction: "INBOUND" }),
+      this.contactModel.countDocuments({ tenantId }),
+      this.convModel.countDocuments({ tenantId }),
+      this.campaignModel.find({ tenantId }).lean().exec(),
+      this.ruleModel.countDocuments({ tenantId }),
+      this.ruleModel.countDocuments({ tenantId, isEnabled: true }),
+      this.msgModel.distinct("conversationId", automatedFilter),
+    ]);
+
+    const campaignTotals = campaigns.reduce(
+      (acc, c) => ({
+        sent: acc.sent + (c.sent ?? 0),
+        delivered: acc.delivered + (c.delivered ?? 0),
+        read: acc.read + (c.read ?? 0),
+        failed: acc.failed + (c.failed ?? 0),
+      }),
+      { sent: 0, delivered: 0, read: 0, failed: 0 },
+    );
+
+    return {
+      messages: { totalOutbound, totalInbound },
+      contacts: { total: totalContacts },
+      conversations: { total: totalConversations },
+      campaigns: {
+        total: campaigns.length,
+        totalSent: campaignTotals.sent,
+        totalDelivered: campaignTotals.delivered,
+        totalRead: campaignTotals.read,
+        totalFailed: campaignTotals.failed,
+      },
+      automation: {
+        totalRules,
+        activeRules,
+        automatedConversations: automatedConvIds.length,
+      },
+    };
   }
 
   private async cacheGet(key: string): Promise<unknown> {

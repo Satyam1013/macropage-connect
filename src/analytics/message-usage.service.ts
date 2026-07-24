@@ -126,6 +126,55 @@ export class MessageUsageService {
     }));
   }
 
+  // Sums every tracked month for this tenant. Only reflects messages sent
+  // since usage tracking was wired up (trackOutbound/trackInbound calls),
+  // not the tenant's full message history — callers wanting a true
+  // all-time send/receive count should use the Message collection instead.
+  async getAllTimeUsage(tenantId: string) {
+    const [agg] = await this.usageModel.aggregate<{
+      marketingCount: number;
+      utilityCount: number;
+      authenticationCount: number;
+      serviceCount: number;
+      totalOutbound: number;
+      totalInbound: number;
+      campaignMessages: number;
+      inboxMessages: number;
+      estimatedCostPaise: number;
+      monthsTracked: number;
+    }>([
+      { $match: { tenantId } },
+      {
+        $group: {
+          _id: null,
+          marketingCount: { $sum: "$marketingCount" },
+          utilityCount: { $sum: "$utilityCount" },
+          authenticationCount: { $sum: "$authenticationCount" },
+          serviceCount: { $sum: "$serviceCount" },
+          totalOutbound: { $sum: "$totalOutbound" },
+          totalInbound: { $sum: "$totalInbound" },
+          campaignMessages: { $sum: "$campaignMessages" },
+          inboxMessages: { $sum: "$inboxMessages" },
+          estimatedCostPaise: { $sum: "$estimatedCostPaise" },
+          monthsTracked: { $sum: 1 },
+        },
+      },
+    ]);
+
+    return {
+      marketingCount: agg?.marketingCount ?? 0,
+      utilityCount: agg?.utilityCount ?? 0,
+      authenticationCount: agg?.authenticationCount ?? 0,
+      serviceCount: agg?.serviceCount ?? 0,
+      totalOutbound: agg?.totalOutbound ?? 0,
+      totalInbound: agg?.totalInbound ?? 0,
+      campaignMessages: agg?.campaignMessages ?? 0,
+      inboxMessages: agg?.inboxMessages ?? 0,
+      estimatedCostPaise: agg?.estimatedCostPaise ?? 0,
+      monthsTracked: agg?.monthsTracked ?? 0,
+    };
+  }
+
   private currentPeriod() {
     const now = new Date();
     return { year: now.getFullYear(), month: now.getMonth() + 1 };

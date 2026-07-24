@@ -28,28 +28,75 @@ export class AnalyticsController {
   @Get("usage")
   async getUsage(@Request() req: AuthReq, @Query("months") months?: string) {
     const tenantId = req.user.tenantId ?? req.user.id;
-    const [current, history] = await Promise.all([
+    const monthCount = parseInt(months ?? "6", 10);
+    const [current, history, contactStats] = await Promise.all([
       this.messageUsageService.getCurrentMonthUsage(tenantId),
-      this.messageUsageService.getUsageHistory(
-        tenantId,
-        parseInt(months ?? "6", 10),
-      ),
+      this.messageUsageService.getUsageHistory(tenantId, monthCount),
+      this.analyticsService.getContactsCreatedStats(tenantId, monthCount),
     ]);
 
     const estimatedCostRupees = current.estimatedCostPaise / 100;
+    const contactsByPeriod = new Map(
+      contactStats.history.map((h) => [h.period, h.contactsCreated]),
+    );
 
     return {
       success: true,
       data: {
         currentMonth: {
           ...current,
+          contactsCreated: contactStats.currentMonthContactsCreated,
+          totalContacts: contactStats.totalContacts,
           estimatedCostRupees,
           estimatedCostFormatted: new Intl.NumberFormat("en-IN", {
             style: "currency",
             currency: "INR",
           }).format(estimatedCostRupees),
         },
-        history,
+        history: history.map((h) => ({
+          ...h,
+          contactsCreated: contactsByPeriod.get(h.period) ?? 0,
+        })),
+        metaRates: META_RATES_DISPLAY,
+      },
+    };
+  }
+
+  @Get("usage/all-time")
+  async getAllTimeUsage(@Request() req: AuthReq) {
+    const tenantId = req.user.tenantId ?? req.user.id;
+    const [stats, messageUsage] = await Promise.all([
+      this.analyticsService.getAllTimeStats(tenantId),
+      this.messageUsageService.getAllTimeUsage(tenantId),
+    ]);
+
+    const estimatedCostRupees = messageUsage.estimatedCostPaise / 100;
+
+    return {
+      success: true,
+      data: {
+        messages: {
+          ...stats.messages,
+          byCategory: {
+            marketing: messageUsage.marketingCount,
+            utility: messageUsage.utilityCount,
+            authentication: messageUsage.authenticationCount,
+            service: messageUsage.serviceCount,
+            note: "Category breakdown only reflects messages sent since usage tracking was enabled — totalOutbound/totalInbound above cover the tenant's full history.",
+          },
+          campaignMessages: messageUsage.campaignMessages,
+          inboxMessages: messageUsage.inboxMessages,
+          estimatedCostPaise: messageUsage.estimatedCostPaise,
+          estimatedCostRupees,
+          estimatedCostFormatted: new Intl.NumberFormat("en-IN", {
+            style: "currency",
+            currency: "INR",
+          }).format(estimatedCostRupees),
+        },
+        contacts: stats.contacts,
+        conversations: stats.conversations,
+        campaigns: stats.campaigns,
+        automation: stats.automation,
         metaRates: META_RATES_DISPLAY,
       },
     };

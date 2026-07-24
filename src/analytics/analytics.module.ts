@@ -11,6 +11,10 @@ import { Campaign, CampaignSchema } from "../schemas/campaign.schema";
 import { Contact, ContactSchema } from "../schemas/contact.schema";
 import { WABAAccount, WABAAccountSchema } from "../schemas/waba-account.schema";
 import { User, UserSchema } from "../users/schemas/user.schema";
+import {
+  AutomationRule,
+  AutomationRuleSchema,
+} from "../schemas/automation-rule.schema";
 import { BillingModule } from "../billing/billing.module";
 import { AnalyticsService } from "./analytics.service";
 import { AnalyticsController } from "./analytics.controller";
@@ -30,6 +34,7 @@ import { MessageUsageService } from "./message-usage.service";
       { name: WABAAccount.name, schema: WABAAccountSchema },
       { name: User.name, schema: UserSchema },
       { name: MessageUsage.name, schema: MessageUsageSchema },
+      { name: AutomationRule.name, schema: AutomationRuleSchema },
     ]),
     BillingModule,
   ],
