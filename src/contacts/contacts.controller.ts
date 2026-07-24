@@ -8,10 +8,14 @@ import {
   Param,
   Query,
   UseGuards,
+  UseInterceptors,
+  UploadedFile,
   Request,
   HttpCode,
   HttpStatus,
+  BadRequestException,
 } from "@nestjs/common";
+import { FileInterceptor } from "@nestjs/platform-express";
 import { ContactsService } from "./contacts.service";
 import { CreateContactDto } from "./dto/create-contact.dto";
 import { CreateSegmentDto } from "./dto/create-segment.dto";
@@ -37,6 +41,28 @@ export class ContactsController {
   ) {
     const tenantId = req.user.tenantId ?? req.user.id;
     return this.contactsService.createSegment(tenantId, dto);
+  }
+
+  @Post("import")
+  @HttpCode(HttpStatus.OK)
+  @UseInterceptors(FileInterceptor("file"))
+  importContacts(
+    @Request() req: { user: UserPayload & { tenantId?: string } },
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    if (!file) throw new BadRequestException("No file uploaded");
+    const isExcel =
+      file.mimetype.includes("spreadsheetml") ||
+      file.originalname.toLowerCase().endsWith(".xlsx");
+    if (!isExcel) {
+      throw new BadRequestException("Only .xlsx files are supported");
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      throw new BadRequestException("File must be under 5MB");
+    }
+
+    const tenantId = req.user.tenantId ?? req.user.id;
+    return this.contactsService.importFromExcel(tenantId, file.buffer);
   }
 
   @Get()
