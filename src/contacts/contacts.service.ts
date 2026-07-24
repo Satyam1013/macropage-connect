@@ -88,6 +88,30 @@ export class ContactsService {
     return where;
   }
 
+  // A custom segment's count is the union of its dynamic `filters` match
+  // and its manually-assigned `contactIds` — not just one or the other.
+  private async buildCustomSegmentView(
+    tenantId: string,
+    segment: ContactSegmentDocument,
+  ) {
+    const filterWhere = this.buildWhere(tenantId, segment.filters);
+    const where =
+      segment.contactIds.length > 0
+        ? {
+            $or: [filterWhere, { tenantId, _id: { $in: segment.contactIds } }],
+          }
+        : filterWhere;
+
+    return {
+      id: String(segment._id),
+      name: segment.name,
+      color: segment.color,
+      filters: segment.filters,
+      count: await this.contactModel.countDocuments(where),
+      type: "custom" as const,
+    };
+  }
+
   async findAll(tenantId: string, filters: ContactFilters = {}) {
     const { page = 1, limit = 20 } = filters;
     const where = this.buildWhere(tenantId, filters);
@@ -210,17 +234,7 @@ export class ContactsService {
     }));
 
     const customSegmentsWithCount = await Promise.all(
-      customSegments.map(async (s) => {
-        const where = this.buildWhere(tenantId, s.filters);
-        return {
-          id: String(s._id),
-          name: s.name,
-          color: s.color,
-          filters: s.filters,
-          count: await this.contactModel.countDocuments(where),
-          type: "custom",
-        };
-      }),
+      customSegments.map((s) => this.buildCustomSegmentView(tenantId, s)),
     );
 
     return {
@@ -241,6 +255,39 @@ export class ContactsService {
       color: dto.color,
       filters: dto.filters ?? {},
     });
+  }
+
+  // Unknown/foreign-tenant IDs are silently dropped rather than rejected —
+  // same behavior as bulkTag()'s $in filter — but the count of how many
+  // were skipped is returned so the caller can tell.
+  async assignContactsToSegment(
+    tenantId: string,
+    segmentId: string,
+    contactIds: string[],
+  ) {
+    const segment = await this.segmentModel
+      .findOne({ _id: segmentId, tenantId })
+      .exec();
+    if (!segment) throw new NotFoundException("Segment not found");
+
+    const validContacts = await this.contactModel
+      .find({ _id: { $in: contactIds }, tenantId })
+      .select("_id")
+      .lean()
+      .exec();
+    const skipped = contactIds.length - validContacts.length;
+
+    const merged = new Map(
+      [...segment.contactIds, ...validContacts.map((c) => c._id)].map((id) => [
+        String(id),
+        id,
+      ]),
+    );
+    segment.contactIds = Array.from(merged.values());
+    await segment.save();
+
+    const view = await this.buildCustomSegmentView(tenantId, segment);
+    return { success: true, data: { ...view, skipped } };
   }
 
   async importFromExcel(tenantId: string, buffer: Buffer) {

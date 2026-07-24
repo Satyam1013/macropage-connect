@@ -19,6 +19,7 @@ import { FileInterceptor } from "@nestjs/platform-express";
 import { ContactsService } from "./contacts.service";
 import { CreateContactDto } from "./dto/create-contact.dto";
 import { CreateSegmentDto } from "./dto/create-segment.dto";
+import { AssignSegmentContactsDto } from "./dto/assign-segment-contacts.dto";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { UserPayload } from "../auth/dto/auth-response.interface";
 
@@ -41,6 +42,21 @@ export class ContactsController {
   ) {
     const tenantId = req.user.tenantId ?? req.user.id;
     return this.contactsService.createSegment(tenantId, dto);
+  }
+
+  @Patch("segments/:id")
+  @HttpCode(HttpStatus.OK)
+  assignSegmentContacts(
+    @Request() req: { user: UserPayload & { tenantId?: string } },
+    @Param("id") id: string,
+    @Body() dto: AssignSegmentContactsDto,
+  ) {
+    const tenantId = req.user.tenantId ?? req.user.id;
+    return this.contactsService.assignContactsToSegment(
+      tenantId,
+      id,
+      dto.contactIds,
+    );
   }
 
   @Post("import")

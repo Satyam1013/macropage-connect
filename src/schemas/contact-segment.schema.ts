@@ -1,5 +1,5 @@
 import { Prop, Schema, SchemaFactory } from "@nestjs/mongoose";
-import { HydratedDocument } from "mongoose";
+import { HydratedDocument, Schema as MongooseSchema, Types } from "mongoose";
 
 export type ContactSegmentDocument = HydratedDocument<ContactSegment> & {
   createdAt: Date;
@@ -21,6 +21,14 @@ export class ContactSegment {
 
   @Prop({ type: Object, default: {} })
   filters!: Record<string, unknown>;
+
+  // Manually-assigned members, on top of whatever `filters` matches.
+  // A segment's effective count is the union of the two.
+  @Prop({
+    type: [{ type: MongooseSchema.Types.ObjectId, ref: "Contact" }],
+    default: [],
+  })
+  contactIds!: Types.ObjectId[];
 }
 
 export const ContactSegmentSchema =
