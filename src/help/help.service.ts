@@ -3,7 +3,12 @@ import { InjectModel } from "@nestjs/mongoose";
 import { Model } from "mongoose";
 import { HelpDoc, HelpDocDocument } from "../schemas/help-doc.schema";
 import { HelpFaq, HelpFaqDocument } from "../schemas/help-faq.schema";
+import {
+  SupportTicket,
+  SupportTicketDocument,
+} from "../schemas/support-ticket.schema";
 import { DOC_ARTICLES, FAQ_ITEMS } from "./help.seed";
+import { CreateTicketDto } from "./dto/create-ticket.dto";
 
 @Injectable()
 export class HelpService implements OnModuleInit {
@@ -14,6 +19,8 @@ export class HelpService implements OnModuleInit {
     private readonly docModel: Model<HelpDocDocument>,
     @InjectModel(HelpFaq.name)
     private readonly faqModel: Model<HelpFaqDocument>,
+    @InjectModel(SupportTicket.name)
+    private readonly ticketModel: Model<SupportTicketDocument>,
   ) {}
 
   async onModuleInit() {
@@ -83,5 +90,24 @@ export class HelpService implements OnModuleInit {
       incidents: [],
       updatedAt: new Date().toISOString(),
     };
+  }
+
+  async createTicket(
+    tenantId: string,
+    user: { id: string; name: string; email: string },
+    dto: CreateTicketDto,
+  ) {
+    const ticket = await this.ticketModel.create({
+      tenantId,
+      userId: user.id,
+      userName: user.name,
+      userEmail: user.email,
+      subject: dto.subject,
+      description: dto.description,
+      category: dto.category ?? "other",
+      priority: dto.priority ?? "medium",
+      attachments: dto.attachments ?? [],
+    });
+    return { success: true, data: ticket };
   }
 }

@@ -2,6 +2,10 @@ import { Module } from "@nestjs/common";
 import { MongooseModule } from "@nestjs/mongoose";
 import { HelpDoc, HelpDocSchema } from "../schemas/help-doc.schema";
 import { HelpFaq, HelpFaqSchema } from "../schemas/help-faq.schema";
+import {
+  SupportTicket,
+  SupportTicketSchema,
+} from "../schemas/support-ticket.schema";
 import { HelpService } from "./help.service";
 import { HelpController } from "./help.controller";
 
@@ -10,6 +14,7 @@ import { HelpController } from "./help.controller";
     MongooseModule.forFeature([
       { name: HelpDoc.name, schema: HelpDocSchema },
       { name: HelpFaq.name, schema: HelpFaqSchema },
+      { name: SupportTicket.name, schema: SupportTicketSchema },
     ]),
   ],
   providers: [HelpService],

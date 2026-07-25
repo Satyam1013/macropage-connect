@@ -1,9 +1,34 @@
-import { Controller, Get, Post, Query, HttpCode, HttpStatus } from "@nestjs/common";
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Query,
+  UseGuards,
+  Request,
+  HttpCode,
+  HttpStatus,
+} from "@nestjs/common";
 import { HelpService } from "./help.service";
+import { CreateTicketDto } from "./dto/create-ticket.dto";
+import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
+import type { AuthReq } from "../auth/dto/auth-request.interface";
 
 @Controller("help")
 export class HelpController {
   constructor(private readonly helpService: HelpService) {}
+
+  @Post("tickets")
+  @HttpCode(HttpStatus.CREATED)
+  @UseGuards(JwtAuthGuard)
+  createTicket(@Request() req: AuthReq, @Body() dto: CreateTicketDto) {
+    const tenantId = req.user.tenantId ?? req.user.id;
+    return this.helpService.createTicket(
+      tenantId,
+      { id: req.user.id, name: req.user.name, email: req.user.email },
+      dto,
+    );
+  }
 
   @Get("docs")
   getDocs(@Query("category") category?: string) {
