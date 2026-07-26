@@ -7,6 +7,8 @@ import {
 import { InjectModel } from "@nestjs/mongoose";
 import { Model } from "mongoose";
 import ExcelJS from "exceljs";
+import axios from "axios";
+import * as fastcsv from "fast-csv";
 import { Contact, ContactDocument } from "../schemas/contact.schema";
 import {
   ContactSegment,
@@ -16,7 +18,7 @@ import { CreateContactDto } from "./dto/create-contact.dto";
 import { CreateSegmentDto } from "./dto/create-segment.dto";
 import type { ContactFilters } from "./contacts.types";
 
-const IMPORT_COLUMNS = [
+const IMPORT_FIELDS = [
   "name",
   "phone",
   "email",
@@ -24,9 +26,10 @@ const IMPORT_COLUMNS = [
   "city",
   "state",
   "country",
-  "jobtitle",
+  "jobTitle",
   "tags",
 ] as const;
+type ImportField = (typeof IMPORT_FIELDS)[number];
 
 function cellToText(value: ExcelJS.CellValue): string {
   if (value === null || value === undefined) return "";
@@ -59,6 +62,62 @@ function normalizeImportPhone(raw: string): string | null {
   return null;
 }
 
+function parseCsvRows(buffer: Buffer): Promise<Record<string, string>[]> {
+  return new Promise((resolve, reject) => {
+    const rows: Record<string, string>[] = [];
+    fastcsv
+      .parseString(buffer.toString("utf-8"), {
+        headers: true,
+        trim: true,
+        ignoreEmpty: true,
+      })
+      .on("data", (row: Record<string, string>) => rows.push(row))
+      .on("end", () => resolve(rows))
+      .on("error", (err: Error) =>
+        reject(
+          new BadRequestException(`Could not read CSV file: ${err.message}`),
+        ),
+      );
+  });
+}
+
+async function parseXlsxRows(
+  buffer: Buffer,
+): Promise<Record<string, string>[]> {
+  const workbook = new ExcelJS.Workbook();
+  try {
+    await workbook.xlsx.load(buffer as unknown as ExcelJS.Buffer);
+  } catch {
+    throw new BadRequestException(
+      "Could not read file — please upload a valid .xlsx file",
+    );
+  }
+
+  const sheet = workbook.worksheets[0];
+  if (!sheet) throw new BadRequestException("The uploaded file has no sheets");
+
+  const headers: string[] = [];
+  sheet.getRow(1).eachCell((cell, colNumber) => {
+    headers[colNumber] = cellToText(cell.value);
+  });
+
+  const rows: Record<string, string>[] = [];
+  sheet.eachRow((row, rowNumber) => {
+    if (rowNumber === 1) return; // header
+    const isBlank =
+      row.values == null || (row.values as unknown[]).length === 0;
+    if (isBlank) return;
+
+    const obj: Record<string, string> = {};
+    headers.forEach((header, colNumber) => {
+      if (!header) return;
+      obj[header] = cellToText(row.getCell(colNumber).value);
+    });
+    rows.push(obj);
+  });
+  return rows;
+}
+
 @Injectable()
 export class ContactsService {
   constructor(
@@ -88,20 +147,25 @@ export class ContactsService {
     return where;
   }
 
-  // A custom segment's count is the union of its dynamic `filters` match
-  // and its manually-assigned `contactIds` — not just one or the other.
+  // A custom segment's membership is the union of its dynamic `filters`
+  // match and its manually-assigned `contactIds` — not just one or the
+  // other. Shared by the count in buildCustomSegmentView() and the actual
+  // member listing in getSegmentContacts() so they can't disagree.
+  private buildSegmentWhere(
+    tenantId: string,
+    segment: Pick<ContactSegmentDocument, "filters" | "contactIds">,
+  ): Record<string, unknown> {
+    const filterWhere = this.buildWhere(tenantId, segment.filters);
+    return segment.contactIds.length > 0
+      ? { $or: [filterWhere, { tenantId, _id: { $in: segment.contactIds } }] }
+      : filterWhere;
+  }
+
   private async buildCustomSegmentView(
     tenantId: string,
     segment: ContactSegmentDocument,
   ) {
-    const filterWhere = this.buildWhere(tenantId, segment.filters);
-    const where =
-      segment.contactIds.length > 0
-        ? {
-            $or: [filterWhere, { tenantId, _id: { $in: segment.contactIds } }],
-          }
-        : filterWhere;
-
+    const where = this.buildSegmentWhere(tenantId, segment);
     return {
       id: String(segment._id),
       name: segment.name,
@@ -110,6 +174,35 @@ export class ContactsService {
       count: await this.contactModel.countDocuments(where),
       type: "custom" as const,
     };
+  }
+
+  // The actual member contacts of a segment (paginated) — GET
+  // /contacts/segments only returns counts for the sidebar, this is what
+  // backs "show me who's actually in this segment."
+  async getSegmentContacts(
+    tenantId: string,
+    segmentId: string,
+    filters: { page?: number; limit?: number } = {},
+  ) {
+    const segment = await this.segmentModel
+      .findOne({ _id: segmentId, tenantId })
+      .exec();
+    if (!segment) throw new NotFoundException("Segment not found");
+
+    const { page = 1, limit = 20 } = filters;
+    const where = this.buildSegmentWhere(tenantId, segment);
+
+    const [data, total] = await Promise.all([
+      this.contactModel
+        .find(where)
+        .sort({ createdAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .exec(),
+      this.contactModel.countDocuments(where),
+    ]);
+
+    return { success: true, data: { data, total, page, limit } };
   }
 
   async findAll(tenantId: string, filters: ContactFilters = {}) {
@@ -290,60 +383,76 @@ export class ContactsService {
     return { success: true, data: { ...view, skipped } };
   }
 
-  async importFromExcel(tenantId: string, buffer: Buffer) {
-    const workbook = new ExcelJS.Workbook();
+  // fileUrl must point at our own DO Spaces bucket — this endpoint has the
+  // server fetch a client-supplied URL, so an unrestricted host would be SSRF.
+  private async downloadImportFile(fileUrl: string): Promise<Buffer> {
+    let parsed: URL;
     try {
-      await workbook.xlsx.load(buffer as unknown as ExcelJS.Buffer);
+      parsed = new URL(fileUrl);
     } catch {
+      throw new BadRequestException("Invalid fileUrl");
+    }
+    if (!parsed.hostname.endsWith(".digitaloceanspaces.com")) {
       throw new BadRequestException(
-        "Could not read file — please upload a valid .xlsx file",
+        "fileUrl must point to a DigitalOcean Spaces file",
       );
     }
 
-    const sheet = workbook.worksheets[0];
-    if (!sheet) {
-      throw new BadRequestException("The uploaded file has no sheets");
+    try {
+      const resp = await axios.get<ArrayBuffer>(fileUrl, {
+        responseType: "arraybuffer",
+        timeout: 30000,
+        maxContentLength: 5 * 1024 * 1024,
+      });
+      return Buffer.from(resp.data);
+    } catch {
+      throw new BadRequestException("Could not download file from fileUrl");
     }
+  }
 
-    const headerRow = sheet.getRow(1);
-    const columnIndex = new Map<(typeof IMPORT_COLUMNS)[number], number>();
-    headerRow.eachCell((cell, colNumber) => {
-      const key = cellToText(cell.value).toLowerCase().replace(/\s+/g, "");
-      if ((IMPORT_COLUMNS as readonly string[]).includes(key)) {
-        columnIndex.set(key as (typeof IMPORT_COLUMNS)[number], colNumber);
-      }
-    });
+  async importContacts(
+    tenantId: string,
+    fileUrl: string,
+    columnMapping?: Record<string, string>,
+    duplicateHandling: "skip" | "update" = "skip",
+  ) {
+    const buffer = await this.downloadImportFile(fileUrl);
+    const pathname = new URL(fileUrl).pathname.toLowerCase();
 
-    if (!columnIndex.has("name") || !columnIndex.has("phone")) {
+    let rawRows: Record<string, string>[];
+    if (pathname.endsWith(".csv")) {
+      rawRows = await parseCsvRows(buffer);
+    } else if (pathname.endsWith(".xlsx")) {
+      rawRows = await parseXlsxRows(buffer);
+    } else {
       throw new BadRequestException(
-        "Sheet must have 'name' and 'phone' columns in the header row",
+        "Unsupported file type — fileUrl must be a .xlsx or .csv file",
       );
     }
 
-    const cellText = (row: ExcelJS.Row, col?: number): string =>
-      col ? cellToText(row.getCell(col).value) : "";
+    const mapping = Object.fromEntries(
+      IMPORT_FIELDS.map((field) => [field, columnMapping?.[field] ?? field]),
+    ) as Record<ImportField, string>;
 
-    const existingContacts = await this.contactModel
-      .find({ tenantId })
-      .select("phone")
-      .lean()
-      .exec();
-    const existingPhones = new Set(existingContacts.map((c) => c.phone));
+    const getField = (row: Record<string, string>, field: ImportField) =>
+      (row[mapping[field]] ?? "").toString().trim();
+
+    const existingPhones = new Set(
+      (
+        await this.contactModel.find({ tenantId }).select("phone").lean().exec()
+      ).map((c) => c.phone),
+    );
 
     const toInsert: Partial<Contact>[] = [];
+    const toUpdate: { phone: string; data: Partial<Contact> }[] = [];
     const errors: { row: number; reason: string }[] = [];
+    const seenInFile = new Set<string>();
     let skipped = 0;
-    let totalRows = 0;
 
-    sheet.eachRow((row, rowNumber) => {
-      if (rowNumber === 1) return; // header
-      const isBlank =
-        row.values == null || (row.values as unknown[]).length === 0;
-      if (isBlank) return;
-      totalRows++;
-
-      const name = cellText(row, columnIndex.get("name"));
-      const rawPhone = cellText(row, columnIndex.get("phone"));
+    rawRows.forEach((row, i) => {
+      const rowNumber = i + 2; // +1 for header row, +1 for 1-indexing
+      const name = getField(row, "name");
+      const rawPhone = getField(row, "phone");
 
       if (!name || !rawPhone) {
         errors.push({ row: rowNumber, reason: "Missing name or phone" });
@@ -356,42 +465,55 @@ export class ContactsService {
         return;
       }
 
-      if (existingPhones.has(phone)) {
-        skipped++;
-        return;
-      }
-      existingPhones.add(phone); // guard against duplicate rows within the file itself
+      const isExisting = existingPhones.has(phone);
+      const isDupInFile = seenInFile.has(phone);
+      const tagsRaw = getField(row, "tags");
 
-      const tagsRaw = cellText(row, columnIndex.get("tags"));
-
-      toInsert.push({
+      const contactData: Partial<Contact> = {
         tenantId,
         name,
         phone,
-        email: cellText(row, columnIndex.get("email")) || undefined,
-        company: cellText(row, columnIndex.get("company")) || undefined,
-        city: cellText(row, columnIndex.get("city")) || undefined,
-        state: cellText(row, columnIndex.get("state")) || undefined,
-        country: cellText(row, columnIndex.get("country")) || undefined,
-        jobTitle: cellText(row, columnIndex.get("jobtitle")) || undefined,
+        email: getField(row, "email") || undefined,
+        company: getField(row, "company") || undefined,
+        city: getField(row, "city") || undefined,
+        state: getField(row, "state") || undefined,
+        country: getField(row, "country") || undefined,
+        jobTitle: getField(row, "jobTitle") || undefined,
         tags: tagsRaw
           ? tagsRaw
               .split(/[,;]/)
               .map((t) => t.trim())
               .filter(Boolean)
           : [],
-      });
+      };
+
+      if (isExisting || isDupInFile) {
+        if (duplicateHandling === "update" && isExisting && !isDupInFile) {
+          toUpdate.push({ phone, data: contactData });
+        } else {
+          skipped++;
+        }
+        seenInFile.add(phone);
+        return;
+      }
+
+      seenInFile.add(phone);
+      toInsert.push(contactData);
     });
 
     if (toInsert.length > 0) {
       await this.contactModel.insertMany(toInsert, { ordered: false });
     }
+    for (const { phone, data } of toUpdate) {
+      await this.contactModel.updateOne({ tenantId, phone }, { $set: data });
+    }
 
     return {
       success: true,
       data: {
-        totalRows,
+        totalRows: rawRows.length,
         imported: toInsert.length,
+        updated: toUpdate.length,
         skipped,
         failed: errors.length,
         errors,

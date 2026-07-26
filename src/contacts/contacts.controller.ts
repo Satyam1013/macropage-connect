@@ -8,18 +8,15 @@ import {
   Param,
   Query,
   UseGuards,
-  UseInterceptors,
-  UploadedFile,
   Request,
   HttpCode,
   HttpStatus,
-  BadRequestException,
 } from "@nestjs/common";
-import { FileInterceptor } from "@nestjs/platform-express";
 import { ContactsService } from "./contacts.service";
 import { CreateContactDto } from "./dto/create-contact.dto";
 import { CreateSegmentDto } from "./dto/create-segment.dto";
 import { AssignSegmentContactsDto } from "./dto/assign-segment-contacts.dto";
+import { ImportContactsDto } from "./dto/import-contacts.dto";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { UserPayload } from "../auth/dto/auth-response.interface";
 
@@ -59,26 +56,33 @@ export class ContactsController {
     );
   }
 
+  @Get("segments/:id/contacts")
+  getSegmentContacts(
+    @Request() req: { user: UserPayload & { tenantId?: string } },
+    @Param("id") id: string,
+    @Query("page") page?: string,
+    @Query("limit") limit?: string,
+  ) {
+    const tenantId = req.user.tenantId ?? req.user.id;
+    return this.contactsService.getSegmentContacts(tenantId, id, {
+      page: page ? Number(page) : 1,
+      limit: limit ? Number(limit) : 20,
+    });
+  }
+
   @Post("import")
   @HttpCode(HttpStatus.OK)
-  @UseInterceptors(FileInterceptor("file"))
   importContacts(
     @Request() req: { user: UserPayload & { tenantId?: string } },
-    @UploadedFile() file: Express.Multer.File,
+    @Body() dto: ImportContactsDto,
   ) {
-    if (!file) throw new BadRequestException("No file uploaded");
-    const isExcel =
-      file.mimetype.includes("spreadsheetml") ||
-      file.originalname.toLowerCase().endsWith(".xlsx");
-    if (!isExcel) {
-      throw new BadRequestException("Only .xlsx files are supported");
-    }
-    if (file.size > 5 * 1024 * 1024) {
-      throw new BadRequestException("File must be under 5MB");
-    }
-
     const tenantId = req.user.tenantId ?? req.user.id;
-    return this.contactsService.importFromExcel(tenantId, file.buffer);
+    return this.contactsService.importContacts(
+      tenantId,
+      dto.fileUrl,
+      dto.columnMapping,
+      dto.duplicateHandling,
+    );
   }
 
   @Get()
