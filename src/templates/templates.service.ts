@@ -32,11 +32,37 @@ export class TemplatesService {
     return t;
   }
 
-  private buildComponents(
+  private async buildComponents(
+    tenantId: string,
     dto: Partial<CreateTemplateDto> & Pick<CreateTemplateDto, "body">,
-  ): Record<string, unknown>[] {
+  ): Promise<Record<string, unknown>[]> {
     const components: Record<string, unknown>[] = [];
-    if (dto.header) components.push({ type: "HEADER", ...dto.header });
+    if (dto.header) {
+      const header = dto.header as Record<string, unknown> & {
+        format?: string;
+        mediaUrl?: string;
+      };
+      // Meta doesn't accept a raw mediaUrl on the component — media
+      // headers need the file uploaded through Meta's Resumable Upload
+      // API first, exchanged for a "handle" referenced in the example.
+      if (
+        header.format &&
+        header.format !== "TEXT" &&
+        typeof header.mediaUrl === "string"
+      ) {
+        const handle = await this.metaService.uploadMediaHandleFromUrl(
+          tenantId,
+          header.mediaUrl,
+        );
+        components.push({
+          type: "HEADER",
+          format: header.format,
+          example: { header_handle: [handle] },
+        });
+      } else {
+        components.push({ type: "HEADER", ...header });
+      }
+    }
 
     const bodyComp: Record<string, unknown> = { type: "BODY", text: dto.body };
     const bodyHasVars = /\{\{\d+\}\}/.test(dto.body);
@@ -109,7 +135,7 @@ export class TemplatesService {
     dto: CreateTemplateDto,
   ): Promise<TemplateDocument> {
     const client = await this.metaService.getClient(tenantId);
-    const components = this.buildComponents(dto);
+    const components = await this.buildComponents(tenantId, dto);
 
     let metaId: string | undefined;
     try {
@@ -208,7 +234,7 @@ export class TemplatesService {
     const category =
       (dto.category as TemplateCategory | undefined) ?? t.category;
 
-    const components = this.buildComponents({
+    const components = await this.buildComponents(tenantId, {
       body,
       header,
       footer,

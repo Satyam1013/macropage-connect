@@ -82,6 +82,79 @@ export class MetaService {
     return this.encryption.decrypt(waba.accessToken);
   }
 
+  // Template headers with an IMAGE/VIDEO/DOCUMENT format can't reference a
+  // public URL directly — Meta requires the file to go through their
+  // Resumable Upload API first, which returns a one-time "handle" string
+  // for use in the template's example.header_handle field. mediaUrl must
+  // point at our own DO Spaces bucket since this fetches a client-supplied
+  // URL server-side (SSRF guard).
+  async uploadMediaHandleFromUrl(
+    tenantId: string,
+    mediaUrl: string,
+  ): Promise<string> {
+    let parsed: URL;
+    try {
+      parsed = new URL(mediaUrl);
+    } catch {
+      throw new BadRequestException("Invalid header media URL");
+    }
+    if (!parsed.hostname.endsWith(".digitaloceanspaces.com")) {
+      throw new BadRequestException(
+        "Header media URL must point to a DigitalOcean Spaces file",
+      );
+    }
+
+    const fileResp = await axios
+      .get<ArrayBuffer>(mediaUrl, {
+        responseType: "arraybuffer",
+        timeout: 30000,
+        maxContentLength: 16 * 1024 * 1024,
+      })
+      .catch(() => {
+        throw new BadRequestException(
+          "Could not download header media from mediaUrl",
+        );
+      });
+    const buffer = Buffer.from(fileResp.data);
+    const mimeType =
+      (fileResp.headers["content-type"] as string | undefined) ??
+      "application/octet-stream";
+
+    const appId = process.env.META_APP_ID;
+    if (!appId) {
+      throw new BadRequestException(
+        "META_APP_ID not configured — contact support",
+      );
+    }
+    const token = await this.getAccessToken(tenantId);
+
+    const session = await axios.post<{ id: string }>(
+      `${BASE}/${appId}/uploads`,
+      null,
+      {
+        params: {
+          file_length: buffer.length,
+          file_type: mimeType,
+          access_token: token,
+        },
+      },
+    );
+
+    const upload = await axios.post<{ h: string }>(
+      `${BASE}/${session.data.id}`,
+      buffer,
+      {
+        headers: {
+          Authorization: `OAuth ${token}`,
+          file_offset: "0",
+          "Content-Type": "application/octet-stream",
+        },
+      },
+    );
+
+    return upload.data.h;
+  }
+
   private readonly logger = new Logger(MetaService.name);
 
   private handleMetaError(tenantId: string) {
