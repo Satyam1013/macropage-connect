@@ -171,6 +171,7 @@ export class ContactsService {
       name: segment.name,
       color: segment.color,
       filters: segment.filters,
+      contactIds: segment.contactIds.map(String),
       count: await this.contactModel.countDocuments(where),
       type: "custom" as const,
     };
