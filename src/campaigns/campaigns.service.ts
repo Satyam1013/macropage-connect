@@ -3,6 +3,7 @@ import {
   Logger,
   NotFoundException,
   BadRequestException,
+  HttpException,
 } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
 import { Model, Types } from "mongoose";
@@ -286,7 +287,7 @@ export class CampaignsService {
           "campaign",
         );
       } catch (err) {
-        const reason = err instanceof Error ? err.message : "Unknown error";
+        const reason = this.extractSendErrorReason(err);
         await this.recipientModel.updateOne(
           { _id: recipient._id },
           { status: "failed", failedAt: new Date(), failureReason: reason },
@@ -313,6 +314,23 @@ export class CampaignsService {
       );
       this.logger.log(`Campaign ${campaignId} completed`);
     }
+  }
+
+  // MetaService.handleMetaError throws BadRequestException with an object
+  // body ({ error: { message } }), not a plain string — so err.message on
+  // it is just Nest's generic "Bad Request Exception", not the actual
+  // reason Meta rejected the send. Unwrap the real message so
+  // failureReason is actually useful for debugging.
+  private extractSendErrorReason(err: unknown): string {
+    if (err instanceof HttpException) {
+      const response = err.getResponse();
+      if (typeof response === "object" && response !== null) {
+        const detail = (response as { error?: { message?: string } }).error
+          ?.message;
+        if (detail) return detail;
+      }
+    }
+    return err instanceof Error ? err.message : "Unknown error";
   }
 
   async retry(tenantId: string, id: string): Promise<CampaignDocument> {
