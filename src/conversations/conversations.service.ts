@@ -282,7 +282,7 @@ export class ConversationsService {
         usageCategory = tpl.category.toLowerCase() as typeof usageCategory;
       }
 
-      let resolvedVars = dto.templateVars;
+      let resolvedVars = dto.templateVars ?? dto.variables;
       if (!resolvedVars || Object.keys(resolvedVars).length === 0) {
         const sampleKeys = Object.keys(
           (tpl?.sampleVariables as Record<string, string> | undefined) ?? {},
@@ -300,16 +300,49 @@ export class ConversationsService {
               .sort((a, b) => Number(a) - Number(b))
               .map((k) => ({ type: "text", text: resolvedVars[k] }))
           : [];
+
+      // Media-header templates have their FORMAT fixed at registration
+      // (stored on tpl.header) but the actual media link is supplied fresh
+      // on every send — omitting it is exactly what causes Meta's #132012
+      // "Parameter format does not match format in the created template".
+      const storedHeader = tpl?.header as { format?: string } | undefined;
+      const headerInput = dto.header as
+        | {
+            format?: string;
+            type?: string;
+            mediaUrl?: string;
+            link?: string;
+            url?: string;
+          }
+        | undefined;
+      const headerFormat = (
+        headerInput?.format ??
+        headerInput?.type ??
+        storedHeader?.format
+      )?.toUpperCase();
+      const headerMedia =
+        headerInput?.mediaUrl ?? headerInput?.link ?? headerInput?.url;
+
+      const components: Record<string, unknown>[] = [];
+      if (headerFormat && headerFormat !== "TEXT" && headerMedia) {
+        const mediaKey = headerFormat.toLowerCase();
+        components.push({
+          type: "header",
+          parameters: [{ type: mediaKey, [mediaKey]: { link: headerMedia } }],
+        });
+      }
+      if (bodyParams.length > 0) {
+        components.push({ type: "body", parameters: bodyParams });
+      }
+
       payload = {
         messaging_product: "whatsapp",
         to: contactPhone,
         type: "template",
         template: {
           name: dto.templateName,
-          language: { code: "en_US" },
-          ...(bodyParams.length > 0 && {
-            components: [{ type: "body", parameters: bodyParams }],
-          }),
+          language: { code: tpl?.language ?? "en_US" },
+          ...(components.length > 0 && { components }),
         },
       };
     } else {

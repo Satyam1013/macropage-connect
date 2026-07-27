@@ -21,7 +21,27 @@ export class SendMessageDto {
   templateName?: string;
 
   @IsOptional()
+  @IsString()
+  templateId?: string;
+
+  @IsOptional()
   templateVars?: Record<string, string>;
+
+  // Frontend sends the resolved {{n}} values under "variables" —
+  // accepted alongside templateVars so neither naming gets silently
+  // stripped by the global ValidationPipe's whitelist.
+  @IsOptional()
+  variables?: Record<string, string>;
+
+  @IsOptional()
+  header?: Record<string, unknown>;
+
+  @IsOptional()
+  @IsString()
+  footer?: string;
+
+  @IsOptional()
+  buttons?: unknown[];
 }
 
 export class AddNoteDto {
