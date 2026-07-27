@@ -95,6 +95,12 @@ export class AuthController {
   }
 
   @UseGuards(JwtAuthGuard)
+  @Delete("sessions")
+  revokeAllSessions(@Request() req: { user: UserPayload }) {
+    return this.authService.revokeAllSessions(req.user.id);
+  }
+
+  @UseGuards(JwtAuthGuard)
   @Get("me")
   async me(@Request() req: { user: UserPayload }) {
     const user = await this.authService.getMe(req.user.id);

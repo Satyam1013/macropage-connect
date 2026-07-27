@@ -331,6 +331,11 @@ export class AuthService {
     await this.sessionModel.deleteOne({ _id: sessionId });
   }
 
+  async revokeAllSessions(userId: string): Promise<{ deletedCount: number }> {
+    const result = await this.sessionModel.deleteMany({ userId }).exec();
+    return { deletedCount: result.deletedCount ?? 0 };
+  }
+
   // ─── Helpers ──────────────────────────────────────────────────────────────
 
   private buildAuthResponse(user: UserDocument, message: string): AuthResponse {
