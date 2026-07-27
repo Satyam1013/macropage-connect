@@ -147,6 +147,16 @@ export class ContactsController {
     return this.contactsService.remove(tenantId, id);
   }
 
+  @Post("bulk-delete")
+  @HttpCode(HttpStatus.OK)
+  bulkDelete(
+    @Request() req: { user: UserPayload & { tenantId?: string } },
+    @Body() body: { ids: string[] },
+  ) {
+    const tenantId = req.user.tenantId ?? req.user.id;
+    return this.contactsService.bulkDelete(tenantId, body.ids);
+  }
+
   @Post("bulk-tag")
   @HttpCode(HttpStatus.OK)
   bulkTag(

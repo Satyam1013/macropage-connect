@@ -282,6 +282,16 @@ export class ContactsService {
     if (!result.deletedCount) throw new NotFoundException("Contact not found");
   }
 
+  async bulkDelete(
+    tenantId: string,
+    ids: string[],
+  ): Promise<{ deletedCount: number }> {
+    const result = await this.contactModel
+      .deleteMany({ _id: { $in: ids }, tenantId })
+      .exec();
+    return { deletedCount: result.deletedCount ?? 0 };
+  }
+
   async bulkTag(
     tenantId: string,
     ids: string[],
