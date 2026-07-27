@@ -12,6 +12,7 @@ import {
   CampaignRecipientDocument,
 } from "../schemas/campaign-recipient.schema";
 import { Template, TemplateDocument } from "../schemas/template.schema";
+import { ContactDocument } from "../schemas/contact.schema";
 import { ContactsService } from "../contacts/contacts.service";
 import { MetaService } from "../meta/meta.service";
 import { MessageUsageService } from "../analytics/message-usage.service";
@@ -20,6 +21,72 @@ function normalizePhone(raw: string): string {
   const digits = raw.replace(/\D/g, "");
   if (digits.length === 10 && /^[6-9]/.test(digits)) return `91${digits}`;
   return digits;
+}
+
+// variableMapping keys look like "{{1}}", "{{2}}" — values are either a
+// contactX merge-tag pulled from the recipient's own record, or a literal
+// string to send as-is.
+function resolveCampaignVariable(
+  mappingValue: unknown,
+  contact: ContactDocument,
+): string {
+  if (typeof mappingValue !== "string") return "";
+  const contactFields: Record<string, string | undefined> = {
+    contactName: contact.name,
+    contactPhone: contact.phone,
+    contactEmail: contact.email,
+    contactCompany: contact.company,
+    contactCity: contact.city,
+    contactState: contact.state,
+    contactCountry: contact.country,
+    contactJobTitle: contact.jobTitle,
+  };
+  return mappingValue in contactFields
+    ? (contactFields[mappingValue] ?? "")
+    : mappingValue;
+}
+
+function buildTemplateComponents(
+  variableMapping: Record<string, unknown>,
+  header: Record<string, unknown> | undefined,
+  contact: ContactDocument,
+): Record<string, unknown>[] {
+  const components: Record<string, unknown>[] = [];
+
+  // Media-header templates need the actual media link on every send — the
+  // format is fixed at registration but WhatsApp still expects it supplied
+  // per-message. We reuse whatever media was stored when the template was
+  // created/edited (templates.service.ts saves it on template.header).
+  const headerInfo = header as
+    | { format?: string; mediaUrl?: string; link?: string; url?: string }
+    | undefined;
+  const headerFormat = headerInfo?.format?.toUpperCase();
+  const headerMedia =
+    headerInfo?.mediaUrl ?? headerInfo?.link ?? headerInfo?.url;
+  if (headerFormat && headerFormat !== "TEXT" && headerMedia) {
+    const mediaKey = headerFormat.toLowerCase();
+    components.push({
+      type: "header",
+      parameters: [{ type: mediaKey, [mediaKey]: { link: headerMedia } }],
+    });
+  }
+
+  const bodyParams = Object.entries(variableMapping ?? {})
+    .map(([key, value]) => {
+      const match = /^\{\{(\d+)\}\}$/.exec(key);
+      return match ? { index: Number(match[1]), value } : null;
+    })
+    .filter((e): e is { index: number; value: unknown } => e !== null)
+    .sort((a, b) => a.index - b.index)
+    .map((e) => ({
+      type: "text",
+      text: resolveCampaignVariable(e.value, contact),
+    }));
+  if (bodyParams.length > 0) {
+    components.push({ type: "body", parameters: bodyParams });
+  }
+
+  return components;
 }
 
 @Injectable()
@@ -172,6 +239,18 @@ export class CampaignsService {
       }
 
       try {
+        const contact = await this.contactsService
+          .findOne(tenantId, recipient.contactId)
+          .catch(() => null);
+
+        const components = contact
+          ? buildTemplateComponents(
+              campaign.variableMapping,
+              template.header,
+              contact,
+            )
+          : [];
+
         const resp = await client.sendMessage({
           messaging_product: "whatsapp",
           to: normalizePhone(recipient.phone),
@@ -179,6 +258,7 @@ export class CampaignsService {
           template: {
             name: template.name,
             language: { code: template.language },
+            ...(components.length > 0 && { components }),
           },
         });
 
