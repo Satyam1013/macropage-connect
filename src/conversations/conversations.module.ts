@@ -15,6 +15,7 @@ import { GatewayModule } from "../gateway/gateway.module";
 import { NotificationsModule } from "../notifications/notifications.module";
 import { CampaignsModule } from "../campaigns/campaigns.module";
 import { AnalyticsModule } from "../analytics/analytics.module";
+import { UsersModule } from "../users/users.module";
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { AnalyticsModule } from "../analytics/analytics.module";
     NotificationsModule,
     CampaignsModule,
     AnalyticsModule,
+    UsersModule,
   ],
   providers: [ConversationsService],
   controllers: [ConversationsController],

@@ -12,6 +12,7 @@ import { Model } from "mongoose";
 import * as bcrypt from "bcryptjs";
 import * as crypto from "crypto";
 import { UsersService, UserDocument } from "../users/users.service";
+import { ActivityService } from "../users/activity.service";
 import { LoginDto } from "./dto/login.dto";
 import { SignupDto } from "./dto/signup.dto";
 import { OAuthDto } from "./dto/oauth.dto";
@@ -44,6 +45,7 @@ export class AuthService {
     private readonly resetTokenModel: Model<PasswordResetTokenDocument>,
     @InjectModel(Session.name)
     private readonly sessionModel: Model<SessionDocument>,
+    private readonly activityService: ActivityService,
   ) {}
 
   // ─── Signup ───────────────────────────────────────────────────────────────
@@ -96,6 +98,12 @@ export class AuthService {
     }
 
     await this.users.updateLastLogin(user.id);
+    void this.activityService.log({
+      tenantId: user.tenantId ?? user.id,
+      userId: user.id,
+      type: "LOGIN",
+      description: "Logged in",
+    });
     return this.buildAuthResponse(user, "Authenticated");
   }
 
@@ -177,6 +185,12 @@ export class AuthService {
     });
 
     await this.users.updateLastLogin(user.id);
+    void this.activityService.log({
+      tenantId: user.tenantId ?? user.id,
+      userId: user.id,
+      type: "LOGIN",
+      description: "Logged in via Google",
+    });
 
     return this.buildAuthResponse(
       user,

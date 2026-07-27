@@ -22,6 +22,7 @@ import { MetaService } from "../meta/meta.service";
 import { SocketService } from "../gateway/socket.service";
 import { CampaignsService } from "../campaigns/campaigns.service";
 import { MessageUsageService } from "../analytics/message-usage.service";
+import { ActivityService } from "../users/activity.service";
 import {
   SendMessageDto,
   AddNoteDto,
@@ -54,6 +55,7 @@ export class ConversationsService {
     private readonly notificationsService: NotificationsService,
     private readonly campaignsService: CampaignsService,
     private readonly messageUsageService: MessageUsageService,
+    private readonly activityService: ActivityService,
   ) {}
 
   async findAll(
@@ -447,6 +449,13 @@ export class ConversationsService {
         1,
         "inbox",
       );
+      void this.activityService.log({
+        tenantId,
+        userId: agentId,
+        type: "MESSAGE_SENT",
+        description: `Sent a message to ${contact.name ?? contact.phone}`,
+        meta: { conversationId, messageType: dto.type },
+      });
 
       return enriched as unknown as MessageDocument;
     } catch (err: unknown) {
