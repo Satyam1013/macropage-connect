@@ -85,6 +85,12 @@ export class ContactsController {
     );
   }
 
+  @Get("tags")
+  getTags(@Request() req: { user: UserPayload & { tenantId?: string } }) {
+    const tenantId = req.user.tenantId ?? req.user.id;
+    return this.contactsService.getTags(tenantId);
+  }
+
   @Get()
   findAll(
     @Request() req: { user: UserPayload & { tenantId?: string } },

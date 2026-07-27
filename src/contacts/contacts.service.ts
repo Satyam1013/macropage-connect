@@ -5,7 +5,7 @@ import {
   BadRequestException,
 } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
-import { Model } from "mongoose";
+import { Model, Types } from "mongoose";
 import ExcelJS from "exceljs";
 import axios from "axios";
 import * as fastcsv from "fast-csv";
@@ -223,11 +223,31 @@ export class ContactsService {
   }
 
   async findOne(tenantId: string, id: string): Promise<ContactDocument> {
+    if (!Types.ObjectId.isValid(id)) {
+      throw new NotFoundException("Contact not found");
+    }
     const contact = await this.contactModel
       .findOne({ _id: id, tenantId })
       .exec();
     if (!contact) throw new NotFoundException("Contact not found");
     return contact;
+  }
+
+  async getTags(tenantId: string) {
+    const agg = await this.contactModel.aggregate<{
+      _id: string;
+      count: number;
+    }>([
+      { $match: { tenantId, tags: { $exists: true, $ne: [] } } },
+      { $unwind: "$tags" },
+      { $group: { _id: "$tags", count: { $sum: 1 } } },
+      { $sort: { count: -1 } },
+    ]);
+
+    return {
+      success: true,
+      data: { tags: agg.map((t) => ({ tag: t._id, count: t.count })) },
+    };
   }
 
   async create(
