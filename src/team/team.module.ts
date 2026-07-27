@@ -8,6 +8,7 @@ import { TeamService } from "./team.service";
 import { TeamController } from "./team.controller";
 import { QueueModule } from "../queue/queue.module";
 import { EmailService } from "../queue/email.service";
+import { UsersModule } from "../users/users.module";
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { EmailService } from "../queue/email.service";
       }),
     }),
     QueueModule,
+    UsersModule,
   ],
   providers: [TeamService, EmailService],
   controllers: [TeamController],

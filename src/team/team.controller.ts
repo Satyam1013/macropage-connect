@@ -11,15 +11,20 @@ import {
   Request,
   HttpCode,
   HttpStatus,
+  BadRequestException,
 } from "@nestjs/common";
 import { TeamService } from "./team.service";
+import { ActivityService } from "../users/activity.service";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import type { AuthReq } from "../auth/dto/auth-request.interface";
 import { UserRole } from "../auth/auth.constants";
 
 @Controller("team")
 export class TeamController {
-  constructor(private readonly teamService: TeamService) {}
+  constructor(
+    private readonly teamService: TeamService,
+    private readonly activityService: ActivityService,
+  ) {}
 
   // ── Static GET routes (must come before /:id) ─────────────────────────────
 
@@ -28,6 +33,26 @@ export class TeamController {
   findAll(@Request() req: AuthReq, @Query("search") search?: string) {
     const tenantId = req.user.tenantId ?? req.user.id;
     return this.teamService.findAll(tenantId, search);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get("activity")
+  getMemberActivity(
+    @Request() req: AuthReq,
+    @Query("memberId") memberId?: string,
+    @Query("page") page?: string,
+    @Query("limit") limit?: string,
+    @Query("type") type?: string,
+  ) {
+    if (!memberId) throw new BadRequestException("memberId is required");
+    const tenantId = req.user.tenantId ?? req.user.id;
+    return this.activityService.getUserActivity(
+      tenantId,
+      memberId,
+      page ? Number(page) : 1,
+      limit ? Number(limit) : 20,
+      type,
+    );
   }
 
   @UseGuards(JwtAuthGuard)
