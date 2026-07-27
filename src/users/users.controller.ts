@@ -15,25 +15,29 @@ import {
   BadRequestException,
 } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
+import { IsOptional, IsString } from "class-validator";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { UsersService } from "./users.service";
 import { ActivityService } from "./activity.service";
 import { UploadService } from "../upload/upload.service";
 import type { AuthReq } from "../auth/dto/auth-request.interface";
 
+// Every field needs a validator, or the global ValidationPipe's
+// whitelist:true strips it from the request before it ever reaches the
+// controller — an undecorated DTO makes every PUT here a silent no-op.
 class UpdateProfileDto {
-  name?: string;
-  bio?: string;
-  phone?: string;
-  city?: string;
-  state?: string;
-  country?: string;
-  department?: string;
-  jobTitle?: string;
-  timezone?: string;
-  language?: string;
-  company?: string;
-  avatarUrl?: string;
+  @IsOptional() @IsString() name?: string;
+  @IsOptional() @IsString() bio?: string;
+  @IsOptional() @IsString() phone?: string;
+  @IsOptional() @IsString() city?: string;
+  @IsOptional() @IsString() state?: string;
+  @IsOptional() @IsString() country?: string;
+  @IsOptional() @IsString() department?: string;
+  @IsOptional() @IsString() jobTitle?: string;
+  @IsOptional() @IsString() timezone?: string;
+  @IsOptional() @IsString() language?: string;
+  @IsOptional() @IsString() company?: string;
+  @IsOptional() @IsString() avatarUrl?: string;
 }
 
 @UseGuards(JwtAuthGuard)
