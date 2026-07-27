@@ -48,6 +48,33 @@ export class AnalyticsService {
 
   // ─── helpers ──────────────────────────────────────────────────────────────
 
+  private static readonly MONTH_ABBR = [
+    "Jan",
+    "Feb",
+    "Mar",
+    "Apr",
+    "May",
+    "Jun",
+    "Jul",
+    "Aug",
+    "Sep",
+    "Oct",
+    "Nov",
+    "Dec",
+  ];
+
+  // "2026-07-21" -> "21 Jul". Only day-level buckets have a real calendar
+  // date to format this way — week ("%Y-%U") and month ("%Y-%m") buckets
+  // are left as-is.
+  private formatChartDate(raw: string, groupBy: string): string {
+    if (groupBy !== "day") return raw;
+    const [, month, day] = raw.split("-");
+    if (!month || !day) return raw;
+    const monthName = AnalyticsService.MONTH_ABBR[Number(month) - 1];
+    if (!monthName) return raw;
+    return `${Number(day)} ${monthName}`;
+  }
+
   private getDateRange(from?: string, to?: string) {
     const dateTo = to ? new Date(to) : new Date();
     const dateFrom = from
@@ -325,6 +352,18 @@ export class AnalyticsService {
               direction: "$direction",
             },
             count: { $sum: 1 },
+            // Cumulative funnel counts (a read message was also
+            // delivered) — based on the timestamp fields, not the single
+            // current `status`, since status only holds the latest stage.
+            delivered: {
+              $sum: { $cond: [{ $ifNull: ["$deliveredAt", false] }, 1, 0] },
+            },
+            read: {
+              $sum: { $cond: [{ $ifNull: ["$readAt", false] }, 1, 0] },
+            },
+            failed: {
+              $sum: { $cond: [{ $eq: ["$status", "FAILED"] }, 1, 0] },
+            },
           },
         },
         { $sort: { "_id.date": 1 } },
@@ -351,23 +390,47 @@ export class AnalyticsService {
       ]),
     ]);
 
-    type MsgEntry = { date: string; inbound: number; outbound: number };
+    type MsgEntry = {
+      date: string;
+      inbound: number;
+      outbound: number;
+      delivered: number;
+      read: number;
+      failed: number;
+    };
     const messageMap = new Map<string, MsgEntry>();
     for (const item of messageAgg as {
       _id: { date: string; direction: string };
       count: number;
+      delivered: number;
+      read: number;
+      failed: number;
     }[]) {
       const d = item._id.date;
-      if (!messageMap.has(d))
-        messageMap.set(d, { date: d, inbound: 0, outbound: 0 });
+      if (!messageMap.has(d)) {
+        messageMap.set(d, {
+          date: d,
+          inbound: 0,
+          outbound: 0,
+          delivered: 0,
+          read: 0,
+          failed: 0,
+        });
+      }
       const entry = messageMap.get(d)!;
       if (item._id.direction === "INBOUND") entry.inbound += item.count;
       else entry.outbound += item.count;
+      entry.delivered += item.delivered;
+      entry.read += item.read;
+      entry.failed += item.failed;
     }
-    const messages = [...messageMap.values()].map((m) => ({
-      ...m,
-      total: m.inbound + m.outbound,
-    }));
+    const messages = [...messageMap.values()]
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .map((m) => ({
+        ...m,
+        date: this.formatChartDate(m.date, safeGroupBy),
+        total: m.inbound + m.outbound,
+      }));
 
     type ConvEntry = { date: string; total: number; resolved: number };
     const convMap = new Map<string, ConvEntry>();
