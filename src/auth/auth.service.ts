@@ -172,7 +172,7 @@ export class AuthService {
 
     const { user, isNew } = await this.users.findOrCreateByGoogle({
       email: payload.email,
-      name: payload.name ?? payload.email!.split("@")[0],
+      name: payload.name ?? payload.email.split("@")[0],
       avatarUrl: payload.picture,
     });
 
