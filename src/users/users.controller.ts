@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Put,
+  Patch,
   Post,
   Body,
   Query,
@@ -62,6 +63,7 @@ export class UsersController {
   }
 
   @Put("me")
+  @Patch("me")
   @HttpCode(HttpStatus.OK)
   async updateMe(@Request() req: AuthReq, @Body() dto: UpdateProfileDto) {
     const updated = await this.usersService.updateProfile(req.user.id, dto);
