@@ -145,7 +145,9 @@ export class UsersService {
       avatarUrl: profile.avatarUrl,
       role: UserRole.OWNER,
       emailVerified: true,
-      trialEndsAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
+      trialEndsAt: new Date(
+        Date.now() + 14 * 24 * 60 * 60 * 1000,
+      ).toISOString(),
       marketingOptIn: false,
     });
 
