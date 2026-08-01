@@ -465,16 +465,24 @@ export class BillingService {
           ? "pro"
           : "free";
 
+    // tenantId identifies a tenant as "owner's own _id" everywhere in this
+    // app (req.user.tenantId ?? req.user.id), but the owner's own user doc
+    // never has a tenantId field set on itself — only team members do. A
+    // bare { tenantId } filter therefore updates every team member but
+    // skips the owner entirely, which is who actually pays.
+    const update: Record<string, unknown> = {
+      plan: isPaid ? "PRO" : "FREE",
+      billingPlan: subPlan,
+      subscriptionType,
+      paidUser: isPaid,
+    };
+    // A real paid plan supersedes any trial state — otherwise the
+    // trial-countdown banner keeps showing after upgrading.
+    if (isPaid) update.trialEndsAt = null;
+
     await this.userModel.updateMany(
-      { tenantId },
-      {
-        $set: {
-          plan: isPaid ? "PRO" : "FREE",
-          billingPlan: subPlan,
-          subscriptionType,
-          paidUser: isPaid,
-        },
-      },
+      { $or: [{ tenantId }, { _id: tenantId }] },
+      { $set: update },
     );
     this.logger.log(
       `[Billing] Synced users for tenant ${tenantId} → plan=${subPlan}`,
