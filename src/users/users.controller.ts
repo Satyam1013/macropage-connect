@@ -62,7 +62,6 @@ export class UsersController {
     };
   }
 
-  @Put("me")
   @Patch("me")
   @HttpCode(HttpStatus.OK)
   async updateMe(@Request() req: AuthReq, @Body() dto: UpdateProfileDto) {
