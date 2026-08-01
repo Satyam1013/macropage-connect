@@ -2,12 +2,6 @@ import mongoose from "mongoose";
 import * as dotenv from "dotenv";
 dotenv.config();
 
-// One-time fix for the syncUserPlan bug: it filtered users by
-// { tenantId }, which never matches an owner's own document (owners never
-// have a tenantId field set on themselves — only team members do, pointing
-// at the owner's _id). So every owner who upgraded kept showing their old
-// trial-era plan/trialEndsAt. This re-runs the same sync for every tenant
-// with an ACTIVE subscription, now matching { $or: [{tenantId}, {_id}] }.
 const PAID_PLANS = ["STARTER", "GROWTH", "BUSINESS", "ENTERPRISE"];
 
 async function main() {
@@ -25,7 +19,7 @@ async function main() {
 
   let usersUpdated = 0;
   for (const sub of activeSubs) {
-    const tenantId = sub.tenantId as string;
+    const tenantId = String(sub.tenantId);
     const plan = sub.plan as string;
     const isPaid = PAID_PLANS.includes(plan);
     const subscriptionType =
@@ -48,12 +42,10 @@ async function main() {
       continue;
     }
 
+    const ownerId = new mongoose.Types.ObjectId(tenantId);
     const result = await db.collection("users").updateMany(
       {
-        $or: [
-          { tenantId },
-          { _id: new mongoose.Types.ObjectId(tenantId) },
-        ],
+        $or: [{ tenantId }, { tenantId: ownerId }, { _id: ownerId }],
       },
       { $set: update },
     );
@@ -70,7 +62,11 @@ async function main() {
   await mongoose.disconnect();
 }
 
-main().catch((err) => {
-  console.error("ERROR:", err.message);
+main().catch((err: unknown) => {
+  if (err instanceof Error) {
+    console.error("ERROR:", err.message);
+  } else {
+    console.error("ERROR:", err);
+  }
   process.exit(1);
 });

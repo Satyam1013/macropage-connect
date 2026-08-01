@@ -1,7 +1,6 @@
 import {
   Controller,
   Get,
-  Put,
   Patch,
   Post,
   Body,
@@ -23,9 +22,6 @@ import { ActivityService } from "./activity.service";
 import { UploadService } from "../upload/upload.service";
 import type { AuthReq } from "../auth/dto/auth-request.interface";
 
-// Every field needs a validator, or the global ValidationPipe's
-// whitelist:true strips it from the request before it ever reaches the
-// controller — an undecorated DTO makes every PUT here a silent no-op.
 class UpdateProfileDto {
   @IsOptional() @IsString() name?: string;
   @IsOptional() @IsString() bio?: string;
