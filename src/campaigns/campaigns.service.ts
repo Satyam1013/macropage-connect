@@ -13,7 +13,10 @@ import {
   CampaignRecipientDocument,
 } from "../schemas/campaign-recipient.schema";
 import { Template, TemplateDocument } from "../schemas/template.schema";
-import { ContactDocument } from "../schemas/contact.schema";
+import {
+  Contact,
+  ContactDocument,
+} from "../schemas/contact.schema";
 import { ContactsService } from "../contacts/contacts.service";
 import { MetaService } from "../meta/meta.service";
 import { MessageUsageService } from "../analytics/message-usage.service";
@@ -101,6 +104,8 @@ export class CampaignsService {
     private readonly recipientModel: Model<CampaignRecipientDocument>,
     @InjectModel(Template.name)
     private readonly templateModel: Model<TemplateDocument>,
+    @InjectModel(Contact.name)
+    private readonly contactModel: Model<ContactDocument>,
     private readonly contactsService: ContactsService,
     private readonly metaService: MetaService,
     private readonly messageUsageService: MessageUsageService,
@@ -167,6 +172,10 @@ export class CampaignsService {
         status: "pending",
       })),
       { ordered: false },
+    );
+    await this.contactModel.updateMany(
+      { _id: { $in: contacts.map((contact) => contact.id) }, tenantId },
+      { $inc: { totalCampaigns: 1 } },
     );
 
     await this.campaignModel.updateOne(
@@ -274,6 +283,10 @@ export class CampaignsService {
         await this.campaignModel.updateOne(
           { _id: campaignId },
           { $inc: { sent: 1 } },
+        );
+        await this.contactModel.updateOne(
+          { _id: recipient.contactId, tenantId },
+          { $inc: { totalMessages: 1 }, $set: { lastMessageAt: new Date() } },
         );
 
         // Fire and forget — usage tracking must never block campaign sending
@@ -418,7 +431,7 @@ export class CampaignsService {
     limit = 50,
   ) {
     await this.findOne(tenantId, campaignId);
-    const [data, total] = await Promise.all([
+    const [recipients, total] = await Promise.all([
       this.recipientModel
         .find({ campaignId })
         .skip((page - 1) * limit)
@@ -426,6 +439,24 @@ export class CampaignsService {
         .exec(),
       this.recipientModel.countDocuments({ campaignId }),
     ]);
+
+    const contactIds = recipients
+      .map((recipient) => recipient.contactId)
+      .filter((contactId) => Types.ObjectId.isValid(contactId));
+    const contacts = await this.contactModel
+      .find({ _id: { $in: contactIds }, tenantId })
+      .select("name")
+      .lean()
+      .exec();
+    const contactNames = new Map(
+      contacts.map((contact) => [String(contact._id), contact.name]),
+    );
+
+    const data = recipients.map((recipient) => ({
+      ...recipient.toObject(),
+      contactName: contactNames.get(recipient.contactId) ?? null,
+    }));
+
     return { data, total, page, limit };
   }
 }

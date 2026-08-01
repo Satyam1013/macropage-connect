@@ -38,7 +38,7 @@ export class ConversationsController {
     @Body()
     body: {
       contactId: string;
-      templateName?: string;
+      templateName: string;
       templateVars?: Record<string, string>;
     },
   ) {
@@ -46,7 +46,7 @@ export class ConversationsController {
     return this.conversationsService.initiateConversation(
       tenantId,
       body.contactId,
-      body.templateName ?? "hello_world",
+      body.templateName,
       req.user.id,
       body.templateVars,
     );

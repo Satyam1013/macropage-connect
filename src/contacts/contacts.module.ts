@@ -5,6 +5,11 @@ import {
   ContactSegment,
   ContactSegmentSchema,
 } from "../schemas/contact-segment.schema";
+import {
+  CampaignRecipient,
+  CampaignRecipientSchema,
+} from "../schemas/campaign-recipient.schema";
+import { Campaign, CampaignSchema } from "../schemas/campaign.schema";
 import { ContactsService } from "./contacts.service";
 import { ContactsController } from "./contacts.controller";
 
@@ -13,6 +18,8 @@ import { ContactsController } from "./contacts.controller";
     MongooseModule.forFeature([
       { name: Contact.name, schema: ContactSchema },
       { name: ContactSegment.name, schema: ContactSegmentSchema },
+      { name: CampaignRecipient.name, schema: CampaignRecipientSchema },
+      { name: Campaign.name, schema: CampaignSchema },
     ]),
   ],
   providers: [ContactsService],

@@ -552,10 +552,38 @@ export class ConversationsService {
     agentId: string,
     templateVars?: Record<string, string>,
   ) {
+    if (!templateName?.trim()) {
+      throw new BadRequestException({
+        success: false,
+        error: {
+          code: "TEMPLATE_REQUIRED",
+          message: "Select an approved WhatsApp template before starting a conversation.",
+        },
+      });
+    }
+
     const contact = await this.contactModel
       .findOne({ _id: contactId, tenantId })
       .exec();
     if (!contact) throw new NotFoundException("Contact not found");
+
+    // Never fall back to Meta's hello_world sample: it is not guaranteed to
+    // exist in this tenant's WABA. Resolving the selected local template also
+    // gives Meta the exact language code registered for that translation.
+    const template = await this.templateModel
+      .findOne({ tenantId, name: templateName, status: "APPROVED" })
+      .lean()
+      .exec();
+    if (!template) {
+      throw new BadRequestException({
+        success: false,
+        error: {
+          code: "TEMPLATE_NOT_APPROVED",
+          message:
+            "The selected template is not approved or has not been synced from WhatsApp. Sync templates and select an approved template.",
+        },
+      });
+    }
 
     const conv = await this.findOrCreate(tenantId, contactId);
     const client = await this.metaService.getClient(tenantId);
@@ -563,12 +591,8 @@ export class ConversationsService {
     // Auto-fill templateVars from contact name if caller didn't supply them
     let resolvedVars = templateVars;
     if (!resolvedVars || Object.keys(resolvedVars).length === 0) {
-      const tpl = await this.templateModel
-        .findOne({ tenantId, name: templateName })
-        .lean()
-        .exec();
       const sampleKeys = Object.keys(
-        (tpl?.sampleVariables as Record<string, string> | undefined) ?? {},
+        (template.sampleVariables as Record<string, string> | undefined) ?? {},
       );
       if (sampleKeys.length > 0) {
         resolvedVars = {};
@@ -587,7 +611,7 @@ export class ConversationsService {
         type: "template",
         template: {
           name: templateName,
-          language: { code: "en_US" },
+          language: { code: template.language },
           ...(resolvedVars &&
             Object.keys(resolvedVars).length > 0 && {
               components: [

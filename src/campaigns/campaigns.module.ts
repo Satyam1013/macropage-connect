@@ -6,6 +6,7 @@ import {
   CampaignRecipientSchema,
 } from "../schemas/campaign-recipient.schema";
 import { Template, TemplateSchema } from "../schemas/template.schema";
+import { Contact, ContactSchema } from "../schemas/contact.schema";
 import { CampaignsService } from "./campaigns.service";
 import { CampaignsController } from "./campaigns.controller";
 import { ContactsModule } from "../contacts/contacts.module";
@@ -19,6 +20,7 @@ import { AnalyticsModule } from "../analytics/analytics.module";
       { name: Campaign.name, schema: CampaignSchema },
       { name: CampaignRecipient.name, schema: CampaignRecipientSchema },
       { name: Template.name, schema: TemplateSchema },
+      { name: Contact.name, schema: ContactSchema },
     ]),
     ContactsModule,
     MetaModule,

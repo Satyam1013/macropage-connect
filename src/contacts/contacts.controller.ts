@@ -114,7 +114,7 @@ export class ContactsController {
     @Param("id") id: string,
   ) {
     const tenantId = req.user.tenantId ?? req.user.id;
-    return this.contactsService.findOne(tenantId, id);
+    return this.contactsService.getDetails(tenantId, id);
   }
 
   @Post()

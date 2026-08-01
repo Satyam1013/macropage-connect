@@ -11,6 +11,11 @@ import axios from "axios";
 import * as fastcsv from "fast-csv";
 import { Contact, ContactDocument } from "../schemas/contact.schema";
 import {
+  CampaignRecipient,
+  CampaignRecipientDocument,
+} from "../schemas/campaign-recipient.schema";
+import { Campaign, CampaignDocument } from "../schemas/campaign.schema";
+import {
   ContactSegment,
   ContactSegmentDocument,
 } from "../schemas/contact-segment.schema";
@@ -125,6 +130,10 @@ export class ContactsService {
     private readonly contactModel: Model<ContactDocument>,
     @InjectModel(ContactSegment.name)
     private readonly segmentModel: Model<ContactSegmentDocument>,
+    @InjectModel(CampaignRecipient.name)
+    private readonly recipientModel: Model<CampaignRecipientDocument>,
+    @InjectModel(Campaign.name)
+    private readonly campaignModel: Model<CampaignDocument>,
   ) {}
 
   private buildWhere(
@@ -232,6 +241,60 @@ export class ContactsService {
       .exec();
     if (!contact) throw new NotFoundException("Contact not found");
     return contact;
+  }
+
+  async getDetails(tenantId: string, id: string) {
+    const contact = await this.findOne(tenantId, id);
+    const recipients = await this.recipientModel
+      .find({ contactId: id })
+      .sort({ sentAt: -1, _id: -1 })
+      .lean()
+      .exec();
+
+    const campaignIds = recipients
+      .map((recipient) => recipient.campaignId)
+      .filter((campaignId) => Types.ObjectId.isValid(campaignId));
+    const campaigns = await this.campaignModel
+      .find({ _id: { $in: campaignIds }, tenantId })
+      .select("name status startedAt completedAt")
+      .lean()
+      .exec();
+    const campaignsById = new Map(
+      campaigns.map((campaign) => [String(campaign._id), campaign]),
+    );
+
+    // Recipient records are the source of truth. Calculating totals from
+    // them also repairs legacy contacts whose denormalized counters were
+    // never incremented during campaign sending.
+    const campaignHistory = recipients.flatMap((recipient) => {
+      const campaign = campaignsById.get(recipient.campaignId);
+      if (!campaign) return [];
+      return [
+        {
+          campaignId: recipient.campaignId,
+          campaignName: campaign.name,
+          campaignStatus: campaign.status,
+          recipientStatus: recipient.status,
+          sentAt: recipient.sentAt ?? null,
+          deliveredAt: recipient.deliveredAt ?? null,
+          readAt: recipient.readAt ?? null,
+          failedAt: recipient.failedAt ?? null,
+          failureReason: recipient.failureReason ?? null,
+        },
+      ];
+    });
+    const totalCampaigns = new Set(campaignHistory.map((item) => item.campaignId))
+      .size;
+    const totalMessages = campaignHistory.filter((item) =>
+      ["sent", "delivered", "read"].includes(item.recipientStatus),
+    ).length;
+
+    return {
+      ...contact.toObject(),
+      totalCampaigns,
+      totalMessages,
+      campaignHistory,
+    };
   }
 
   async getTags(tenantId: string) {

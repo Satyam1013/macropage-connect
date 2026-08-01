@@ -46,8 +46,18 @@ export class HelpController {
   }
 
   @Get("status")
-  getStatus() {
-    return this.helpService.getSystemStatus();
+  @UseGuards(JwtAuthGuard)
+  getStatus(
+    @Request() req: AuthReq,
+    @Query("page") page?: string,
+    @Query("limit") limit?: string,
+  ) {
+    const tenantId = req.user.tenantId ?? req.user.id;
+    return this.helpService.getSystemStatus(
+      tenantId,
+      page ? Number(page) : 1,
+      limit ? Number(limit) : 20,
+    );
   }
 
   // Remove this endpoint after running once

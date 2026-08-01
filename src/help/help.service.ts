@@ -79,7 +79,22 @@ export class HelpService implements OnModuleInit {
     return { docs, faqs };
   }
 
-  getSystemStatus() {
+  async getSystemStatus(tenantId: string, page = 1, limit = 20) {
+    const safePage = Number.isFinite(page) && page > 0 ? Math.floor(page) : 1;
+    const safeLimit =
+      Number.isFinite(limit) && limit > 0
+        ? Math.min(Math.floor(limit), 100)
+        : 20;
+    const [data, total] = await Promise.all([
+      this.ticketModel
+        .find({ tenantId })
+        .sort({ createdAt: -1 })
+        .skip((safePage - 1) * safeLimit)
+        .limit(safeLimit)
+        .exec(),
+      this.ticketModel.countDocuments({ tenantId }),
+    ]);
+
     return {
       overall: "operational",
       services: [
@@ -89,6 +104,7 @@ export class HelpService implements OnModuleInit {
       ],
       incidents: [],
       updatedAt: new Date().toISOString(),
+      tickets: { data, total, page: safePage, limit: safeLimit },
     };
   }
 
