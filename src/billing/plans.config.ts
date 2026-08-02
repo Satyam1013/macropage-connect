@@ -13,19 +13,19 @@ export const PLANS = {
     },
     pricing: {
       monthly: {
-        amount: 199900,
+        amount: 89900,
         razorpayPlanId: process.env.RAZORPAY_STARTER_MONTHLY_PLAN_ID ?? "",
         interval: 1,
         period: "monthly",
       },
       quarterly: {
-        amount: 539700,
+        amount: 249900,
         razorpayPlanId: process.env.RAZORPAY_STARTER_QUARTERLY_PLAN_ID ?? "",
         interval: 3,
         period: "monthly",
       },
       yearly: {
-        amount: 1798800,
+        amount: 999900,
         razorpayPlanId: process.env.RAZORPAY_STARTER_YEARLY_PLAN_ID ?? "",
         interval: 1,
         period: "yearly",
@@ -45,19 +45,19 @@ export const PLANS = {
     },
     pricing: {
       monthly: {
-        amount: 349900,
+        amount: 189900,
         razorpayPlanId: process.env.RAZORPAY_GROWTH_MONTHLY_PLAN_ID ?? "",
         interval: 1,
         period: "monthly",
       },
       quarterly: {
-        amount: 944730,
+        amount: 529900,
         razorpayPlanId: process.env.RAZORPAY_GROWTH_QUARTERLY_PLAN_ID ?? "",
         interval: 3,
         period: "monthly",
       },
       yearly: {
-        amount: 3148800,
+        amount: 2119900,
         razorpayPlanId: process.env.RAZORPAY_GROWTH_YEARLY_PLAN_ID ?? "",
         interval: 1,
         period: "yearly",
@@ -65,7 +65,7 @@ export const PLANS = {
     },
   },
   BUSINESS: {
-    name: "Business",
+    name: "Scale",
     description: "For scaling businesses",
     features: {
       maxTeamMembers: 25,
@@ -77,19 +77,19 @@ export const PLANS = {
     },
     pricing: {
       monthly: {
-        amount: 899900,
+        amount: 599900,
         razorpayPlanId: process.env.RAZORPAY_BUSINESS_MONTHLY_PLAN_ID ?? "",
         interval: 1,
         period: "monthly",
       },
       quarterly: {
-        amount: 2429730,
+        amount: 1669900,
         razorpayPlanId: process.env.RAZORPAY_BUSINESS_QUARTERLY_PLAN_ID ?? "",
         interval: 3,
         period: "monthly",
       },
       yearly: {
-        amount: 8098800,
+        amount: 6999900,
         razorpayPlanId: process.env.RAZORPAY_BUSINESS_YEARLY_PLAN_ID ?? "",
         interval: 1,
         period: "yearly",
