@@ -23,6 +23,7 @@ import { OnboardingModule } from "./onboarding/onboarding.module";
 import { QuickRepliesModule } from "./quick-replies/quick-replies.module";
 import { AdminModule } from "./admin/admin.module";
 import { SampleTemplatesModule } from "./sample-templates/sample-templates.module";
+import { PublicApiModule } from "./public-api/public-api.module";
 
 // Infrastructure
 import { MetaModule } from "./meta/meta.module";
@@ -65,6 +66,7 @@ import { GatewayModule } from "./gateway/gateway.module";
     QuickRepliesModule,
     AdminModule,
     SampleTemplatesModule,
+    PublicApiModule,
   ],
 })
 export class AppModule {}

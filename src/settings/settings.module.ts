@@ -10,6 +10,7 @@ import { UploadModule } from "../upload/upload.module";
 import { BillingModule } from "../billing/billing.module";
 import { SettingsService } from "./settings.service";
 import { SettingsController } from "./settings.controller";
+import { ApiKeyGuard } from "../auth/guards/api-key.guard";
 
 @Module({
   imports: [
@@ -21,8 +22,8 @@ import { SettingsController } from "./settings.controller";
     UploadModule,
     BillingModule,
   ],
-  providers: [SettingsService],
+  providers: [SettingsService, ApiKeyGuard],
   controllers: [SettingsController],
-  exports: [SettingsService],
+  exports: [SettingsService, ApiKeyGuard],
 })
 export class SettingsModule {}

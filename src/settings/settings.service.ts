@@ -5,7 +5,6 @@ import {
 } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
 import { Model } from "mongoose";
-import * as bcrypt from "bcryptjs";
 import * as crypto from "crypto";
 import axios from "axios";
 import { APIKey, APIKeyDocument } from "../schemas/api-key.schema";
@@ -200,7 +199,10 @@ export class SettingsService {
     permissions: string[],
   ): Promise<{ key: string; record: APIKeyDocument }> {
     const raw = "mk_live_" + crypto.randomBytes(24).toString("hex");
-    const keyHash = await bcrypt.hash(raw, 10);
+    // The raw key already carries 192 bits of random entropy, so a plain
+    // digest (unlike bcrypt's per-hash salt) still resists brute force
+    // while staying directly indexable for the O(1) lookup ApiKeyGuard needs.
+    const keyHash = crypto.createHash("sha256").update(raw).digest("hex");
     const keyPreview = raw.slice(-8);
 
     const record = await this.apiKeyModel.create({
@@ -220,6 +222,36 @@ export class SettingsService {
       { isActive: false },
     );
     if (!result.matchedCount) throw new NotFoundException("API key not found");
+  }
+
+  // Used by ApiKeyGuard to authenticate requests to the public API.
+  async validateApiKey(
+    rawKey: string,
+    ip?: string,
+  ): Promise<APIKeyDocument | null> {
+    if (!rawKey.startsWith("mk_live_")) return null;
+    const keyHash = crypto.createHash("sha256").update(rawKey).digest("hex");
+
+    const record = await this.apiKeyModel
+      .findOne({ keyHash, isActive: true })
+      .exec();
+    if (!record) return null;
+    if (record.expiresAt && record.expiresAt < new Date()) return null;
+    if (
+      record.ipRestrictions.length > 0 &&
+      (!ip || !record.ipRestrictions.includes(ip))
+    ) {
+      return null;
+    }
+
+    await this.apiKeyModel
+      .updateOne(
+        { _id: record._id },
+        { $set: { lastUsedAt: new Date() }, $inc: { requestsToday: 1 } },
+      )
+      .exec();
+
+    return record;
   }
 
   // ─── Webhooks ─────────────────────────────────────────────────────────────

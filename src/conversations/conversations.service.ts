@@ -549,7 +549,7 @@ export class ConversationsService {
     tenantId: string,
     contactId: string,
     templateName: string,
-    agentId: string,
+    agentId?: string,
     templateVars?: Record<string, string>,
   ) {
     if (!templateName?.trim()) {
@@ -557,7 +557,8 @@ export class ConversationsService {
         success: false,
         error: {
           code: "TEMPLATE_REQUIRED",
-          message: "Select an approved WhatsApp template before starting a conversation.",
+          message:
+            "Select an approved WhatsApp template before starting a conversation.",
         },
       });
     }
