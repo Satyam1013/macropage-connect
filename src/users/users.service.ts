@@ -162,6 +162,7 @@ export class UsersService {
       role: user.role,
       tenantId: user.tenantId,
       phone: user.phone,
+      avatarUrl: user.avatarUrl,
       emailVerified: user.emailVerified,
       whatsappSetupDone: user.whatsappSetupDone,
       plan: user.plan,
