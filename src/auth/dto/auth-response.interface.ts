@@ -4,7 +4,7 @@ export interface UserPayload {
   email: string;
   role?: string;
   phone?: string;
-  avatarUrl?: string;
+  avatarUrl?: string | null;
   tenantId?: string;
   emailVerified?: boolean;
   whatsappSetupDone?: boolean;
