@@ -7,8 +7,9 @@ export type SupportTicketDocument = HydratedDocument<SupportTicket> & {
 };
 
 // Raised by Connect portal users, triaged in the separate admin panel —
-// collection name is explicit so both services agree on it.
-@Schema({ timestamps: true, collection: "supporttickets" })
+// collection name is explicit so both services agree on it (must match
+// the `tickets` collection the macropage-admin Ticket schema reads from).
+@Schema({ timestamps: true, collection: "tickets" })
 export class SupportTicket {
   @Prop({ required: true, index: true })
   tenantId!: string;
