@@ -6,8 +6,14 @@ import {
 } from "../schemas/automation-rule.schema";
 import { Flow, FlowSchema } from "../schemas/flow.schema";
 import { Message, MessageSchema } from "../schemas/message.schema";
+import {
+  Conversation,
+  ConversationSchema,
+} from "../schemas/conversation.schema";
+import { Contact, ContactSchema } from "../schemas/contact.schema";
 import { AutomationService } from "./automation.service";
 import { AutomationController } from "./automation.controller";
+import { FlowEngineService } from "./flow-engine.service";
 import { BillingModule } from "../billing/billing.module";
 import { ConversationsModule } from "../conversations/conversations.module";
 import { MetaModule } from "../meta/meta.module";
@@ -20,14 +26,16 @@ import { RolesGuard } from "../common/guards/roles.guard";
       { name: AutomationRule.name, schema: AutomationRuleSchema },
       { name: Flow.name, schema: FlowSchema },
       { name: Message.name, schema: MessageSchema },
+      { name: Conversation.name, schema: ConversationSchema },
+      { name: Contact.name, schema: ContactSchema },
     ]),
     BillingModule,
     ConversationsModule,
     MetaModule,
     GatewayModule,
   ],
-  providers: [AutomationService, RolesGuard],
+  providers: [AutomationService, FlowEngineService, RolesGuard],
   controllers: [AutomationController],
-  exports: [AutomationService],
+  exports: [AutomationService, FlowEngineService],
 })
 export class AutomationModule {}

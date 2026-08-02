@@ -12,6 +12,7 @@ import { SocketService } from "../gateway/socket.service";
 import { Message, MessageDocument } from "../schemas/message.schema";
 import { BillingService } from "../billing/billing.service";
 import { getPlanLimits } from "./plan-limits.config";
+import { FlowEngineService } from "./flow-engine.service";
 
 @Injectable()
 export class AutomationService {
@@ -28,6 +29,7 @@ export class AutomationService {
     private readonly metaService: MetaService,
     private readonly socketService: SocketService,
     private readonly billingService: BillingService,
+    private readonly flowEngineService: FlowEngineService,
   ) {}
 
   // ─── Rules ────────────────────────────────────────────────────────────────
@@ -269,6 +271,7 @@ export class AutomationService {
   async processRules(
     tenantId: string,
     conversationId: string,
+    contactId: string,
     contactPhone: string,
     messageContent: string,
   ): Promise<void> {
@@ -346,6 +349,7 @@ export class AutomationService {
       await this.executeAction(
         tenantId,
         conversationId,
+        contactId,
         contactPhone,
         rule.actions,
       ).catch((err: unknown) =>
@@ -357,6 +361,7 @@ export class AutomationService {
   private async executeAction(
     tenantId: string,
     conversationId: string,
+    contactId: string,
     contactPhone: string,
     actions: Record<string, unknown>,
   ): Promise<void> {
@@ -370,6 +375,23 @@ export class AutomationService {
     const type = (action.type ?? action.actionType ?? cfg.type) as
       | string
       | undefined;
+
+    if (type === "start_flow") {
+      const flowId = (cfg.flowId ?? action.flowId) as string | undefined;
+      if (!flowId) {
+        this.logger.warn(`[Rules] start_flow action missing flowId — skipping`);
+        return;
+      }
+      await this.flowEngineService.startFlow(
+        tenantId,
+        flowId,
+        conversationId,
+        contactId,
+        contactPhone,
+      );
+      return;
+    }
+
     // message lives at action.message OR action.config.message
     const message = (action.message ??
       action.text ??

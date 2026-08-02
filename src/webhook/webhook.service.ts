@@ -9,6 +9,7 @@ import {
 import { ContactsService } from "../contacts/contacts.service";
 import { ConversationsService } from "../conversations/conversations.service";
 import { AutomationService } from "../automation/automation.service";
+import { FlowEngineService } from "../automation/flow-engine.service";
 import { MediaDownloadService } from "../whatsapp/media-download.service";
 
 interface InboundMediaField {
@@ -28,6 +29,7 @@ export class WebhookService {
     private readonly contactsService: ContactsService,
     private readonly conversationsService: ConversationsService,
     private readonly automationService: AutomationService,
+    private readonly flowEngineService: FlowEngineService,
     private readonly mediaDownloadService: MediaDownloadService,
   ) {}
 
@@ -124,11 +126,24 @@ export class WebhookService {
       let mediaId: string | undefined;
       let mimeType: string | undefined;
       let fileName: string | undefined;
+      let buttonReplyId: string | undefined;
 
       switch (type) {
         case "text":
           content = (msg.text as { body?: string })?.body ?? "";
           break;
+        case "interactive": {
+          const interactive = msg.interactive as
+            | {
+                button_reply?: { id?: string; title?: string };
+                list_reply?: { id?: string; title?: string };
+              }
+            | undefined;
+          const reply = interactive?.button_reply ?? interactive?.list_reply;
+          content = reply?.title ?? "";
+          buttonReplyId = reply?.id;
+          break;
+        }
         case "image":
         case "video":
         case "sticker": {
@@ -195,11 +210,39 @@ export class WebhookService {
         { mediaUrl, mediaId, mimeType, fileName },
       );
 
-      void this.automationService
-        .processRules(tenantId, conversation.id, contact.phone, content)
-        .catch((err: unknown) =>
-          this.logger.error("Automation processing failed", err),
-        );
+      // A conversation mid-flow owns the next inbound reply — automation
+      // rules only run once the flow isn't waiting on this contact.
+      const resumed = await this.flowEngineService
+        .resumeFlow(
+          tenantId,
+          {
+            id: conversation.id,
+            activeFlowId: conversation.activeFlowId,
+            activeFlowNodeId: conversation.activeFlowNodeId,
+          },
+          contact.id,
+          contact.phone,
+          content,
+          buttonReplyId,
+        )
+        .catch((err: unknown) => {
+          this.logger.error("Flow resume failed", err);
+          return true; // avoid double-processing via rules on ambiguous state
+        });
+
+      if (!resumed) {
+        await this.automationService
+          .processRules(
+            tenantId,
+            conversation.id,
+            contact.id,
+            contact.phone,
+            content,
+          )
+          .catch((err: unknown) =>
+            this.logger.error("Automation processing failed", err),
+          );
+      }
     } catch (err) {
       this.logger.error("Failed to handle inbound message", err);
     }
