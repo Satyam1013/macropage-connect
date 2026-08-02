@@ -7,6 +7,7 @@ import { AuthService } from "./auth.service";
 import { AuthController } from "./auth.controller";
 import { JwtStrategy } from "./strategies/jwt.strategy";
 import { UsersModule } from "../users/users.module";
+import { BillingModule } from "../billing/billing.module";
 import { QueueModule } from "../queue/queue.module";
 import { EmailService } from "../queue/email.service";
 import {
@@ -22,6 +23,7 @@ import { Session, SessionSchema } from "../schemas/session.schema";
 @Module({
   imports: [
     UsersModule,
+    BillingModule,
     PassportModule,
     ConfigModule,
     QueueModule,

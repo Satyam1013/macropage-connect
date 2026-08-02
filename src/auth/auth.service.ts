@@ -29,6 +29,7 @@ import {
 } from "../schemas/password-reset-token.schema";
 import { Session, SessionDocument } from "../schemas/session.schema";
 import { EmailService } from "../queue/email.service";
+import { BillingService } from "../billing/billing.service";
 
 @Injectable()
 export class AuthService {
@@ -46,6 +47,7 @@ export class AuthService {
     @InjectModel(Session.name)
     private readonly sessionModel: Model<SessionDocument>,
     private readonly activityService: ActivityService,
+    private readonly billingService: BillingService,
   ) {}
 
   // ─── Signup ───────────────────────────────────────────────────────────────
@@ -203,7 +205,14 @@ export class AuthService {
   async getMe(userId: string): Promise<UserPayload | null> {
     const user = await this.users.findById(userId);
     if (!user) return null;
-    return this.users.toPublicProfile(user);
+
+    const tenantId = user.tenantId ?? user.id;
+    const sub = await this.billingService.getSubscription(tenantId);
+
+    return {
+      ...this.users.toPublicProfile(user),
+      currentPeriodEnd: sub?.currentPeriodEnd?.toISOString() ?? null,
+    };
   }
 
   // ─── OAuth (legacy stub) ──────────────────────────────────────────────────

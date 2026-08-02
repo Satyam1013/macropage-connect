@@ -12,6 +12,7 @@ export interface UserPayload {
   billingPlan?: string;
   billingCycle?: string;
   trialEndsAt?: string;
+  currentPeriodEnd?: string | null;
   subscriptionType?: "free" | "pro" | "business";
   paidUser?: boolean;
   createdAt: string;

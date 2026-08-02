@@ -19,6 +19,7 @@ import { IsOptional, IsString } from "class-validator";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { UsersService } from "./users.service";
 import { UploadService } from "../upload/upload.service";
+import { BillingService } from "../billing/billing.service";
 import type { AuthReq } from "../auth/dto/auth-request.interface";
 
 // Every field needs a validator, or the global ValidationPipe's
@@ -47,18 +48,25 @@ export class MeController {
   constructor(
     private readonly usersService: UsersService,
     private readonly uploadService: UploadService,
+    private readonly billingService: BillingService,
   ) {}
 
   @Get()
   @Header("Cache-Control", "no-cache, no-store, must-revalidate")
   async getMe(@Request() req: AuthReq) {
     const user = await this.usersService.findById(req.user.id);
+    if (!user) return { success: true, data: { user: null } };
+
+    const tenantId = user.tenantId ?? user.id;
+    const sub = await this.billingService.getSubscription(tenantId);
+
     return {
       success: true,
       data: {
-        user: user && {
+        user: {
           ...user.toObject(),
           avatarUrl: user.avatarUrl ?? null,
+          currentPeriodEnd: sub?.currentPeriodEnd?.toISOString() ?? null,
         },
       },
     };

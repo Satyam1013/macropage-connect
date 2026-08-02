@@ -20,6 +20,7 @@ import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { UsersService } from "./users.service";
 import { ActivityService } from "./activity.service";
 import { UploadService } from "../upload/upload.service";
+import { BillingService } from "../billing/billing.service";
 import type { AuthReq } from "../auth/dto/auth-request.interface";
 
 class UpdateProfileDto {
@@ -44,16 +45,26 @@ export class UsersController {
     private readonly usersService: UsersService,
     private readonly activityService: ActivityService,
     private readonly uploadService: UploadService,
+    private readonly billingService: BillingService,
   ) {}
 
   @Get("me")
   @Header("Cache-Control", "no-cache, no-store, must-revalidate")
   async getMe(@Request() req: AuthReq) {
     const user = await this.usersService.findById(req.user.id);
+    if (!user) return { success: true, data: { user: null } };
+
+    const tenantId = user.tenantId ?? user.id;
+    const sub = await this.billingService.getSubscription(tenantId);
+
     return {
       success: true,
       data: {
-        user: user && { ...user.toObject(), avatarUrl: user.avatarUrl ?? null },
+        user: {
+          ...user.toObject(),
+          avatarUrl: user.avatarUrl ?? null,
+          currentPeriodEnd: sub?.currentPeriodEnd?.toISOString() ?? null,
+        },
       },
     };
   }

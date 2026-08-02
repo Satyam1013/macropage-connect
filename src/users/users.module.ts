@@ -7,6 +7,7 @@ import { ActivityService } from "./activity.service";
 import { User, UserSchema } from "./schemas/user.schema";
 import { ActivityLog, ActivityLogSchema } from "../schemas/activity-log.schema";
 import { UploadModule } from "../upload/upload.module";
+import { BillingModule } from "../billing/billing.module";
 
 @Module({
   imports: [
@@ -15,6 +16,7 @@ import { UploadModule } from "../upload/upload.module";
       { name: ActivityLog.name, schema: ActivityLogSchema },
     ]),
     UploadModule,
+    BillingModule,
   ],
   controllers: [UsersController, MeController],
   providers: [UsersService, ActivityService],
