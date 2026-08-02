@@ -25,6 +25,7 @@ import { AdminModule } from "./admin/admin.module";
 import { SampleTemplatesModule } from "./sample-templates/sample-templates.module";
 import { PublicApiModule } from "./public-api/public-api.module";
 import { IntegrationPlatformsModule } from "./integration-platforms/integration-platforms.module";
+import { AdsModule } from "./ads/ads.module";
 
 // Infrastructure
 import { MetaModule } from "./meta/meta.module";
@@ -69,6 +70,7 @@ import { GatewayModule } from "./gateway/gateway.module";
     SampleTemplatesModule,
     PublicApiModule,
     IntegrationPlatformsModule,
+    AdsModule,
   ],
 })
 export class AppModule {}
