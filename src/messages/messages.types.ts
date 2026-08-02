@@ -16,4 +16,9 @@ export type MessageType =
   | "NOTE"
   | "SYSTEM";
 
-export type MessageStatus = "PENDING" | "SENT" | "DELIVERED" | "READ" | "FAILED";
+export type MessageStatus =
+  | "PENDING"
+  | "SENT"
+  | "DELIVERED"
+  | "READ"
+  | "FAILED";

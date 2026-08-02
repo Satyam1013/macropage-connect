@@ -519,8 +519,7 @@ export const FAQ_ITEMS = [
   {
     category: "general",
     order: 2,
-    question:
-      "Do I need a WhatsApp Business account to use Macropage Connect?",
+    question: "Do I need a WhatsApp Business account to use Macropage Connect?",
     answer:
       "Yes. You need a WhatsApp Business Account (WABA) connected through Meta. During setup, Macropage Connect guides you through connecting your existing WABA or creating a new one. You will need a Facebook account and a Facebook Business Portfolio to complete this.",
     tags: ["whatsapp", "waba", "requirements"],
@@ -564,7 +563,7 @@ export const FAQ_ITEMS = [
     order: 1,
     question: "Why is my WhatsApp token expired?",
     answer:
-      "WhatsApp access tokens expire every 60 days. When this happens, go to Settings → WhatsApp and click Reconnect. Complete the Facebook login flow to get a fresh token. This is done automatically in the background on a regular basis, but if it fails you will see a \"token expired\" banner.",
+      'WhatsApp access tokens expire every 60 days. When this happens, go to Settings → WhatsApp and click Reconnect. Complete the Facebook login flow to get a fresh token. This is done automatically in the background on a regular basis, but if it fails you will see a "token expired" banner.',
     tags: ["token", "expired", "reconnect"],
   },
   {
@@ -604,7 +603,7 @@ export const FAQ_ITEMS = [
     order: 6,
     question: "Can I see if a customer is online or their last seen?",
     answer:
-      "No. The WhatsApp Business API does not provide customer online status, last seen, or typing indicators. This is a Meta privacy restriction. The portal shows \"last message received\" which is the last time the customer sent you a message.",
+      'No. The WhatsApp Business API does not provide customer online status, last seen, or typing indicators. This is a Meta privacy restriction. The portal shows "last message received" which is the last time the customer sent you a message.',
     tags: ["online", "last seen", "status", "typing"],
   },
   {
@@ -630,7 +629,7 @@ export const FAQ_ITEMS = [
     order: 2,
     question: "Can I schedule a campaign for later?",
     answer:
-      "Yes. In Step 3 of the campaign wizard, select \"Schedule for later\" and pick a date and time. The campaign will automatically launch at the scheduled time. You can edit or cancel a scheduled campaign before it launches.",
+      'Yes. In Step 3 of the campaign wizard, select "Schedule for later" and pick a date and time. The campaign will automatically launch at the scheduled time. You can edit or cancel a scheduled campaign before it launches.',
     tags: ["schedule", "later", "campaign", "time"],
   },
   {
@@ -704,7 +703,7 @@ export const FAQ_ITEMS = [
     order: 5,
     question: "What are template variables and how do I use them?",
     answer:
-      "Variables are placeholders like {{1}}, {{2}} that get replaced with real values when sending. For example: \"Hello {{1}}, your order {{2}} is confirmed!\" When sending via campaign, these are mapped to contact fields like name, order ID etc. Always provide example values when submitting templates with variables.",
+      'Variables are placeholders like {{1}}, {{2}} that get replaced with real values when sending. For example: "Hello {{1}}, your order {{2}} is confirmed!" When sending via campaign, these are mapped to contact fields like name, order ID etc. Always provide example values when submitting templates with variables.',
     tags: ["variables", "placeholder", "dynamic", "template"],
   },
   {
@@ -798,7 +797,7 @@ export const FAQ_ITEMS = [
     order: 1,
     question: "How do I reset my password?",
     answer:
-      "Click \"Forgot password\" on the login page. Enter your email address and we will send a reset link. The link expires in 1 hour.",
+      'Click "Forgot password" on the login page. Enter your email address and we will send a reset link. The link expires in 1 hour.',
     tags: ["password", "reset", "forgot", "login"],
   },
   {
