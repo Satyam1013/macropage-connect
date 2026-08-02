@@ -50,11 +50,11 @@ export class Conversation {
   // Set while a multi-node Flow is walking this conversation — the node
   // awaiting the contact's reply (e.g. a message node with buttons).
   // Both null when no flow is in progress.
-  @Prop({ default: null })
-  activeFlowId?: string | null;
+  @Prop({ type: String, default: null })
+  activeFlowId?: string;
 
-  @Prop({ default: null })
-  activeFlowNodeId?: string | null;
+  @Prop({ type: String, default: null })
+  activeFlowNodeId?: string;
 }
 
 export const ConversationSchema = SchemaFactory.createForClass(Conversation);
