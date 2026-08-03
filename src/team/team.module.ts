@@ -9,6 +9,7 @@ import { TeamController } from "./team.controller";
 import { QueueModule } from "../queue/queue.module";
 import { EmailService } from "../queue/email.service";
 import { UsersModule } from "../users/users.module";
+import { NotificationsModule } from "../notifications/notifications.module";
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { UsersModule } from "../users/users.module";
     }),
     QueueModule,
     UsersModule,
+    NotificationsModule,
   ],
   providers: [TeamService, EmailService],
   controllers: [TeamController],

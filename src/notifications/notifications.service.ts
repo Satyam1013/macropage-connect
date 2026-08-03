@@ -1,4 +1,4 @@
-import { Injectable, Inject } from "@nestjs/common";
+import { Injectable, Inject, Logger } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
 import { Model } from "mongoose";
 import type Redis from "ioredis";
@@ -12,19 +12,26 @@ import {
 } from "./notification-preferences.schema";
 import { UpdatePreferencesDto } from "./dto/update-preferences.dto";
 import { EventsGateway } from "../gateway/events.gateway";
+import { User, UserDocument } from "../users/schemas/user.schema";
+import { EmailService } from "../queue/email.service";
 
 import { NOTIF_PREFS_REDIS } from "./notifications.constants";
 
 @Injectable()
 export class NotificationsService {
+  private readonly logger = new Logger(NotificationsService.name);
+
   constructor(
     @InjectModel(Notification.name)
     private readonly notifModel: Model<NotificationDocument>,
     @InjectModel(NotificationPreferences.name)
     private readonly prefModel: Model<NotificationPreferencesDocument>,
+    @InjectModel(User.name)
+    private readonly userModel: Model<UserDocument>,
     @Inject(NOTIF_PREFS_REDIS)
     private readonly redis: Redis,
     private readonly gateway: EventsGateway,
+    private readonly emailService: EmailService,
   ) {}
 
   async create(
@@ -34,22 +41,51 @@ export class NotificationsService {
     title: string,
     body: string,
     data?: Record<string, unknown>,
-  ): Promise<NotificationDocument> {
-    const notif = await this.notifModel.create({
-      tenantId,
-      userId,
-      type,
-      title,
-      body,
-      data,
-    });
-    if (userId) {
-      this.gateway.emitToUser(userId, "notification:new", {
+  ): Promise<NotificationDocument | undefined> {
+    const [notifyInApp, notifyEmail] = userId
+      ? await Promise.all([
+          this.shouldNotify(tenantId, userId, type, "inApp"),
+          this.shouldNotify(tenantId, userId, type, "email"),
+        ])
+      : [true, false];
+
+    let notif: NotificationDocument | undefined;
+    if (notifyInApp) {
+      notif = await this.notifModel.create({
+        tenantId,
+        userId,
+        type,
         title,
         body,
-        type,
+        data,
       });
+      if (userId) {
+        this.gateway.emitToUser(userId, "notification:new", {
+          title,
+          body,
+          type,
+        });
+      }
     }
+
+    if (userId && notifyEmail) {
+      const user = await this.userModel
+        .findById(userId)
+        .select("email")
+        .lean()
+        .exec();
+      if (user?.email) {
+        this.emailService
+          .sendNotificationEmail(user.email, title, body)
+          .catch((err: unknown) =>
+            this.logger.error(
+              `Failed to send notification email to ${user.email}`,
+              err,
+            ),
+          );
+      }
+    }
+
     return notif;
   }
 

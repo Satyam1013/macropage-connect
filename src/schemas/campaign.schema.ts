@@ -94,6 +94,9 @@ export class Campaign {
   @Prop()
   errorMessage?: string;
 
+  @Prop({ default: false })
+  lowDeliveryNotified!: boolean;
+
   @Prop({ required: true })
   createdBy!: string;
 }

@@ -103,6 +103,9 @@ export class User {
   @Prop()
   trialEndsAt?: string;
 
+  @Prop()
+  trialEndingNotifiedAt?: Date;
+
   @Prop({ default: false })
   marketingOptIn!: boolean;
 

@@ -15,6 +15,7 @@ import { User, UserDocument } from "../users/schemas/user.schema";
 import { TeamInvite, TeamInviteDocument } from "../schemas/team-invite.schema";
 import { EmailService } from "../queue/email.service";
 import { UserRole } from "../auth/auth.constants";
+import { NotificationsService } from "../notifications/notifications.service";
 
 @Injectable()
 export class TeamService {
@@ -25,9 +26,38 @@ export class TeamService {
     @InjectModel(TeamInvite.name)
     private readonly inviteModel: Model<TeamInviteDocument>,
     private readonly emailService: EmailService,
+    private readonly notificationsService: NotificationsService,
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
   ) {}
+
+  private async notifyAdmins(
+    tenantId: string,
+    excludeUserId: string,
+    type: string,
+    title: string,
+    body: string,
+  ): Promise<void> {
+    const admins = await this.userModel
+      .find({
+        tenantId,
+        role: { $in: [UserRole.OWNER, UserRole.ADMIN] },
+        _id: { $ne: excludeUserId },
+      })
+      .select("_id")
+      .lean()
+      .exec();
+
+    for (const admin of admins) {
+      void this.notificationsService.create(
+        tenantId,
+        String(admin._id),
+        type,
+        title,
+        body,
+      );
+    }
+  }
 
   async getAssignableMembers(tenantId: string) {
     const members = await this.userModel
@@ -261,6 +291,14 @@ export class TeamService {
       { $set: { status: "ACCEPTED", acceptedAt: new Date() } },
     );
 
+    void this.notifyAdmins(
+      invite.tenantId,
+      String(user._id),
+      "team_member_joined",
+      "New team member joined",
+      `${user.name} (${user.email}) has joined your team.`,
+    );
+
     const accessToken = this.jwt.sign(
       { sub: user.id, email: user.email },
       {
@@ -384,11 +422,25 @@ export class TeamService {
   ): Promise<void> {
     if (memberId === requesterId)
       throw new BadRequestException("Cannot deactivate yourself");
-    const result = await this.userModel.updateOne(
+    const member = await this.userModel
+      .findOne({ _id: memberId, tenantId })
+      .select("name email")
+      .lean()
+      .exec();
+    if (!member) throw new NotFoundException("Member not found");
+
+    await this.userModel.updateOne(
       { _id: memberId, tenantId },
       { onlineStatus: "offline" },
     );
-    if (!result.matchedCount) throw new NotFoundException("Member not found");
+
+    void this.notifyAdmins(
+      tenantId,
+      memberId,
+      "team_member_left",
+      "Team member removed",
+      `${member.name} (${member.email}) has left your team.`,
+    );
   }
 
   async getInvites(tenantId: string) {

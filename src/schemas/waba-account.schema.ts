@@ -44,6 +44,11 @@ export class WABAAccount {
   @Prop({ default: "TIER_1K" })
   messagingTier!: string;
 
+  // YYYY-MM-DD of the last day a daily_limit_reached notification fired —
+  // dedup guard so the hourly cron only notifies once per calendar day.
+  @Prop()
+  dailyLimitNotifiedDate?: string;
+
   @Prop({ default: false })
   webhookVerified!: boolean;
 

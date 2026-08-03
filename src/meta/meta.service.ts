@@ -8,13 +8,19 @@ import {
   WABAAccountDocument,
 } from "../schemas/waba-account.schema";
 import { EncryptionService } from "./encryption.service";
+import { User, UserDocument } from "../users/schemas/user.schema";
+import { UserRole } from "../auth/auth.constants";
+import { NotificationsService } from "../notifications/notifications.service";
 
 @Injectable()
 export class MetaService {
   constructor(
     @InjectModel(WABAAccount.name)
     private readonly wabaModel: Model<WABAAccountDocument>,
+    @InjectModel(User.name)
+    private readonly userModel: Model<UserDocument>,
     private readonly encryption: EncryptionService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   async getClient(tenantId: string) {
@@ -182,6 +188,7 @@ export class MetaService {
 
       if (code === 190) {
         await this.wabaModel.updateOne({ tenantId }, { tokenExpired: true });
+        void this.notifyOwnerTokenExpired(tenantId);
         throw new BadRequestException({
           success: false,
           error: {
@@ -207,6 +214,22 @@ export class MetaService {
         error: { code: "META_SEND_FAIL", message },
       });
     };
+  }
+
+  private async notifyOwnerTokenExpired(tenantId: string): Promise<void> {
+    const owner = await this.userModel
+      .findOne({ tenantId, role: UserRole.OWNER })
+      .select("_id")
+      .lean()
+      .exec();
+    if (!owner) return;
+    await this.notificationsService.create(
+      tenantId,
+      String(owner._id),
+      "waba_token_expired",
+      "WhatsApp token expired",
+      "Your WhatsApp access token has expired. Please reconnect your account.",
+    );
   }
 
   async exchangeCodeForToken(code: string): Promise<string> {

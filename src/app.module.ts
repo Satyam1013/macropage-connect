@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 import { ConfigModule, ConfigService } from "@nestjs/config";
 import { MongooseModule } from "@nestjs/mongoose";
+import { ScheduleModule } from "@nestjs/schedule";
 
 // Feature modules
 import { AuthModule } from "./auth/auth.module";
@@ -31,6 +32,7 @@ import { AdsModule } from "./ads/ads.module";
 import { MetaModule } from "./meta/meta.module";
 import { QueueModule } from "./queue/queue.module";
 import { GatewayModule } from "./gateway/gateway.module";
+import { ScheduledNotificationsModule } from "./notifications/scheduled-notifications.module";
 
 @Module({
   imports: [
@@ -41,6 +43,7 @@ import { GatewayModule } from "./gateway/gateway.module";
         uri: config.get<string>("MONGODB_URI"),
       }),
     }),
+    ScheduleModule.forRoot(),
 
     // Infrastructure
     MetaModule,
@@ -62,6 +65,7 @@ import { GatewayModule } from "./gateway/gateway.module";
     SettingsModule,
     BillingModule,
     NotificationsModule,
+    ScheduledNotificationsModule,
     UploadModule,
     HelpModule,
     OnboardingModule,

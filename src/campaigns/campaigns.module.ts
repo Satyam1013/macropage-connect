@@ -13,6 +13,7 @@ import { ContactsModule } from "../contacts/contacts.module";
 import { MetaModule } from "../meta/meta.module";
 import { QueueModule } from "../queue/queue.module";
 import { AnalyticsModule } from "../analytics/analytics.module";
+import { NotificationsModule } from "../notifications/notifications.module";
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { AnalyticsModule } from "../analytics/analytics.module";
     MetaModule,
     QueueModule,
     AnalyticsModule,
+    NotificationsModule,
   ],
   providers: [CampaignsService],
   controllers: [CampaignsController],

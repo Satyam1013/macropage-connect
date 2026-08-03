@@ -14,6 +14,8 @@ import { NotificationsService } from "./notifications.service";
 import { NOTIF_PREFS_REDIS } from "./notifications.constants";
 import { NotificationsController } from "./notifications.controller";
 import { GatewayModule } from "../gateway/gateway.module";
+import { User, UserSchema } from "../users/schemas/user.schema";
+import { QueueModule } from "../queue/queue.module";
 
 @Module({
   imports: [
@@ -24,8 +26,10 @@ import { GatewayModule } from "../gateway/gateway.module";
         name: NotificationPreferences.name,
         schema: NotificationPreferencesSchema,
       },
+      { name: User.name, schema: UserSchema },
     ]),
     GatewayModule,
+    QueueModule,
   ],
   providers: [
     {

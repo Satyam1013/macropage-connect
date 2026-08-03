@@ -528,7 +528,27 @@ export class ConversationsService {
     tenantId: string,
     id: string,
   ): Promise<ConversationDocument> {
-    return this.updateConversation(tenantId, id, { status: "RESOLVED" });
+    const conv = await this.updateConversation(tenantId, id, {
+      status: "RESOLVED",
+    });
+
+    if (conv.assignedTo) {
+      const contact = await this.contactModel
+        .findById(conv.contactId)
+        .select("name")
+        .lean()
+        .exec();
+      await this.notificationsService.create(
+        tenantId,
+        conv.assignedTo,
+        "conversation_resolved",
+        "Conversation resolved",
+        `The conversation with ${contact?.name ?? "a contact"} has been marked resolved.`,
+        { conversationId: id },
+      );
+    }
+
+    return conv;
   }
 
   async findOrCreate(

@@ -64,6 +64,14 @@ export class EmailService {
     );
   }
 
+  async sendNotificationEmail(
+    to: string,
+    title: string,
+    body: string,
+  ): Promise<void> {
+    await this.sendRaw(to, title, `<p>${body}</p>`);
+  }
+
   async sendInviteEmail(
     to: string,
     token: string,

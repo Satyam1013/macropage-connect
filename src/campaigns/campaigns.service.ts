@@ -13,13 +13,11 @@ import {
   CampaignRecipientDocument,
 } from "../schemas/campaign-recipient.schema";
 import { Template, TemplateDocument } from "../schemas/template.schema";
-import {
-  Contact,
-  ContactDocument,
-} from "../schemas/contact.schema";
+import { Contact, ContactDocument } from "../schemas/contact.schema";
 import { ContactsService } from "../contacts/contacts.service";
 import { MetaService } from "../meta/meta.service";
 import { MessageUsageService } from "../analytics/message-usage.service";
+import { NotificationsService } from "../notifications/notifications.service";
 
 function normalizePhone(raw: string): string {
   const digits = raw.replace(/\D/g, "");
@@ -109,7 +107,24 @@ export class CampaignsService {
     private readonly contactsService: ContactsService,
     private readonly metaService: MetaService,
     private readonly messageUsageService: MessageUsageService,
+    private readonly notificationsService: NotificationsService,
   ) {}
+
+  private notifyCampaignOwner(
+    campaign: CampaignDocument,
+    type: "campaign_completed" | "campaign_failed",
+    title: string,
+    body: string,
+  ): void {
+    void this.notificationsService.create(
+      campaign.tenantId,
+      campaign.createdBy,
+      type,
+      title,
+      body,
+      { campaignId: String(campaign._id) },
+    );
+  }
 
   async findAll(tenantId: string, status?: string) {
     const where: Record<string, unknown> = { tenantId };
@@ -208,6 +223,12 @@ export class CampaignsService {
         { _id: campaignId },
         { status: "FAILED", errorMessage: "No template assigned to campaign" },
       );
+      this.notifyCampaignOwner(
+        campaign,
+        "campaign_failed",
+        `Campaign "${campaign.name}" failed`,
+        "No template assigned to campaign.",
+      );
       return;
     }
 
@@ -219,6 +240,12 @@ export class CampaignsService {
         { _id: campaignId },
         { status: "FAILED", errorMessage: "Template not found" },
       );
+      this.notifyCampaignOwner(
+        campaign,
+        "campaign_failed",
+        `Campaign "${campaign.name}" failed`,
+        "Template not found.",
+      );
       return;
     }
 
@@ -229,6 +256,12 @@ export class CampaignsService {
       await this.campaignModel.updateOne(
         { _id: campaignId },
         { status: "FAILED", errorMessage: "WhatsApp account not connected" },
+      );
+      this.notifyCampaignOwner(
+        campaign,
+        "campaign_failed",
+        `Campaign "${campaign.name}" failed`,
+        "WhatsApp account not connected.",
       );
       return;
     }
@@ -317,7 +350,7 @@ export class CampaignsService {
 
     const final = await this.campaignModel
       .findById(campaignId)
-      .select("status")
+      .select("status sent failed")
       .lean()
       .exec();
     if (final?.status === "RUNNING") {
@@ -326,6 +359,12 @@ export class CampaignsService {
         { status: "COMPLETED", completedAt: new Date() },
       );
       this.logger.log(`Campaign ${campaignId} completed`);
+      this.notifyCampaignOwner(
+        campaign,
+        "campaign_completed",
+        `Campaign "${campaign.name}" completed`,
+        `Sent ${final.sent} message(s), ${final.failed} failed.`,
+      );
     }
   }
 

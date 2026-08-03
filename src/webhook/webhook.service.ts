@@ -11,6 +11,9 @@ import { ConversationsService } from "../conversations/conversations.service";
 import { AutomationService } from "../automation/automation.service";
 import { FlowEngineService } from "../automation/flow-engine.service";
 import { MediaDownloadService } from "../whatsapp/media-download.service";
+import { NotificationsService } from "../notifications/notifications.service";
+import { User, UserDocument } from "../users/schemas/user.schema";
+import { UserRole } from "../auth/auth.constants";
 
 interface InboundMediaField {
   id?: string;
@@ -26,11 +29,14 @@ export class WebhookService {
   constructor(
     @InjectModel(WABAAccount.name)
     private readonly wabaModel: Model<WABAAccountDocument>,
+    @InjectModel(User.name)
+    private readonly userModel: Model<UserDocument>,
     private readonly contactsService: ContactsService,
     private readonly conversationsService: ConversationsService,
     private readonly automationService: AutomationService,
     private readonly flowEngineService: FlowEngineService,
     private readonly mediaDownloadService: MediaDownloadService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   verifyWebhook(query: Record<string, string>): string {
@@ -54,6 +60,11 @@ export class WebhookService {
 
     for (const entry of entries) {
       for (const change of entry.changes ?? []) {
+        if (change.field === "phone_number_quality_update") {
+          await this.handleQualityUpdate(change.value);
+          continue;
+        }
+
         if (change.field !== "messages") continue;
 
         const phoneNumberId = (
@@ -210,6 +221,17 @@ export class WebhookService {
         { mediaUrl, mediaId, mimeType, fileName },
       );
 
+      if (conversation.assignedTo) {
+        void this.notificationsService.create(
+          tenantId,
+          conversation.assignedTo,
+          "new_message",
+          "New message",
+          `${contact.name ?? contact.phone} sent you a new message`,
+          { conversationId: conversation.id },
+        );
+      }
+
       // A conversation mid-flow owns the next inbound reply — automation
       // rules only run once the flow isn't waiting on this contact.
       const resumed = await this.flowEngineService
@@ -245,6 +267,49 @@ export class WebhookService {
       }
     } catch (err) {
       this.logger.error("Failed to handle inbound message", err);
+    }
+  }
+
+  // Meta sends this on quality-rating changes for a connected number. The
+  // payload carries the rating under `event` (e.g. GREEN/YELLOW/RED), not
+  // under a dedicated `quality_rating` key.
+  private async handleQualityUpdate(
+    value: Record<string, unknown>,
+  ): Promise<void> {
+    try {
+      const displayPhoneNumber = value.display_phone_number as
+        | string
+        | undefined;
+      const newRating = value.event as string | undefined;
+      if (!displayPhoneNumber || !newRating) return;
+
+      const waba = await this.wabaModel
+        .findOne({ phoneNumber: displayPhoneNumber })
+        .exec();
+      if (!waba) return;
+      if (waba.qualityRating === newRating) return;
+
+      await this.wabaModel.updateOne(
+        { _id: waba._id },
+        { qualityRating: newRating },
+      );
+
+      const owner = await this.userModel
+        .findOne({ tenantId: waba.tenantId, role: UserRole.OWNER })
+        .select("_id")
+        .lean()
+        .exec();
+      if (!owner) return;
+
+      await this.notificationsService.create(
+        waba.tenantId,
+        String(owner._id),
+        "quality_rating_changed",
+        "WhatsApp quality rating changed",
+        `Your WhatsApp number's quality rating changed to ${newRating}.`,
+      );
+    } catch (err) {
+      this.logger.error("Failed to handle quality rating update", err);
     }
   }
 
