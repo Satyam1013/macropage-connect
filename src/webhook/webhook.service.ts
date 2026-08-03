@@ -109,6 +109,15 @@ export class WebhookService {
     }
   }
 
+  private async findOwnerId(tenantId: string): Promise<string | undefined> {
+    const owner = await this.userModel
+      .findOne({ tenantId, role: UserRole.OWNER })
+      .select("_id")
+      .lean()
+      .exec();
+    return owner ? String(owner._id) : undefined;
+  }
+
   private async handleInboundMessage(
     tenantId: string,
     msg: Record<string, unknown>,
@@ -221,10 +230,16 @@ export class WebhookService {
         { mediaUrl, mediaId, mimeType, fileName },
       );
 
-      if (conversation.assignedTo) {
+      // Assigned conversations notify the assignee; unassigned ones (the
+      // common case for solo/small-team accounts that never manually
+      // assign) fall back to the tenant owner so inbound messages never
+      // go unnoticed.
+      const notifyUserId =
+        conversation.assignedTo ?? (await this.findOwnerId(tenantId));
+      if (notifyUserId) {
         void this.notificationsService.create(
           tenantId,
-          conversation.assignedTo,
+          notifyUserId,
           "new_message",
           "New message",
           `${contact.name ?? contact.phone} sent you a new message`,
