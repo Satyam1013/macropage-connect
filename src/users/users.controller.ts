@@ -55,13 +55,17 @@ export class UsersController {
     if (!user) return { success: true, data: { user: null } };
 
     const tenantId = user.tenantId ?? user.id;
-    const sub = await this.billingService.getSubscription(tenantId);
+    const [sub, tenantFields] = await Promise.all([
+      this.billingService.getSubscription(tenantId),
+      this.usersService.resolveTenantFields(user),
+    ]);
 
     return {
       success: true,
       data: {
         user: {
           ...user.toObject(),
+          ...tenantFields,
           avatarUrl: user.avatarUrl ?? null,
           currentPeriodEnd: sub?.currentPeriodEnd?.toISOString() ?? null,
         },

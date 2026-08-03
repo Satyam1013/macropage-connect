@@ -154,13 +154,15 @@ export class UsersService {
     return { user, isNew: true };
   }
 
-  async toPublicProfile(user: UserDocument): Promise<UserPayload> {
-    // Branding and billing are tenant-level concepts but only ever get
-    // written to the owner's own doc (tenantId === owner's _id; team
-    // members never carry their own copy) — see billing.service.ts
-    // syncUserPlan and whatsapp.service.ts completeSetup. Invited
-    // members must read them off the owner, not their own record.
-    let tenantSource: Pick<
+  // Branding and billing are tenant-level concepts but only ever get
+  // written to the owner's own doc (tenantId === owner's _id; team
+  // members never carry their own copy) — see billing.service.ts
+  // syncUserPlan and whatsapp.service.ts completeSetup. Invited
+  // members must read them off the owner, not their own record.
+  async resolveTenantFields(
+    user: UserDocument,
+  ): Promise<
+    Pick<
       UserDocument,
       | "company"
       | "logoUrl"
@@ -171,18 +173,22 @@ export class UsersService {
       | "trialEndsAt"
       | "subscriptionType"
       | "paidUser"
-    > = user;
+    >
+  > {
+    if (!user.tenantId) return user;
 
-    if (user.tenantId) {
-      const owner = await this.userModel
-        .findById(user.tenantId)
-        .select(
-          "company logoUrl whatsappSetupDone plan billingPlan billingCycle trialEndsAt subscriptionType paidUser",
-        )
-        .lean()
-        .exec();
-      if (owner) tenantSource = owner;
-    }
+    const owner = await this.userModel
+      .findById(user.tenantId)
+      .select(
+        "company logoUrl whatsappSetupDone plan billingPlan billingCycle trialEndsAt subscriptionType paidUser",
+      )
+      .lean()
+      .exec();
+    return owner ?? user;
+  }
+
+  async toPublicProfile(user: UserDocument): Promise<UserPayload> {
+    const tenantSource = await this.resolveTenantFields(user);
 
     return {
       id: user.id,
