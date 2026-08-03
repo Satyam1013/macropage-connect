@@ -13,7 +13,6 @@ import { FlowEngineService } from "../automation/flow-engine.service";
 import { MediaDownloadService } from "../whatsapp/media-download.service";
 import { NotificationsService } from "../notifications/notifications.service";
 import { User, UserDocument } from "../users/schemas/user.schema";
-import { UserRole } from "../auth/auth.constants";
 
 interface InboundMediaField {
   id?: string;
@@ -109,9 +108,11 @@ export class WebhookService {
     }
   }
 
+  // tenantId is always the owner's own _id — invited team members are the
+  // only users that ever get a distinct `tenantId` field stored on them.
   private async findOwnerId(tenantId: string): Promise<string | undefined> {
     const owner = await this.userModel
-      .findOne({ tenantId, role: UserRole.OWNER })
+      .findById(tenantId)
       .select("_id")
       .lean()
       .exec();
@@ -309,16 +310,12 @@ export class WebhookService {
         { qualityRating: newRating },
       );
 
-      const owner = await this.userModel
-        .findOne({ tenantId: waba.tenantId, role: UserRole.OWNER })
-        .select("_id")
-        .lean()
-        .exec();
-      if (!owner) return;
+      const ownerId = await this.findOwnerId(waba.tenantId);
+      if (!ownerId) return;
 
       await this.notificationsService.create(
         waba.tenantId,
-        String(owner._id),
+        ownerId,
         "quality_rating_changed",
         "WhatsApp quality rating changed",
         `Your WhatsApp number's quality rating changed to ${newRating}.`,

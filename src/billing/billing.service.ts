@@ -18,7 +18,6 @@ import { NotificationsService } from "../notifications/notifications.service";
 import { RazorpayService } from "./razorpay.service";
 import type { BillingCycle, PlanKey } from "./billing.types";
 import { getPlanPricing } from "./plans.config";
-import { UserRole } from "../auth/auth.constants";
 
 @Injectable()
 export class BillingService {
@@ -390,8 +389,10 @@ export class BillingService {
         if (dbSub) {
           await this.syncUserPlan(dbSub.tenantId, dbSub.plan);
 
+          // tenantId is always the owner's own _id — invited team members are
+          // the only users that ever get a distinct `tenantId` field stored.
           const owner = await this.userModel
-            .findOne({ tenantId: dbSub.tenantId, role: UserRole.OWNER })
+            .findById(dbSub.tenantId)
             .select("_id")
             .lean()
             .exec();
@@ -421,7 +422,7 @@ export class BillingService {
           .exec();
         if (dbSub) {
           const owner = await this.userModel
-            .findOne({ tenantId: dbSub.tenantId, role: UserRole.OWNER })
+            .findById(dbSub.tenantId)
             .select("_id")
             .lean()
             .exec();

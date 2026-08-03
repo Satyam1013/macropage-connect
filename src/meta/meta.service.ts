@@ -9,7 +9,6 @@ import {
 } from "../schemas/waba-account.schema";
 import { EncryptionService } from "./encryption.service";
 import { User, UserDocument } from "../users/schemas/user.schema";
-import { UserRole } from "../auth/auth.constants";
 import { NotificationsService } from "../notifications/notifications.service";
 
 @Injectable()
@@ -216,9 +215,11 @@ export class MetaService {
     };
   }
 
+  // tenantId is always the owner's own _id — invited team members are the
+  // only users that ever get a distinct `tenantId` field stored on them.
   private async notifyOwnerTokenExpired(tenantId: string): Promise<void> {
     const owner = await this.userModel
-      .findOne({ tenantId, role: UserRole.OWNER })
+      .findById(tenantId)
       .select("_id")
       .lean()
       .exec();

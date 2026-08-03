@@ -9,7 +9,6 @@ import {
 } from "../schemas/waba-account.schema";
 import { Message, MessageDocument } from "../schemas/message.schema";
 import { Campaign, CampaignDocument } from "../schemas/campaign.schema";
-import { UserRole } from "../auth/auth.constants";
 import { NotificationsService } from "./notifications.service";
 
 const TIER_LIMITS: Record<string, number> = {
@@ -43,9 +42,11 @@ export class ScheduledNotificationsService {
     private readonly notificationsService: NotificationsService,
   ) {}
 
+  // tenantId is always the owner's own _id — invited team members are the
+  // only users that ever get a distinct `tenantId` field stored on them.
   private async findOwnerId(tenantId: string): Promise<string | undefined> {
     const owner = await this.userModel
-      .findOne({ tenantId, role: UserRole.OWNER })
+      .findById(tenantId)
       .select("_id")
       .lean()
       .exec();

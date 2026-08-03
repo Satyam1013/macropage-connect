@@ -38,9 +38,12 @@ export class TeamService {
     title: string,
     body: string,
   ): Promise<void> {
+    // The tenant owner's own document never has `tenantId` set — it IS the
+    // tenantId — so admins must be matched by tenantId OR by being that
+    // root user (_id === tenantId).
     const admins = await this.userModel
       .find({
-        tenantId,
+        $or: [{ tenantId }, { _id: tenantId }],
         role: { $in: [UserRole.OWNER, UserRole.ADMIN] },
         _id: { $ne: excludeUserId },
       })
