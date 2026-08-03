@@ -22,6 +22,7 @@ import { UploadModule } from "./upload/upload.module";
 import { HelpModule } from "./help/help.module";
 import { OnboardingModule } from "./onboarding/onboarding.module";
 import { QuickRepliesModule } from "./quick-replies/quick-replies.module";
+import { QrMessageModule } from "./qr-message/qr-message.module";
 import { AdminModule } from "./admin/admin.module";
 import { SampleTemplatesModule } from "./sample-templates/sample-templates.module";
 import { PublicApiModule } from "./public-api/public-api.module";
@@ -70,6 +71,7 @@ import { ScheduledNotificationsModule } from "./notifications/scheduled-notifica
     HelpModule,
     OnboardingModule,
     QuickRepliesModule,
+    QrMessageModule,
     AdminModule,
     SampleTemplatesModule,
     PublicApiModule,
