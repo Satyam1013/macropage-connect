@@ -163,6 +163,8 @@ export class UsersService {
       tenantId: user.tenantId,
       phone: user.phone,
       avatarUrl: user.avatarUrl ?? null,
+      companyName: user.company,
+      logoUrl: user.logoUrl ?? null,
       emailVerified: user.emailVerified,
       whatsappSetupDone: user.whatsappSetupDone,
       plan: user.plan,
