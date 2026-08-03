@@ -73,7 +73,12 @@ export class AuthService {
 
     void this.emailService.sendVerificationEmail(user.email, user.name, otp);
 
-    return this.buildAuthResponse(user, "Account created successfully");
+    // No tokens yet — verifyEmail() issues them once the OTP is confirmed.
+    return {
+      success: true,
+      data: { user: await this.users.toPublicProfile(user) },
+      message: "Account created — check your email for a verification code",
+    };
   }
 
   // ─── Login ────────────────────────────────────────────────────────────────
@@ -327,12 +332,22 @@ export class AuthService {
 
   // ─── Email Verification ───────────────────────────────────────────────────
 
-  async verifyEmail(email: string, otp: string): Promise<{ message: string }> {
+  async verifyEmail(email: string, otp: string): Promise<AuthResponse> {
     const otpHash = crypto.createHash("sha256").update(otp).digest("hex");
     const user = await this.users.findByEmailAndOtp(email, otpHash);
     if (!user) throw new BadRequestException("Invalid or expired OTP");
     await this.users.markEmailVerified(user.id);
-    return { message: "Email verified successfully" };
+    user.emailVerified = true;
+
+    await this.users.updateLastLogin(user.id);
+    void this.activityService.log({
+      tenantId: user.tenantId ?? user.id,
+      userId: user.id,
+      type: "LOGIN",
+      description: "Logged in",
+    });
+
+    return this.buildAuthResponse(user, "Email verified successfully");
   }
 
   async resendVerification(email: string): Promise<{ message: string }> {

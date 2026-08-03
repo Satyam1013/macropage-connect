@@ -23,7 +23,7 @@ export interface UserPayload {
 export interface AuthResponse {
   success: true;
   data: {
-    accessToken: string;
+    accessToken?: string;
     refreshToken?: string;
     user: UserPayload;
   };
