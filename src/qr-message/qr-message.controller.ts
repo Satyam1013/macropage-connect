@@ -2,7 +2,9 @@ import {
   Controller,
   Get,
   Post,
+  Put,
   Body,
+  Param,
   UseGuards,
   Request,
   HttpCode,
@@ -29,5 +31,15 @@ export class QrMessageController {
   create(@Request() req: AuthReq, @Body() dto: CreateQrMessageDto) {
     const tenantId = req.user.tenantId ?? req.user.id;
     return this.service.create(tenantId, req.user.id, dto);
+  }
+
+  @Put(":id")
+  update(
+    @Request() req: AuthReq,
+    @Param("id") id: string,
+    @Body() dto: CreateQrMessageDto,
+  ) {
+    const tenantId = req.user.tenantId ?? req.user.id;
+    return this.service.update(tenantId, id, dto);
   }
 }
