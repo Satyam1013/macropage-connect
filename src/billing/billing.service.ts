@@ -14,10 +14,39 @@ import {
 import { Invoice, InvoiceDocument } from "../schemas/invoice.schema";
 import { Payment, PaymentDocument } from "../schemas/payment.schema";
 import { User, UserDocument } from "../users/schemas/user.schema";
+import {
+  PlanOverride,
+  PlanOverrideDocument,
+} from "./schemas/plan-override.schema";
 import { NotificationsService } from "../notifications/notifications.service";
 import { RazorpayService } from "./razorpay.service";
 import type { BillingCycle, PlanKey } from "./billing.types";
 import { getPlanPricing } from "./plans.config";
+
+function mergePlan(
+  current: Record<string, unknown>,
+  changes: Record<string, unknown>,
+): Record<string, unknown> {
+  return Object.entries(changes).reduce<Record<string, unknown>>(
+    (result, [key, value]) => {
+      const existing = result[key];
+      result[key] =
+        value &&
+        typeof value === "object" &&
+        !Array.isArray(value) &&
+        existing &&
+        typeof existing === "object" &&
+        !Array.isArray(existing)
+          ? mergePlan(
+              existing as Record<string, unknown>,
+              value as Record<string, unknown>,
+            )
+          : value;
+      return result;
+    },
+    { ...current },
+  );
+}
 
 @Injectable()
 export class BillingService {
@@ -32,14 +61,31 @@ export class BillingService {
     private readonly paymentModel: Model<PaymentDocument>,
     @InjectModel(User.name)
     private readonly userModel: Model<UserDocument>,
+    @InjectModel(PlanOverride.name)
+    private readonly planOverrideModel: Model<PlanOverrideDocument>,
     private readonly razorpayService: RazorpayService,
     private readonly notificationsService: NotificationsService,
   ) {}
 
   // ── Public plans list ─────────────────────────────────────────────────────
 
-  getPlans() {
-    return PLAN_PRICING;
+  /** Merges macropage-admin's pricing-page edits (adminplanoverrides) onto the static catalog. */
+  async getPlans() {
+    const overrides = await this.planOverrideModel.find().lean().exec();
+    if (overrides.length === 0) {
+      return PLAN_PRICING;
+    }
+    const overridesByPlanId = new Map(
+      overrides.map((override) => [override.planId, override.plan]),
+    );
+    return PLAN_PRICING.map((plan) =>
+      overridesByPlanId.has(plan.id)
+        ? (mergePlan(
+            plan as unknown as Record<string, unknown>,
+            overridesByPlanId.get(plan.id)!,
+          ) as unknown as (typeof PLAN_PRICING)[number])
+        : plan,
+    );
   }
 
   // ── Subscription read ─────────────────────────────────────────────────────
