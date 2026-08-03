@@ -459,9 +459,20 @@ export class AnalyticsService {
 
   // ─── GET /analytics/dashboard/recent ──────────────────────────────────────
 
-  async getDashboardRecent(tenantId: string, limit = 10) {
+  async getDashboardRecent(
+    tenantId: string,
+    limit = 10,
+    requesterId?: string,
+    role?: string,
+  ) {
     const safeLimit = Math.min(Math.max(limit, 1), 50);
     const perType = Math.ceil(safeLimit / 3);
+
+    // AGENTs only ever see their own activity — not other agents', not a
+    // manager's/owner's. Campaigns and messages can be attributed to a user
+    // (createdBy / conversation.assignedTo); contacts have no owner field
+    // at all, so there's no way to prove one is "theirs" — exclude them.
+    const isAgentScoped = role === "AGENT" && !!requesterId;
 
     const [recentMessages, recentCampaigns, recentContacts] = await Promise.all(
       [
@@ -474,7 +485,6 @@ export class AnalyticsService {
             },
           },
           { $sort: { createdAt: -1 } },
-          { $limit: perType },
           {
             $addFields: {
               conversationObjId: { $toObjectId: "$conversationId" },
@@ -494,6 +504,10 @@ export class AnalyticsService {
               preserveNullAndEmptyArrays: true,
             },
           },
+          ...(isAgentScoped
+            ? [{ $match: { "conversation.assignedTo": requesterId } }]
+            : []),
+          { $limit: perType },
           {
             $addFields: {
               contactObjId: {
@@ -532,19 +546,26 @@ export class AnalyticsService {
           },
         ]),
         this.campaignModel
-          .find({ tenantId, status: "COMPLETED", completedAt: { $ne: null } })
+          .find({
+            tenantId,
+            status: "COMPLETED",
+            completedAt: { $ne: null },
+            ...(isAgentScoped ? { createdBy: requesterId } : {}),
+          })
           .sort({ completedAt: -1 })
           .limit(perType)
           .select("_id name sent delivered completedAt")
           .lean()
           .exec(),
-        this.contactModel
-          .find({ tenantId })
-          .sort({ createdAt: -1 })
-          .limit(perType)
-          .select("_id name phone createdAt")
-          .lean()
-          .exec(),
+        isAgentScoped
+          ? Promise.resolve([])
+          : this.contactModel
+              .find({ tenantId })
+              .sort({ createdAt: -1 })
+              .limit(perType)
+              .select("_id name phone createdAt")
+              .lean()
+              .exec(),
       ],
     );
 

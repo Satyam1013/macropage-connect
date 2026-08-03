@@ -40,6 +40,8 @@ export class DashboardController {
     return this.analyticsService.getDashboardRecent(
       tenantId,
       limit ? Number(limit) : 10,
+      req.user.id,
+      req.user.role,
     );
   }
 
