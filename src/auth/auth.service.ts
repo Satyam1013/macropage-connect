@@ -3,6 +3,7 @@ import {
   UnauthorizedException,
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Logger,
 } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
@@ -96,6 +97,14 @@ export class AuthService {
         success: false,
         message: "Invalid email or password",
         code: "INVALID_CREDENTIALS",
+      });
+    }
+
+    if (!user.emailVerified) {
+      throw new ForbiddenException({
+        success: false,
+        message: "Please verify your email before logging in",
+        code: "EMAIL_NOT_VERIFIED",
       });
     }
 
