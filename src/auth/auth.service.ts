@@ -4,6 +4,7 @@ import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
+  NotFoundException,
   Logger,
 } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
@@ -287,21 +288,24 @@ export class AuthService {
 
   async forgotPassword(dto: ForgotPasswordDto): Promise<{ message: string }> {
     const user = await this.users.findByEmail(dto.email);
-    if (user) {
-      const token = crypto.randomBytes(32).toString("hex");
-      const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
-      await this.resetTokenModel.create({
-        userId: user.id,
-        tokenHash,
-        expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+    if (!user) {
+      throw new NotFoundException({
+        success: false,
+        message: "No account found with this email — please use another email",
+        code: "EMAIL_NOT_FOUND",
       });
-      void this.emailService.sendPasswordResetEmail(
-        user.email,
-        user.name,
-        token,
-      );
     }
-    return { message: "If this email exists, a reset link was sent" };
+
+    const token = crypto.randomBytes(32).toString("hex");
+    const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+    await this.resetTokenModel.create({
+      userId: user.id,
+      tokenHash,
+      expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+    });
+    void this.emailService.sendPasswordResetEmail(user.email, user.name, token);
+
+    return { message: "Password reset link sent to your email" };
   }
 
   // ─── Reset Password ───────────────────────────────────────────────────────
