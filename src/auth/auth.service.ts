@@ -210,7 +210,7 @@ export class AuthService {
     const sub = await this.billingService.getSubscription(tenantId);
 
     return {
-      ...this.users.toPublicProfile(user),
+      ...(await this.users.toPublicProfile(user)),
       currentPeriodEnd: sub?.currentPeriodEnd?.toISOString() ?? null,
     };
   }
@@ -361,7 +361,10 @@ export class AuthService {
 
   // ─── Helpers ──────────────────────────────────────────────────────────────
 
-  private buildAuthResponse(user: UserDocument, message: string): AuthResponse {
+  private async buildAuthResponse(
+    user: UserDocument,
+    message: string,
+  ): Promise<AuthResponse> {
     const accessToken = this.signAccessToken(user.id, user.email);
     const refreshToken = this.signRefreshToken(user.id, user.email);
 
@@ -370,7 +373,7 @@ export class AuthService {
       data: {
         accessToken,
         refreshToken,
-        user: this.users.toPublicProfile(user),
+        user: await this.users.toPublicProfile(user),
       },
       message,
     };

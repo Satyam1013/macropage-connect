@@ -154,7 +154,36 @@ export class UsersService {
     return { user, isNew: true };
   }
 
-  toPublicProfile(user: UserDocument): UserPayload {
+  async toPublicProfile(user: UserDocument): Promise<UserPayload> {
+    // Branding and billing are tenant-level concepts but only ever get
+    // written to the owner's own doc (tenantId === owner's _id; team
+    // members never carry their own copy) — see billing.service.ts
+    // syncUserPlan and whatsapp.service.ts completeSetup. Invited
+    // members must read them off the owner, not their own record.
+    let tenantSource: Pick<
+      UserDocument,
+      | "company"
+      | "logoUrl"
+      | "whatsappSetupDone"
+      | "plan"
+      | "billingPlan"
+      | "billingCycle"
+      | "trialEndsAt"
+      | "subscriptionType"
+      | "paidUser"
+    > = user;
+
+    if (user.tenantId) {
+      const owner = await this.userModel
+        .findById(user.tenantId)
+        .select(
+          "company logoUrl whatsappSetupDone plan billingPlan billingCycle trialEndsAt subscriptionType paidUser",
+        )
+        .lean()
+        .exec();
+      if (owner) tenantSource = owner;
+    }
+
     return {
       id: user.id,
       name: user.name,
@@ -163,16 +192,16 @@ export class UsersService {
       tenantId: user.tenantId,
       phone: user.phone,
       avatarUrl: user.avatarUrl ?? null,
-      companyName: user.company,
-      logoUrl: user.logoUrl ?? null,
+      companyName: tenantSource.company,
+      logoUrl: tenantSource.logoUrl ?? null,
       emailVerified: user.emailVerified,
-      whatsappSetupDone: user.whatsappSetupDone,
-      plan: user.plan,
-      billingPlan: user.billingPlan,
-      billingCycle: user.billingCycle,
-      trialEndsAt: user.trialEndsAt,
-      subscriptionType: user.subscriptionType,
-      paidUser: user.paidUser,
+      whatsappSetupDone: tenantSource.whatsappSetupDone,
+      plan: tenantSource.plan,
+      billingPlan: tenantSource.billingPlan,
+      billingCycle: tenantSource.billingCycle,
+      trialEndsAt: tenantSource.trialEndsAt,
+      subscriptionType: tenantSource.subscriptionType,
+      paidUser: tenantSource.paidUser,
       createdAt: user.createdAt.toISOString(),
     };
   }
