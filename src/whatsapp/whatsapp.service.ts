@@ -57,7 +57,6 @@ export class WhatsappService {
     const phoneVerified = waba?.phoneVerified ?? false;
     const testMessageSent = waba?.testMessageSent ?? false;
     const phoneRegistered: boolean = Boolean(waba?.phoneRegistered);
-    const setupComplete: boolean = Boolean(waba?.setupComplete);
 
     let currentStep: number;
     if (!businessInfoSaved) currentStep = 1;
@@ -65,6 +64,12 @@ export class WhatsappService {
     else if (!phoneVerified) currentStep = 3;
     else if (!testMessageSent) currentStep = 4;
     else currentStep = 5;
+
+    // waba.setupComplete only tracks the Meta phone-registration API call
+    // (see registerPhoneNumber) — it's unrelated to the onboarding wizard
+    // steps above. The wizard is only actually complete once every step,
+    // including the test message, has run.
+    const setupComplete = currentStep === 5;
 
     return {
       success: true,
@@ -946,7 +951,7 @@ export class WhatsappService {
       success: true,
       data: {
         phoneRegistered: Boolean(waba.phoneRegistered),
-        phoneRegisteredAt: (waba.phoneRegisteredAt as Date | undefined) ?? null,
+        phoneRegisteredAt: waba.phoneRegisteredAt ?? null,
         setupComplete: Boolean(waba.setupComplete),
       },
     };
