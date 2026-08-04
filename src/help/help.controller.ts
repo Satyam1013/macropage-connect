@@ -70,6 +70,11 @@ export class HelpController {
     return this.helpService.getFaqs(category);
   }
 
+  @Get("videos")
+  getVideoTutorials() {
+    return this.helpService.getVideoTutorials();
+  }
+
   @Get("search")
   search(@Query("q") q: string) {
     return this.helpService.search(q);

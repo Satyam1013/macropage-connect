@@ -9,6 +9,10 @@ import { Model, Types } from "mongoose";
 import { HelpDoc, HelpDocDocument } from "../schemas/help-doc.schema";
 import { HelpFaq, HelpFaqDocument } from "../schemas/help-faq.schema";
 import {
+  VideoTutorial,
+  VideoTutorialDocument,
+} from "../schemas/video-tutorial.schema";
+import {
   SupportTicket,
   SupportTicketDocument,
 } from "../schemas/support-ticket.schema";
@@ -24,6 +28,8 @@ export class HelpService implements OnModuleInit {
     private readonly docModel: Model<HelpDocDocument>,
     @InjectModel(HelpFaq.name)
     private readonly faqModel: Model<HelpFaqDocument>,
+    @InjectModel(VideoTutorial.name)
+    private readonly videoTutorialModel: Model<VideoTutorialDocument>,
     @InjectModel(SupportTicket.name)
     private readonly ticketModel: Model<SupportTicketDocument>,
   ) {}
@@ -61,6 +67,10 @@ export class HelpService implements OnModuleInit {
   async getFaqs(category?: string): Promise<HelpFaqDocument[]> {
     const filter = category ? { category } : {};
     return this.faqModel.find(filter).sort({ category: 1, order: 1 }).exec();
+  }
+
+  async getVideoTutorials(): Promise<VideoTutorialDocument[]> {
+    return this.videoTutorialModel.find().sort({ order: 1, createdAt: 1 }).exec();
   }
 
   async search(

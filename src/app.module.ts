@@ -28,6 +28,7 @@ import { SampleTemplatesModule } from "./sample-templates/sample-templates.modul
 import { PublicApiModule } from "./public-api/public-api.module";
 import { IntegrationPlatformsModule } from "./integration-platforms/integration-platforms.module";
 import { AdsModule } from "./ads/ads.module";
+import { DemoRequestsModule } from "./demo-requests/demo-requests.module";
 
 // Infrastructure
 import { MetaModule } from "./meta/meta.module";
@@ -77,6 +78,7 @@ import { ScheduledNotificationsModule } from "./notifications/scheduled-notifica
     PublicApiModule,
     IntegrationPlatformsModule,
     AdsModule,
+    DemoRequestsModule,
   ],
 })
 export class AppModule {}
