@@ -1,6 +1,11 @@
-import { Injectable, OnModuleInit, Logger } from "@nestjs/common";
+import {
+  Injectable,
+  OnModuleInit,
+  Logger,
+  NotFoundException,
+} from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
-import { Model } from "mongoose";
+import { Model, Types } from "mongoose";
 import { HelpDoc, HelpDocDocument } from "../schemas/help-doc.schema";
 import { HelpFaq, HelpFaqDocument } from "../schemas/help-faq.schema";
 import {
@@ -106,6 +111,18 @@ export class HelpService implements OnModuleInit {
       updatedAt: new Date().toISOString(),
       tickets: { data, total, page: safePage, limit: safeLimit },
     };
+  }
+
+  async getTicketById(
+    tenantId: string,
+    id: string,
+  ): Promise<SupportTicketDocument> {
+    if (!Types.ObjectId.isValid(id)) {
+      throw new NotFoundException("Ticket not found");
+    }
+    const ticket = await this.ticketModel.findOne({ _id: id, tenantId }).exec();
+    if (!ticket) throw new NotFoundException("Ticket not found");
+    return ticket;
   }
 
   async createTicket(

@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Body,
+  Param,
   Query,
   UseGuards,
   Request,
@@ -28,6 +29,14 @@ export class HelpController {
       { id: req.user.id, name: req.user.name, email: req.user.email },
       dto,
     );
+  }
+
+  @Get("tickets/:id")
+  @UseGuards(JwtAuthGuard)
+  async getTicket(@Request() req: AuthReq, @Param("id") id: string) {
+    const tenantId = req.user.tenantId ?? req.user.id;
+    const data = await this.helpService.getTicketById(tenantId, id);
+    return { success: true, data };
   }
 
   @Get("docs")
