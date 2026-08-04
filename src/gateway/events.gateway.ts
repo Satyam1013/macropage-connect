@@ -16,6 +16,12 @@ import { Model } from "mongoose";
 import { Server, Socket as BaseSocket, DefaultEventsMap } from "socket.io";
 import { SocketService } from "./socket.service";
 import { SocketData } from "./gateway.types";
+import {
+  SupportTicket,
+  SupportTicketDocument,
+} from "../schemas/support-ticket.schema";
+import { SupportChatService } from "../support-chat/support-chat.service";
+import type { ChatSenderType } from "../support-chat/schemas/chat-message.schema";
 
 // Local alias needed: cross-module type aliases break emitDecoratorMetadata in decorated params
 type AppSocket = BaseSocket<
@@ -68,7 +74,10 @@ export class EventsGateway
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
     private readonly socketService: SocketService,
+    private readonly supportChatService: SupportChatService,
     @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
+    @InjectModel(SupportTicket.name)
+    private readonly ticketModel: Model<SupportTicketDocument>,
   ) {}
 
   // ── INIT ──────────────────────────────────────────────────────────────────
@@ -110,7 +119,9 @@ export class EventsGateway
       const userId = payload.sub;
       const user = await this.userModel
         .findById(userId)
-        .select("_id name email avatarUrl role tenantId onlineStatus")
+        .select(
+          "_id name email avatarUrl role tenantId onlineStatus platformRole",
+        )
         .lean()
         .exec();
 
@@ -130,6 +141,7 @@ export class EventsGateway
       client.data.tenantId = tenantId;
       client.data.role = user.role;
       client.data.name = user.name;
+      client.data.platformRole = user.platformRole;
 
       // Join rooms
       await client.join(`tenant:${tenantId}`);
@@ -204,6 +216,54 @@ export class EventsGateway
     }
 
     this.logger.log(`Disconnected: ${userId} socket:${client.id}`);
+  }
+
+  // ── SUPPORT TICKET CHAT ────────────────────────────────────────────────────
+  // Only the ticket's own tenant, or platform staff, may join/message a
+  // ticket room — prevents an unrelated tenant from reading another
+  // tenant's support conversation just by knowing the ticket id.
+
+  private async canAccessTicket(client: AppSocket, ticketId: string) {
+    if (client.data.platformRole) return true;
+    const ticket = await this.ticketModel
+      .findById(ticketId)
+      .select("tenantId")
+      .lean()
+      .exec();
+    return !!ticket && ticket.tenantId === client.data.tenantId;
+  }
+
+  @SubscribeMessage("ticket:join")
+  async handleJoinTicket(
+    @ConnectedSocket() client: AppSocket,
+    @MessageBody() data: { ticketId: string },
+  ) {
+    if (!(await this.canAccessTicket(client, data.ticketId))) {
+      client.emit("error", { code: "FORBIDDEN", message: "Ticket not found" });
+      return;
+    }
+    await client.join(`ticket:${data.ticketId}`);
+    const history = await this.supportChatService.getHistory(data.ticketId);
+    client.emit("ticket:history", history);
+  }
+
+  @SubscribeMessage("ticket:message")
+  async handleTicketMessage(
+    @ConnectedSocket() client: AppSocket,
+    @MessageBody()
+    data: { ticketId: string; senderType: ChatSenderType; message: string },
+  ) {
+    if (!(await this.canAccessTicket(client, data.ticketId))) {
+      client.emit("error", { code: "FORBIDDEN", message: "Ticket not found" });
+      return;
+    }
+    const savedMessage = await this.supportChatService.saveMessage({
+      ticketId: data.ticketId,
+      senderType: data.senderType,
+      senderId: client.data.userId,
+      message: data.message,
+    });
+    this.server.to(`ticket:${data.ticketId}`).emit("ticket:message", savedMessage);
   }
 
   // ── CONVERSATION ROOM ─────────────────────────────────────────────────────

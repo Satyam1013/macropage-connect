@@ -3,4 +3,5 @@ export interface SocketData {
   tenantId: string;
   role: string;
   name: string;
+  platformRole?: string;
 }

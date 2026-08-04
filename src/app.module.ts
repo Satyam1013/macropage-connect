@@ -32,6 +32,7 @@ import { DemoRequestsModule } from "./demo-requests/demo-requests.module";
 import { TagsModule } from "./tags/tags.module";
 import { MessagesStatsModule } from "./platform-admin/messages-stats/messages-stats.module";
 import { PlatformCustomersModule } from "./platform-admin/customers/customers.module";
+import { PlatformNotificationsModule } from "./platform-admin/notifications/notifications.module";
 
 // Infrastructure
 import { MetaModule } from "./meta/meta.module";
@@ -85,6 +86,7 @@ import { ScheduledNotificationsModule } from "./notifications/scheduled-notifica
     TagsModule,
     MessagesStatsModule,
     PlatformCustomersModule,
+    PlatformNotificationsModule,
   ],
 })
 export class AppModule {}
