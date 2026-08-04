@@ -21,3 +21,10 @@ export const AUDIO_TYPES = [
   "audio/wav",
   "audio/mp4",
 ];
+
+export const TUTORIAL_TYPES = [
+  ...IMAGE_TYPES,
+  "video/mp4",
+  "video/webm",
+  "application/pdf",
+];

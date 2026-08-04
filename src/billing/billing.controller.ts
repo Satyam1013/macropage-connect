@@ -2,8 +2,10 @@ import {
   Controller,
   Get,
   Post,
+  Patch,
   Delete,
   Body,
+  Param,
   Headers,
   HttpCode,
   HttpStatus,
@@ -18,11 +20,14 @@ import { RazorpayService } from "./razorpay.service";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { RolesGuard } from "../common/guards/roles.guard";
 import { Roles } from "../common/decorators/roles.decorator";
-import { UserRole } from "../auth/auth.constants";
+import { PlatformRolesGuard } from "../common/guards/platform-roles.guard";
+import { PlatformRoles } from "../common/decorators/platform-roles.decorator";
+import { UserRole, PlatformRole } from "../auth/auth.constants";
 import type { AuthReq } from "../auth/dto/auth-request.interface";
 import { CreateSubscriptionDto } from "./dto/create-subscription.dto";
 import { VerifyPaymentDto } from "./dto/verify-payment.dto";
 import { CancelSubscriptionDto } from "./dto/cancel-subscription.dto";
+import { UpdatePlanDto } from "./dto/update-plan.dto";
 
 @Controller("billing")
 export class BillingController {
@@ -36,6 +41,29 @@ export class BillingController {
   @Get("plans")
   getPlans() {
     return this.billingService.getPlans();
+  }
+
+  // ── Platform-staff ─────────────────────────────────────────────────────────
+
+  @Patch("platform/plans/:planId")
+  @UseGuards(JwtAuthGuard, PlatformRolesGuard)
+  @PlatformRoles(PlatformRole.SUPER_ADMIN)
+  updatePlan(@Param("planId") planId: string, @Body() dto: UpdatePlanDto) {
+    return this.billingService.updatePlanOverride(planId, dto);
+  }
+
+  @Get("platform/plans/customer/:tenantId")
+  @UseGuards(JwtAuthGuard, PlatformRolesGuard)
+  @PlatformRoles(PlatformRole.SUPER_ADMIN, PlatformRole.SUPPORT_AGENT)
+  getPlanHistoryForCustomer(@Param("tenantId") tenantId: string) {
+    return this.billingService.getPlanHistoryForPlatform(tenantId);
+  }
+
+  @Get("platform/plans/customer/:tenantId/current")
+  @UseGuards(JwtAuthGuard, PlatformRolesGuard)
+  @PlatformRoles(PlatformRole.SUPER_ADMIN, PlatformRole.SUPPORT_AGENT)
+  getCurrentSubscriptionForCustomer(@Param("tenantId") tenantId: string) {
+    return this.billingService.getSubscription(tenantId);
   }
 
   // ── Owner-only ─────────────────────────────────────────────────────────────

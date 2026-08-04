@@ -6,7 +6,12 @@ import {
   DeleteObjectCommand,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import { IMAGE_TYPES, DOC_TYPES, AUDIO_TYPES } from "./upload.constants";
+import {
+  IMAGE_TYPES,
+  DOC_TYPES,
+  AUDIO_TYPES,
+  TUTORIAL_TYPES,
+} from "./upload.constants";
 import { GetObjectCommand } from "@aws-sdk/client-s3";
 import { randomUUID } from "crypto";
 
@@ -33,7 +38,16 @@ export class UploadService {
         secretAccessKey: this.config.get("DO_SPACES_SECRET", ""),
       },
       forcePathStyle: false,
+      requestChecksumCalculation: "WHEN_REQUIRED",
+      responseChecksumValidation: "WHEN_REQUIRED",
     });
+
+    // S3Client hardcodes `requestChecksumRequired: true` for PutObject, so
+    // the WHEN_REQUIRED settings above are ignored on their own and it
+    // still attaches an `x-amz-checksum-crc32` header — which DigitalOcean
+    // Spaces doesn't understand and rejects with "InvalidArgument". Strip
+    // the middleware that adds/validates flexible checksums entirely.
+    this.s3.middlewareStack.removeByTag("BODY_CHECKSUM");
   }
 
   async uploadImage(
@@ -152,5 +166,64 @@ export class UploadService {
     await this.s3.send(
       new DeleteObjectCommand({ Bucket: this.bucket, Key: key }),
     );
+  }
+
+  // ── Platform-staff uploads (help docs, ads, sample templates, etc.) ─────
+  // Distinct key prefixes so they never collide with tenant-scoped keys above.
+
+  async uploadPlatformTutorial(
+    file: Express.Multer.File,
+  ): Promise<{ url: string }> {
+    if (!TUTORIAL_TYPES.includes(file.mimetype)) {
+      throw new BadRequestException(
+        "Only images, mp4/webm video, or PDF are allowed for tutorials",
+      );
+    }
+    if (file.size > 100 * 1024 * 1024) {
+      throw new BadRequestException("File must be under 100MB");
+    }
+
+    const ext = file.originalname.split(".").pop() ?? "bin";
+    const key = `platform-tutorials/${randomUUID()}.${ext}`;
+
+    await this.s3.send(
+      new PutObjectCommand({
+        Bucket: this.bucket,
+        Key: key,
+        Body: file.buffer,
+        ContentType: file.mimetype,
+        ACL: "public-read",
+      }),
+    );
+
+    return { url: `${this.cdnBase}/${key}` };
+  }
+
+  async uploadPlatformImage(
+    file: Express.Multer.File,
+  ): Promise<{ url: string }> {
+    if (!IMAGE_TYPES.includes(file.mimetype)) {
+      throw new BadRequestException(
+        "Only jpeg, png, webp, or gif images are allowed",
+      );
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      throw new BadRequestException("File must be under 10MB");
+    }
+
+    const ext = file.originalname.split(".").pop() ?? "bin";
+    const key = `platform-images/${randomUUID()}.${ext}`;
+
+    await this.s3.send(
+      new PutObjectCommand({
+        Bucket: this.bucket,
+        Key: key,
+        Body: file.buffer,
+        ContentType: file.mimetype,
+        ACL: "public-read",
+      }),
+    );
+
+    return { url: `${this.cdnBase}/${key}` };
   }
 }

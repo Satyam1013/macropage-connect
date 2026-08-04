@@ -1,6 +1,6 @@
 import { Prop, Schema, SchemaFactory } from "@nestjs/mongoose";
 import { HydratedDocument } from "mongoose";
-import { UserRole } from "src/auth/auth.constants";
+import { PlatformRole, UserRole } from "src/auth/auth.constants";
 
 export type UserDocument = HydratedDocument<User> & {
   createdAt: Date;
@@ -33,6 +33,12 @@ export class User {
     required: true,
   })
   role!: UserRole;
+
+  // Platform-staff-only field — undefined for every normal tenant user.
+  // Gates /platform/* routes via PlatformRolesGuard; never derive
+  // authorization from `role` above for those routes.
+  @Prop({ type: String, enum: Object.values(PlatformRole) })
+  platformRole?: PlatformRole;
 
   @Prop({ default: false })
   emailVerified!: boolean;

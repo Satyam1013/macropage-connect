@@ -2,6 +2,14 @@ import { Prop, Schema, SchemaFactory } from "@nestjs/mongoose";
 import { HydratedDocument } from "mongoose";
 
 export type IntegrationStatus = "Active" | "Inactive" | "ComingSoon";
+export const INTEGRATION_STATUSES: IntegrationStatus[] = [
+  "Active",
+  "Inactive",
+  "ComingSoon",
+];
+
+/** Seeded starting categories — not a hard enum, platform admins can add new ones from the UI. */
+export const INTEGRATION_CATEGORIES = ["E-commerce", "CRM", "Automation"];
 
 export type IntegrationPlatformDocument =
   HydratedDocument<IntegrationPlatform> & {
@@ -40,3 +48,6 @@ export class IntegrationPlatform {
 
 export const IntegrationPlatformSchema =
   SchemaFactory.createForClass(IntegrationPlatform);
+
+IntegrationPlatformSchema.index({ category: 1, name: 1 }, { unique: true });
+IntegrationPlatformSchema.index({ status: 1 });

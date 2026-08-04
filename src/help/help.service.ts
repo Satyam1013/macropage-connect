@@ -1,4 +1,5 @@
 import {
+  ConflictException,
   Injectable,
   OnModuleInit,
   Logger,
@@ -18,6 +19,14 @@ import {
 } from "../schemas/support-ticket.schema";
 import { DOC_ARTICLES, FAQ_ITEMS } from "./help.seed";
 import { CreateTicketDto } from "./dto/create-ticket.dto";
+import { CreateVideoTutorialDto } from "./dto/create-video-tutorial.dto";
+import { UpdateVideoTutorialDto } from "./dto/update-video-tutorial.dto";
+import { CreateDocDto } from "./dto/create-doc.dto";
+import { UpdateDocDto } from "./dto/update-doc.dto";
+import { CreateFaqDto } from "./dto/create-faq.dto";
+import { UpdateFaqDto } from "./dto/update-faq.dto";
+import { QueryTicketsDto } from "./dto/query-tickets.dto";
+import { UpdateTicketDto } from "./dto/update-ticket.dto";
 
 @Injectable()
 export class HelpService implements OnModuleInit {
@@ -69,8 +78,82 @@ export class HelpService implements OnModuleInit {
     return this.faqModel.find(filter).sort({ category: 1, order: 1 }).exec();
   }
 
+  // ── Platform-staff CRUD: docs ────────────────────────────────────────────
+
+  async createDoc(dto: CreateDocDto) {
+    const exists = await this.docModel.findOne({ slug: dto.slug }).exec();
+    if (exists) {
+      throw new ConflictException("A doc with this slug already exists");
+    }
+    return this.docModel.create(dto);
+  }
+
+  async updateDoc(id: string, dto: UpdateDocDto) {
+    const doc = await this.docModel
+      .findByIdAndUpdate(id, dto, { new: true })
+      .exec();
+    if (!doc) {
+      throw new NotFoundException("Doc not found");
+    }
+    return doc;
+  }
+
+  async deleteDoc(id: string) {
+    const doc = await this.docModel.findByIdAndDelete(id).exec();
+    if (!doc) {
+      throw new NotFoundException("Doc not found");
+    }
+    return doc;
+  }
+
+  // ── Platform-staff CRUD: FAQs ────────────────────────────────────────────
+
+  createFaq(dto: CreateFaqDto) {
+    return this.faqModel.create(dto);
+  }
+
+  async updateFaq(id: string, dto: UpdateFaqDto) {
+    const faq = await this.faqModel
+      .findByIdAndUpdate(id, dto, { new: true })
+      .exec();
+    if (!faq) {
+      throw new NotFoundException("FAQ not found");
+    }
+    return faq;
+  }
+
+  async deleteFaq(id: string) {
+    const faq = await this.faqModel.findByIdAndDelete(id).exec();
+    if (!faq) {
+      throw new NotFoundException("FAQ not found");
+    }
+    return faq;
+  }
+
   async getVideoTutorials(): Promise<VideoTutorialDocument[]> {
     return this.videoTutorialModel.find().sort({ order: 1, createdAt: 1 }).exec();
+  }
+
+  createVideoTutorial(dto: CreateVideoTutorialDto) {
+    return this.videoTutorialModel.create(dto);
+  }
+
+  async updateVideoTutorial(id: string, dto: UpdateVideoTutorialDto) {
+    const video = await this.videoTutorialModel
+      .findByIdAndUpdate(id, dto, { new: true })
+      .exec();
+    if (!video) {
+      throw new NotFoundException("Video tutorial not found");
+    }
+    return video;
+  }
+
+  async deleteVideoTutorial(id: string) {
+    const video = await this.videoTutorialModel.findByIdAndDelete(id).exec();
+    if (!video) {
+      throw new NotFoundException("Video tutorial not found");
+    }
+    return video;
   }
 
   async search(
@@ -158,5 +241,52 @@ export class HelpService implements OnModuleInit {
       attachments: dto.attachments ?? [],
     });
     return { success: true, data: ticket };
+  }
+
+  // ── Platform-staff triage (cross-tenant) ─────────────────────────────────
+
+  async findAllTicketsForPlatform(query: QueryTicketsDto) {
+    const { page = 1, limit = 20, status, priority, tenantId } = query;
+
+    const filter: Record<string, unknown> = {};
+    if (status) filter.status = status;
+    if (priority) filter.priority = priority;
+    if (tenantId) filter.tenantId = tenantId;
+
+    const [data, total] = await Promise.all([
+      this.ticketModel
+        .find(filter)
+        .sort({ createdAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .exec(),
+      this.ticketModel.countDocuments(filter),
+    ]);
+
+    return { data, total, page, limit };
+  }
+
+  async findOneTicketForPlatform(id: string): Promise<SupportTicketDocument> {
+    if (!Types.ObjectId.isValid(id)) {
+      throw new NotFoundException("Ticket not found");
+    }
+    const ticket = await this.ticketModel.findById(id).exec();
+    if (!ticket) throw new NotFoundException("Ticket not found");
+    return ticket;
+  }
+
+  async updateTicketStatus(id: string, dto: UpdateTicketDto) {
+    if (!Types.ObjectId.isValid(id)) {
+      throw new NotFoundException("Ticket not found");
+    }
+    const ticket = await this.ticketModel
+      .findByIdAndUpdate(
+        id,
+        { $set: { status: dto.status } },
+        { new: true, runValidators: true },
+      )
+      .exec();
+    if (!ticket) throw new NotFoundException("Ticket not found");
+    return ticket;
   }
 }

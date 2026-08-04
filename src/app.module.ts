@@ -29,6 +29,9 @@ import { PublicApiModule } from "./public-api/public-api.module";
 import { IntegrationPlatformsModule } from "./integration-platforms/integration-platforms.module";
 import { AdsModule } from "./ads/ads.module";
 import { DemoRequestsModule } from "./demo-requests/demo-requests.module";
+import { TagsModule } from "./tags/tags.module";
+import { MessagesStatsModule } from "./platform-admin/messages-stats/messages-stats.module";
+import { PlatformCustomersModule } from "./platform-admin/customers/customers.module";
 
 // Infrastructure
 import { MetaModule } from "./meta/meta.module";
@@ -79,6 +82,9 @@ import { ScheduledNotificationsModule } from "./notifications/scheduled-notifica
     IntegrationPlatformsModule,
     AdsModule,
     DemoRequestsModule,
+    TagsModule,
+    MessagesStatsModule,
+    PlatformCustomersModule,
   ],
 })
 export class AppModule {}

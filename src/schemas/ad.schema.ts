@@ -22,6 +22,12 @@ export class Ad {
   @Prop({ required: true })
   mediaUrl!: string;
 
+  @Prop({ trim: true })
+  description?: string;
+
+  @Prop({ required: true, trim: true })
+  category!: string;
+
   @Prop({ type: String, enum: ["popup", "banner", "inline"], required: true })
   type!: AdType;
 

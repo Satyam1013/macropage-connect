@@ -22,6 +22,7 @@ import { NotificationsService } from "../notifications/notifications.service";
 import { RazorpayService } from "./razorpay.service";
 import type { BillingCycle, PlanKey } from "./billing.types";
 import { getPlanPricing } from "./plans.config";
+import { UpdatePlanDto } from "./dto/update-plan.dto";
 
 function mergePlan(
   current: Record<string, unknown>,
@@ -88,12 +89,79 @@ export class BillingService {
     );
   }
 
+  /** Platform-staff pricing-page edit — writes to adminplanoverrides. */
+  async updatePlanOverride(planId: string, dto: UpdatePlanDto) {
+    const defaultPlan = PLAN_PRICING.find((plan) => plan.id === planId);
+    if (!defaultPlan) {
+      throw new NotFoundException("Plan not found");
+    }
+
+    const existingOverride = await this.planOverrideModel
+      .findOne({ planId })
+      .lean()
+      .exec();
+    const plan = mergePlan(
+      (existingOverride?.plan ??
+        (defaultPlan as unknown as Record<string, unknown>)) as Record<
+        string,
+        unknown
+      >,
+      dto as Record<string, unknown>,
+    );
+
+    const updatedOverride = await this.planOverrideModel
+      .findOneAndUpdate(
+        { planId },
+        { $set: { plan } },
+        { new: true, upsert: true, runValidators: true },
+      )
+      .lean()
+      .exec();
+
+    return updatedOverride!.plan;
+  }
+
+  /**
+   * Platform-staff triage: a tenant's plan history. Payment docs only exist
+   * for actual purchases — a tenant still on the free TRIAL plan has none,
+   * so synthesize a TRIAL entry from the Subscription doc (every tenant has
+   * one) so the free plan and its period still show up.
+   */
+  async getPlanHistoryForPlatform(tenantId: string) {
+    const [payments, subscription] = await Promise.all([
+      this.paymentModel.find({ tenantId }).sort({ createdAt: -1 }).lean().exec(),
+      this.subModel.findOne({ tenantId }).lean().exec(),
+    ]);
+
+    if (!subscription) {
+      return payments;
+    }
+
+    const trialEntry = {
+      tenantId,
+      plan: "TRIAL",
+      status: subscription.status,
+      amount: 0,
+      currency: "INR",
+      periodStart: subscription.currentPeriodStart ?? subscription.createdAt,
+      periodEnd: subscription.trialEndsAt ?? subscription.currentPeriodEnd,
+      createdAt: subscription.createdAt,
+      isFreePlan: true,
+    };
+
+    return [...payments, trialEntry];
+  }
+
   // ── Subscription read ─────────────────────────────────────────────────────
 
   async getSubscription(
     tenantId: string,
   ): Promise<SubscriptionDocument | null> {
     return this.subModel.findOne({ tenantId }).exec();
+  }
+
+  countActiveSubscriptions() {
+    return this.subModel.countDocuments({ status: "ACTIVE" }).exec();
   }
 
   async getOrCreateSubscription(
