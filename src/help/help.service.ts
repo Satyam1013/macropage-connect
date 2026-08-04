@@ -84,7 +84,7 @@ export class HelpService implements OnModuleInit {
     return { docs, faqs };
   }
 
-  async getSystemStatus(tenantId: string, page = 1, limit = 20) {
+  async listTickets(tenantId: string, page = 1, limit = 20) {
     const safePage = Number.isFinite(page) && page > 0 ? Math.floor(page) : 1;
     const safeLimit =
       Number.isFinite(limit) && limit > 0
@@ -100,6 +100,12 @@ export class HelpService implements OnModuleInit {
       this.ticketModel.countDocuments({ tenantId }),
     ]);
 
+    return { data, total, page: safePage, limit: safeLimit };
+  }
+
+  async getSystemStatus(tenantId: string, page = 1, limit = 20) {
+    const tickets = await this.listTickets(tenantId, page, limit);
+
     return {
       overall: "operational",
       services: [
@@ -109,7 +115,7 @@ export class HelpService implements OnModuleInit {
       ],
       incidents: [],
       updatedAt: new Date().toISOString(),
-      tickets: { data, total, page: safePage, limit: safeLimit },
+      tickets,
     };
   }
 

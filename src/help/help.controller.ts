@@ -31,6 +31,27 @@ export class HelpController {
     );
   }
 
+  @Get("tickets")
+  @UseGuards(JwtAuthGuard)
+  async getTickets(
+    @Request() req: AuthReq,
+    @Query("page") page?: string,
+    @Query("limit") limit?: string,
+  ) {
+    const tenantId = req.user.tenantId ?? req.user.id;
+    const {
+      data,
+      total,
+      page: p,
+      limit: l,
+    } = await this.helpService.listTickets(
+      tenantId,
+      page ? Number(page) : 1,
+      limit ? Number(limit) : 20,
+    );
+    return { success: true, data, total, page: p, limit: l };
+  }
+
   @Get("tickets/:id")
   @UseGuards(JwtAuthGuard)
   async getTicket(@Request() req: AuthReq, @Param("id") id: string) {
