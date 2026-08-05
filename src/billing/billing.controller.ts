@@ -49,7 +49,7 @@ export class BillingController {
   @UseGuards(JwtAuthGuard, PlatformRolesGuard)
   @PlatformRoles(PlatformRole.SUPER_ADMIN)
   updatePlan(@Param("planId") planId: string, @Body() dto: UpdatePlanDto) {
-    return this.billingService.updatePlanOverride(planId, dto);
+    return this.billingService.updatePlanCatalog(planId, dto);
   }
 
   @Get("platform/plans/customer/:tenantId")

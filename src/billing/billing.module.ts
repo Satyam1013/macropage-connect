@@ -7,10 +7,7 @@ import {
 import { Invoice, InvoiceSchema } from "../schemas/invoice.schema";
 import { Payment, PaymentSchema } from "../schemas/payment.schema";
 import { User, UserSchema } from "../users/schemas/user.schema";
-import {
-  PlanOverride,
-  PlanOverrideSchema,
-} from "./schemas/plan-override.schema";
+import { Plan, PlanSchema } from "./schemas/plan.schema";
 import { BillingService } from "./billing.service";
 import { BillingController } from "./billing.controller";
 import { RazorpayService } from "./razorpay.service";
@@ -24,7 +21,7 @@ import { NotificationsModule } from "../notifications/notifications.module";
       { name: Invoice.name, schema: InvoiceSchema },
       { name: Payment.name, schema: PaymentSchema },
       { name: User.name, schema: UserSchema },
-      { name: PlanOverride.name, schema: PlanOverrideSchema },
+      { name: Plan.name, schema: PlanSchema },
     ]),
     NotificationsModule,
   ],

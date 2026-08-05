@@ -14,10 +14,7 @@ import {
 import { Invoice, InvoiceDocument } from "../schemas/invoice.schema";
 import { Payment, PaymentDocument } from "../schemas/payment.schema";
 import { User, UserDocument } from "../users/schemas/user.schema";
-import {
-  PlanOverride,
-  PlanOverrideDocument,
-} from "./schemas/plan-override.schema";
+import { Plan, PlanDocument } from "./schemas/plan.schema";
 import { NotificationsService } from "../notifications/notifications.service";
 import { RazorpayService } from "./razorpay.service";
 import type { BillingCycle, PlanKey } from "./billing.types";
@@ -62,54 +59,42 @@ export class BillingService {
     private readonly paymentModel: Model<PaymentDocument>,
     @InjectModel(User.name)
     private readonly userModel: Model<UserDocument>,
-    @InjectModel(PlanOverride.name)
-    private readonly planOverrideModel: Model<PlanOverrideDocument>,
+    @InjectModel(Plan.name)
+    private readonly planModel: Model<PlanDocument>,
     private readonly razorpayService: RazorpayService,
     private readonly notificationsService: NotificationsService,
   ) {}
 
   // ── Public plans list ─────────────────────────────────────────────────────
 
-  /** Merges macropage-admin's pricing-page edits (adminplanoverrides) onto the static catalog. */
+  /** DB (the `plans` collection) is the source of truth once seeded; falls back to the static catalog otherwise. */
   async getPlans() {
-    const overrides = await this.planOverrideModel.find().lean().exec();
-    if (overrides.length === 0) {
+    const plans = await this.planModel.find().lean().exec();
+    if (plans.length === 0) {
       return PLAN_PRICING;
     }
-    const overridesByPlanId = new Map(
-      overrides.map((override) => [override.planId, override.plan]),
-    );
-    return PLAN_PRICING.map((plan) =>
-      overridesByPlanId.has(plan.id)
-        ? (mergePlan(
-            plan as unknown as Record<string, unknown>,
-            overridesByPlanId.get(plan.id)!,
-          ) as unknown as (typeof PLAN_PRICING)[number])
-        : plan,
+    const planById = new Map(plans.map((p) => [p.planId, p.plan]));
+    return PLAN_PRICING.map(
+      (defaultPlan) =>
+        (planById.get(defaultPlan.id) ??
+          defaultPlan) as (typeof PLAN_PRICING)[number],
     );
   }
 
-  /** Platform-staff pricing-page edit — writes to adminplanoverrides. */
-  async updatePlanOverride(planId: string, dto: UpdatePlanDto) {
+  /** Platform-staff pricing-page edit — writes straight to the `plans` collection. */
+  async updatePlanCatalog(planId: string, dto: UpdatePlanDto) {
     const defaultPlan = PLAN_PRICING.find((plan) => plan.id === planId);
     if (!defaultPlan) {
       throw new NotFoundException("Plan not found");
     }
 
-    const existingOverride = await this.planOverrideModel
-      .findOne({ planId })
-      .lean()
-      .exec();
+    const existing = await this.planModel.findOne({ planId }).lean().exec();
     const plan = mergePlan(
-      (existingOverride?.plan ??
-        (defaultPlan as unknown as Record<string, unknown>)) as Record<
-        string,
-        unknown
-      >,
+      existing?.plan ?? defaultPlan,
       dto as Record<string, unknown>,
     );
 
-    const updatedOverride = await this.planOverrideModel
+    const updated = await this.planModel
       .findOneAndUpdate(
         { planId },
         { $set: { plan } },
@@ -118,7 +103,7 @@ export class BillingService {
       .lean()
       .exec();
 
-    return updatedOverride!.plan;
+    return updated?.plan;
   }
 
   /**
@@ -129,7 +114,11 @@ export class BillingService {
    */
   async getPlanHistoryForPlatform(tenantId: string) {
     const [payments, subscription] = await Promise.all([
-      this.paymentModel.find({ tenantId }).sort({ createdAt: -1 }).lean().exec(),
+      this.paymentModel
+        .find({ tenantId })
+        .sort({ createdAt: -1 })
+        .lean()
+        .exec(),
       this.subModel.findOne({ tenantId }).lean().exec(),
     ]);
 
