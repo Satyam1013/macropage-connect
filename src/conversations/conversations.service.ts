@@ -180,6 +180,7 @@ export class ConversationsService {
           .exec()
       : [];
     const agentMap = Object.fromEntries(agents.map((a) => [String(a._id), a]));
+    const templateMap = await this.getTemplateMapFor(messages);
 
     await this.convModel.updateOne({ _id: id }, { unreadCount: 0 });
 
@@ -192,9 +193,35 @@ export class ConversationsService {
         messages: messages.map((m) => ({
           ...m,
           agent: m.agentId ? (agentMap[String(m.agentId)] ?? null) : null,
+          template:
+            m.type === "TEMPLATE" && m.templateId
+              ? (templateMap[m.templateId] ?? null)
+              : null,
         })),
       },
     };
+  }
+
+  // Only content/templateVars is stored on the message itself — the
+  // header/footer/buttons live on the template, so TEMPLATE messages need
+  // this joined in or the inbox can only ever render the bare body text.
+  private async getTemplateMapFor(
+    messages: { type: string; templateId?: string }[],
+  ): Promise<Record<string, TemplateDocument>> {
+    const templateIds = [
+      ...new Set(
+        messages
+          .filter((m) => m.type === "TEMPLATE" && m.templateId)
+          .map((m) => m.templateId as string),
+      ),
+    ];
+    if (!templateIds.length) return {};
+    const templates = await this.templateModel
+      .find({ _id: { $in: templateIds } })
+      .select("_id name header footer buttons category language")
+      .lean()
+      .exec();
+    return Object.fromEntries(templates.map((t) => [String(t._id), t]));
   }
 
   async getMessages(
@@ -231,12 +258,17 @@ export class ConversationsService {
           .exec()
       : [];
     const agentMap = Object.fromEntries(agents.map((a) => [String(a._id), a]));
+    const templateMap = await this.getTemplateMapFor(messages);
 
     // Return in ascending order (oldest→newest) so frontend renders correctly
     const data = messages
       .map((m) => ({
         ...m,
         agent: m.agentId ? (agentMap[String(m.agentId)] ?? null) : null,
+        template:
+          m.type === "TEMPLATE" && m.templateId
+            ? (templateMap[m.templateId] ?? null)
+            : null,
       }))
       .reverse();
 
