@@ -4,3 +4,7 @@ export type EmailJobData = {
   html: string;
   text?: string;
 };
+
+export type CampaignJobData = {
+  campaignId: string;
+};

@@ -4,4 +4,5 @@ export type CampaignStatus =
   | "RUNNING"
   | "COMPLETED"
   | "FAILED"
-  | "PAUSED";
+  | "PAUSED"
+  | "CANCELLED";

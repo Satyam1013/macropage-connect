@@ -6,7 +6,10 @@ import {
   HttpException,
 } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
+import { InjectQueue } from "@nestjs/bullmq";
+import { Queue } from "bullmq";
 import { Model, Types } from "mongoose";
+import { CampaignJobData } from "../queue/queue.types";
 import { Campaign, CampaignDocument } from "../schemas/campaign.schema";
 import {
   CampaignRecipient,
@@ -108,6 +111,8 @@ export class CampaignsService {
     private readonly metaService: MetaService,
     private readonly messageUsageService: MessageUsageService,
     private readonly notificationsService: NotificationsService,
+    @InjectQueue("campaigns")
+    private readonly campaignsQueue: Queue<CampaignJobData>,
   ) {}
 
   private notifyCampaignOwner(
@@ -156,12 +161,45 @@ export class CampaignsService {
     if (typeof dto.templateId === "string") {
       dto.templateId = dto.templateId.replace(/^<|>$/g, "");
     }
-    return this.campaignModel.create({
+
+    const scheduledAt = dto.scheduledAt ? new Date(dto.scheduledAt) : undefined;
+    const isScheduled = !!scheduledAt && !Number.isNaN(scheduledAt.getTime());
+
+    const campaign = await this.campaignModel.create({
       ...dto,
       tenantId,
       createdBy: userId,
-      status: "DRAFT",
+      status: isScheduled ? "SCHEDULED" : "DRAFT",
     });
+
+    // Delayed BullMQ job instead of a polling cron — Redis fires this at
+    // the exact scheduled time and the job survives process restarts.
+    if (isScheduled) {
+      await this.campaignsQueue.add(
+        "launch",
+        { campaignId: String(campaign._id) },
+        {
+          jobId: String(campaign._id),
+          delay: Math.max(0, scheduledAt.getTime() - Date.now()),
+        },
+      );
+    }
+
+    return campaign;
+  }
+
+  private async removeScheduledJob(campaignId: string): Promise<void> {
+    const job = await this.campaignsQueue.getJob(campaignId);
+    if (job) await job.remove();
+  }
+
+  // Invoked by CampaignProcessor when a delayed job fires. Guards on status
+  // since the campaign may have been launched manually, paused, or
+  // cancelled in the meantime.
+  async launchScheduled(campaignId: string): Promise<void> {
+    const campaign = await this.campaignModel.findById(campaignId).exec();
+    if (!campaign || campaign.status !== "SCHEDULED") return;
+    await this.launch(campaign.tenantId, campaignId);
   }
 
   async launch(tenantId: string, id: string): Promise<CampaignDocument> {
@@ -172,6 +210,10 @@ export class CampaignsService {
         "Campaign cannot be launched in current state",
       );
     }
+
+    // In case this is a manual/early launch of a SCHEDULED campaign, drop
+    // the pending delayed job so it doesn't fire again later.
+    await this.removeScheduledJob(id);
 
     const { data: contacts } = await this.contactsService.findAll(tenantId, {
       tags: campaign.audienceTags.length ? campaign.audienceTags : undefined,
@@ -415,6 +457,7 @@ export class CampaignsService {
   }
 
   async pause(tenantId: string, id: string): Promise<CampaignDocument> {
+    await this.removeScheduledJob(id);
     await this.campaignModel.updateOne(
       { _id: id, tenantId },
       { status: "PAUSED", pausedAt: new Date() },
@@ -429,6 +472,7 @@ export class CampaignsService {
         "Campaign cannot be cancelled in current state",
       );
     }
+    await this.removeScheduledJob(id);
     await this.campaignModel.updateOne(
       { _id: id, tenantId },
       { status: "CANCELLED" },

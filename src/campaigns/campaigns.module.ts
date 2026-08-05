@@ -9,6 +9,7 @@ import { Template, TemplateSchema } from "../schemas/template.schema";
 import { Contact, ContactSchema } from "../schemas/contact.schema";
 import { CampaignsService } from "./campaigns.service";
 import { CampaignsController } from "./campaigns.controller";
+import { CampaignProcessor } from "./campaign.processor";
 import { ContactsModule } from "../contacts/contacts.module";
 import { MetaModule } from "../meta/meta.module";
 import { QueueModule } from "../queue/queue.module";
@@ -29,7 +30,7 @@ import { NotificationsModule } from "../notifications/notifications.module";
     AnalyticsModule,
     NotificationsModule,
   ],
-  providers: [CampaignsService],
+  providers: [CampaignsService, CampaignProcessor],
   controllers: [CampaignsController],
   exports: [CampaignsService],
 })
