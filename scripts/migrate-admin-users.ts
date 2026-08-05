@@ -46,7 +46,9 @@ async function main() {
         .collection("users")
         .updateOne({ email }, { $set: { platformRole } });
       updated++;
-      console.log(`Updated existing user ${email} -> platformRole=${platformRole}`);
+      console.log(
+        `Updated existing user ${email} -> platformRole=${platformRole}`,
+      );
       continue;
     }
 
