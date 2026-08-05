@@ -15,6 +15,16 @@ export class CampaignProcessor extends WorkerHost {
   async process(job: Job<CampaignJobData>): Promise<void> {
     const { campaignId } = job.data;
     this.logger.log(`Launching scheduled campaign ${campaignId}`);
-    await this.campaignsService.launchScheduled(campaignId);
+    try {
+      await this.campaignsService.launchScheduled(campaignId);
+    } catch (err) {
+      // WorkerHost swallows thrown errors into a silent retry — log the
+      // real cause here or every failure is invisible in production.
+      this.logger.error(
+        `Failed to launch scheduled campaign ${campaignId}`,
+        err instanceof Error ? err.stack : err,
+      );
+      throw err;
+    }
   }
 }
