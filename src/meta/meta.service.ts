@@ -187,7 +187,12 @@ export class MetaService {
 
       if (code === 190) {
         await this.wabaModel.updateOne({ tenantId }, { tokenExpired: true });
-        void this.notifyOwnerTokenExpired(tenantId);
+        this.notifyOwnerTokenExpired(tenantId).catch((err: unknown) =>
+          this.logger.error(
+            `Failed to notify owner of expired token for tenant ${tenantId}`,
+            err,
+          ),
+        );
         throw new BadRequestException({
           success: false,
           error: {

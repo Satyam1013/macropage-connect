@@ -72,7 +72,14 @@ export class AuthService {
     const otpHash = crypto.createHash("sha256").update(otp).digest("hex");
     await this.users.setEmailVerifyToken(user.id, otpHash);
 
-    void this.emailService.sendVerificationEmail(user.email, user.name, otp);
+    this.emailService
+      .sendVerificationEmail(user.email, user.name, otp)
+      .catch((err: unknown) =>
+        this.logger.error(
+          `Failed to send verification email → ${user.email}`,
+          err,
+        ),
+      );
 
     // No tokens yet — verifyEmail() issues them once the OTP is confirmed.
     return {
@@ -303,7 +310,14 @@ export class AuthService {
       tokenHash,
       expiresAt: new Date(Date.now() + 60 * 60 * 1000),
     });
-    void this.emailService.sendPasswordResetEmail(user.email, user.name, token);
+    this.emailService
+      .sendPasswordResetEmail(user.email, user.name, token)
+      .catch((err: unknown) =>
+        this.logger.error(
+          `Failed to send password reset email → ${user.email}`,
+          err,
+        ),
+      );
 
     return { message: "Password reset link sent to your email" };
   }
@@ -364,7 +378,14 @@ export class AuthService {
     const otp = String(Math.floor(100000 + Math.random() * 900000));
     const otpHash = crypto.createHash("sha256").update(otp).digest("hex");
     await this.users.setEmailVerifyToken(user.id, otpHash);
-    void this.emailService.sendVerificationEmail(user.email, user.name, otp);
+    this.emailService
+      .sendVerificationEmail(user.email, user.name, otp)
+      .catch((err: unknown) =>
+        this.logger.error(
+          `Failed to send verification email → ${user.email}`,
+          err,
+        ),
+      );
     return { message: "Verification OTP sent" };
   }
 

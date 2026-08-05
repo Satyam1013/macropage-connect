@@ -238,14 +238,21 @@ export class WebhookService {
       const notifyUserId =
         conversation.assignedTo ?? (await this.findOwnerId(tenantId));
       if (notifyUserId) {
-        void this.notificationsService.create(
-          tenantId,
-          notifyUserId,
-          "new_message",
-          "New message",
-          `${contact.name ?? contact.phone} sent you a new message`,
-          { conversationId: conversation.id },
-        );
+        this.notificationsService
+          .create(
+            tenantId,
+            notifyUserId,
+            "new_message",
+            "New message",
+            `${contact.name ?? contact.phone} sent you a new message`,
+            { conversationId: conversation.id },
+          )
+          .catch((err: unknown) =>
+            this.logger.error(
+              `Failed to create new_message notification for tenant ${tenantId}`,
+              err,
+            ),
+          );
       }
 
       // A conversation mid-flow owns the next inbound reply — automation

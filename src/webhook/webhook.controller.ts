@@ -9,6 +9,7 @@ import {
   HttpStatus,
   Res,
   Req,
+  Logger,
 } from "@nestjs/common";
 import { WebhookService } from "./webhook.service";
 import { BillingService } from "../billing/billing.service";
@@ -16,6 +17,8 @@ import type { Response } from "express";
 
 @Controller("webhook")
 export class WebhookController {
+  private readonly logger = new Logger(WebhookController.name);
+
   constructor(
     private readonly webhookService: WebhookService,
     private readonly billingService: BillingService,
@@ -34,7 +37,11 @@ export class WebhookController {
   @Post("meta")
   @HttpCode(HttpStatus.OK)
   handleMeta(@Body() body: Record<string, unknown>) {
-    void this.webhookService.handleMetaWebhook(body);
+    this.webhookService
+      .handleMetaWebhook(body)
+      .catch((err: unknown) =>
+        this.logger.error("Failed to process Meta webhook", err),
+      );
     return { status: "ok" };
   }
 
