@@ -3,6 +3,7 @@ export interface UserPayload {
   name: string;
   email: string;
   role?: string;
+  platformRole?: string;
   phone?: string;
   avatarUrl?: string | null;
   companyName?: string;

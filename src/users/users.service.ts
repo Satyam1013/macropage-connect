@@ -195,6 +195,7 @@ export class UsersService {
       name: user.name,
       email: user.email,
       role: user.role,
+      platformRole: user.platformRole,
       tenantId: user.tenantId,
       phone: user.phone,
       avatarUrl: user.avatarUrl ?? null,
