@@ -189,8 +189,21 @@ export class CampaignsService {
   }
 
   private async removeScheduledJob(campaignId: string): Promise<void> {
-    const job = await this.campaignsQueue.getJob(campaignId);
-    if (job) await job.remove();
+    try {
+      const job = await this.campaignsQueue.getJob(campaignId);
+      if (job) await job.remove();
+    } catch (err) {
+      // launch() calls this on every path, including when it's invoked
+      // from inside the delayed job itself (launchScheduled →
+      // CampaignProcessor) — that job holds its own lock and can't be
+      // removed mid-processing. Harmless: BullMQ removes it on completion
+      // via removeOnComplete. Only log in case something else is wrong.
+      this.logger.warn(
+        `Could not remove queued job ${campaignId}: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+    }
   }
 
   // Invoked by CampaignProcessor when a delayed job fires. Guards on status
