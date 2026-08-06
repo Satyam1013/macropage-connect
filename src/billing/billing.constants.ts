@@ -1,5 +1,5 @@
 import type { Plan, PlanFeature } from "./billing.types";
-import { PLANS } from "./plans.config";
+import { getRazorpayPlanId } from "./plans.config";
 
 // Which plans can access each feature
 export const FEATURE_PLANS: Record<PlanFeature, Plan[]> = {
@@ -80,9 +80,9 @@ export const PLAN_PRICING = [
     ctaHref: "https://app.macropage.in/register",
     currency: "INR",
     razorpayPlanIds: {
-      monthly: PLANS.STARTER.pricing.monthly.razorpayPlanId,
-      quarterly: PLANS.STARTER.pricing.quarterly.razorpayPlanId,
-      yearly: PLANS.STARTER.pricing.yearly.razorpayPlanId,
+      monthly: getRazorpayPlanId("STARTER", "monthly"),
+      quarterly: getRazorpayPlanId("STARTER", "quarterly"),
+      yearly: getRazorpayPlanId("STARTER", "yearly"),
     },
     pricing: {
       monthly: { price: 1999, billedAs: "₹1,999/month" },
@@ -119,9 +119,9 @@ export const PLAN_PRICING = [
     ctaHref: "https://app.macropage.in/register",
     currency: "INR",
     razorpayPlanIds: {
-      monthly: PLANS.GROWTH.pricing.monthly.razorpayPlanId,
-      quarterly: PLANS.GROWTH.pricing.quarterly.razorpayPlanId,
-      yearly: PLANS.GROWTH.pricing.yearly.razorpayPlanId,
+      monthly: getRazorpayPlanId("GROWTH", "monthly"),
+      quarterly: getRazorpayPlanId("GROWTH", "quarterly"),
+      yearly: getRazorpayPlanId("GROWTH", "yearly"),
     },
     pricing: {
       monthly: { price: 3499, billedAs: "₹3,499/month" },
@@ -155,9 +155,9 @@ export const PLAN_PRICING = [
     ctaHref: "https://app.macropage.in/register",
     currency: "INR",
     razorpayPlanIds: {
-      monthly: PLANS.BUSINESS.pricing.monthly.razorpayPlanId,
-      quarterly: PLANS.BUSINESS.pricing.quarterly.razorpayPlanId,
-      yearly: PLANS.BUSINESS.pricing.yearly.razorpayPlanId,
+      monthly: getRazorpayPlanId("BUSINESS", "monthly"),
+      quarterly: getRazorpayPlanId("BUSINESS", "quarterly"),
+      yearly: getRazorpayPlanId("BUSINESS", "yearly"),
     },
     pricing: {
       monthly: { price: 8999, billedAs: "₹8,999/month" },
