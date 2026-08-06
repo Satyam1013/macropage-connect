@@ -216,23 +216,27 @@ export class BillingService {
     const rzpSubId: string = rzpSub.id;
     const rzpShortUrl: string | null = rzpSub.short_url ?? null;
 
-    // Deliberately doesn't set plan/billingCycle/status here — this only
-    // creates the Razorpay subscription + checkout link, the customer
-    // hasn't paid (or even completed the mandate) yet. Flipping the
-    // tenant's plan now would grant paid access before any money moves,
-    // and if they abandon checkout there's nothing to undo it. The
-    // requested plan/billingCycle already round-trips through Razorpay's
-    // subscription `notes` (see createSubscription call above), so the
-    // subscription.activated/charged webhook handlers read it from there
-    // and apply it only once Razorpay confirms the subscription is real.
+    // Deliberately doesn't set plan/billingCycle/status/razorpaySubId/
+    // razorpayPlanId here — this only creates the Razorpay subscription +
+    // checkout link, the customer hasn't paid (or even completed the
+    // mandate) yet. Writing those onto the tenant's real fields now would
+    // both grant paid access before any money moves AND, if the tenant
+    // already has an active paid subscription, clobber its razorpaySubId
+    // with this abandoned attempt's — breaking webhook matching for the
+    // subscription they're actually paying for. Stash them as "pending"
+    // instead; the requested plan/billingCycle round-trips through
+    // Razorpay's subscription `notes` (see createSubscription call above),
+    // and the subscription.activated/charged webhook handlers (matched by
+    // pendingRazorpaySubId) promote pending → real only once Razorpay
+    // confirms the subscription is genuine.
     await this.subModel.findOneAndUpdate(
       { tenantId },
       {
         $set: {
           tenantId,
-          razorpaySubId: rzpSubId,
           razorpayCustomerId,
-          razorpayPlanId: pricing.razorpayPlanId,
+          pendingRazorpaySubId: rzpSubId,
+          pendingRazorpayPlanId: pricing.razorpayPlanId,
         },
       },
       { upsert: true, new: true },
@@ -274,8 +278,14 @@ export class BillingService {
       );
     }
 
+    // Matched by pendingRazorpaySubId, not razorpaySubId — the latter isn't
+    // written until this verification (or the activated/charged webhook)
+    // confirms the subscription is real (see createRazorpaySubscription).
     const sub = await this.subModel
-      .findOne({ tenantId, razorpaySubId: data.razorpay_subscription_id })
+      .findOne({
+        tenantId,
+        pendingRazorpaySubId: data.razorpay_subscription_id,
+      })
       .exec();
     if (!sub) throw new NotFoundException("Subscription not found");
 
@@ -305,9 +315,12 @@ export class BillingService {
           status: "ACTIVE",
           plan,
           billingCycle,
+          razorpaySubId: data.razorpay_subscription_id,
+          razorpayPlanId: sub.pendingRazorpayPlanId,
           currentPeriodStart: periodStart,
           currentPeriodEnd: periodEnd,
         },
+        $unset: { pendingRazorpaySubId: "", pendingRazorpayPlanId: "" },
       },
     );
 
@@ -439,16 +452,33 @@ export class BillingService {
     switch (event) {
       case "subscription.activated": {
         if (!sub) break;
+        const subId = sub.id as string;
         // The plan/billingCycle the customer actually requested only lives
         // in the notes we set at creation (createRazorpaySubscription
         // deliberately doesn't touch the tenant's plan pre-payment) — apply
         // it now that Razorpay confirms the mandate is real.
         const notes = sub.notes as Record<string, string> | undefined;
+
+        // First activation is matched by pendingRazorpaySubId (razorpaySubId
+        // isn't written until now, precisely so an abandoned checkout can't
+        // clobber a tenant's real active subscription); a re-activation
+        // after e.g. a pause matches directly on the already-real
+        // razorpaySubId.
+        const target = await this.subModel
+          .findOne({
+            $or: [{ razorpaySubId: subId }, { pendingRazorpaySubId: subId }],
+          })
+          .exec();
+        if (!target) break;
+
         await this.subModel.updateOne(
-          { razorpaySubId: sub.id as string },
+          { _id: target._id },
           {
             $set: {
               status: "ACTIVE",
+              razorpaySubId: subId,
+              razorpayPlanId:
+                target.pendingRazorpayPlanId ?? target.razorpayPlanId,
               ...(notes?.plan && { plan: notes.plan }),
               ...(notes?.billingCycle && { billingCycle: notes.billingCycle }),
               currentPeriodStart: new Date(
@@ -456,10 +486,11 @@ export class BillingService {
               ),
               currentPeriodEnd: new Date((sub.current_end as number) * 1000),
             },
+            $unset: { pendingRazorpaySubId: "", pendingRazorpayPlanId: "" },
           },
         );
         const activatedSub = await this.subModel
-          .findOne({ razorpaySubId: sub.id as string })
+          .findOne({ razorpaySubId: subId })
           .lean()
           .exec();
         if (activatedSub) {
@@ -494,21 +525,38 @@ export class BillingService {
 
         // Same as subscription.activated — cover the case where "charged"
         // is the first webhook we see for a brand-new subscription (plan
-        // not applied yet since createRazorpaySubscription doesn't set it).
+        // not applied yet since createRazorpaySubscription doesn't set it),
+        // matching via pendingRazorpaySubId and promoting pending → real.
         const chargedNotes = sub.notes as Record<string, string> | undefined;
-        await this.subModel.updateOne(
-          { razorpaySubId: sub.id as string },
-          {
-            $set: {
-              status: "ACTIVE",
-              ...(chargedNotes?.plan && { plan: chargedNotes.plan }),
-              ...(chargedNotes?.billingCycle && {
-                billingCycle: chargedNotes.billingCycle,
-              }),
-              currentPeriodEnd: new Date((sub.current_end as number) * 1000),
+        const chargedSubId = sub.id as string;
+        const chargedTarget = await this.subModel
+          .findOne({
+            $or: [
+              { razorpaySubId: chargedSubId },
+              { pendingRazorpaySubId: chargedSubId },
+            ],
+          })
+          .exec();
+        if (chargedTarget) {
+          await this.subModel.updateOne(
+            { _id: chargedTarget._id },
+            {
+              $set: {
+                status: "ACTIVE",
+                razorpaySubId: chargedSubId,
+                razorpayPlanId:
+                  chargedTarget.pendingRazorpayPlanId ??
+                  chargedTarget.razorpayPlanId,
+                ...(chargedNotes?.plan && { plan: chargedNotes.plan }),
+                ...(chargedNotes?.billingCycle && {
+                  billingCycle: chargedNotes.billingCycle,
+                }),
+                currentPeriodEnd: new Date((sub.current_end as number) * 1000),
+              },
+              $unset: { pendingRazorpaySubId: "", pendingRazorpayPlanId: "" },
             },
-          },
-        );
+          );
+        }
 
         // Notify owner
         const dbSub = await this.subModel

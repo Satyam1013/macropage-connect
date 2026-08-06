@@ -38,6 +38,17 @@ export class Subscription {
   @Prop()
   razorpayPlanId?: string;
 
+  // Set when a checkout is started, before payment is confirmed. Copied
+  // onto razorpaySubId/razorpayPlanId (and cleared) only once Razorpay
+  // confirms the subscription — an abandoned checkout must never touch a
+  // tenant's real, already-active razorpaySubId/razorpayPlanId, or a
+  // second webhook for the real subscription would stop matching.
+  @Prop({ index: true })
+  pendingRazorpaySubId?: string;
+
+  @Prop()
+  pendingRazorpayPlanId?: string;
+
   @Prop()
   trialEndsAt?: Date;
 
