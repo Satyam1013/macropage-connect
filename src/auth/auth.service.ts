@@ -215,6 +215,18 @@ export class AuthService {
       type: "LOGIN",
       description: "Logged in via Google",
     });
+    // Google signups skip the OTP/verifyEmail step entirely, so this is
+    // the only place a new Google-signup user's welcome email can fire.
+    if (isNew) {
+      this.emailService
+        .sendWelcomeEmail(user.email, user.name)
+        .catch((err: unknown) =>
+          this.logger.error(
+            `Failed to send welcome email → ${user.email}`,
+            err,
+          ),
+        );
+    }
 
     return this.buildAuthResponse(
       user,
@@ -364,6 +376,11 @@ export class AuthService {
       type: "LOGIN",
       description: "Logged in",
     });
+    this.emailService
+      .sendWelcomeEmail(user.email, user.name)
+      .catch((err: unknown) =>
+        this.logger.error(`Failed to send welcome email → ${user.email}`, err),
+      );
 
     return this.buildAuthResponse(user, "Email verified successfully");
   }

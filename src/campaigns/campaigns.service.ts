@@ -17,10 +17,12 @@ import {
 } from "../schemas/campaign-recipient.schema";
 import { Template, TemplateDocument } from "../schemas/template.schema";
 import { Contact, ContactDocument } from "../schemas/contact.schema";
+import { User, UserDocument } from "../users/schemas/user.schema";
 import { ContactsService } from "../contacts/contacts.service";
 import { MetaService } from "../meta/meta.service";
 import { MessageUsageService } from "../analytics/message-usage.service";
 import { NotificationsService } from "../notifications/notifications.service";
+import { EmailService } from "../queue/email.service";
 
 function normalizePhone(raw: string): string {
   const digits = raw.replace(/\D/g, "");
@@ -107,10 +109,13 @@ export class CampaignsService {
     private readonly templateModel: Model<TemplateDocument>,
     @InjectModel(Contact.name)
     private readonly contactModel: Model<ContactDocument>,
+    @InjectModel(User.name)
+    private readonly userModel: Model<UserDocument>,
     private readonly contactsService: ContactsService,
     private readonly metaService: MetaService,
     private readonly messageUsageService: MessageUsageService,
     private readonly notificationsService: NotificationsService,
+    private readonly emailService: EmailService,
     @InjectQueue("campaigns")
     private readonly campaignsQueue: Queue<CampaignJobData>,
   ) {}
@@ -183,9 +188,41 @@ export class CampaignsService {
           delay: Math.max(0, scheduledAt.getTime() - Date.now()),
         },
       );
+      this.notifyCampaignScheduled(campaign).catch((err: unknown) =>
+        this.logger.error(
+          `Failed to send scheduled-campaign email for ${campaign.id}`,
+          err,
+        ),
+      );
     }
 
     return campaign;
+  }
+
+  private async notifyCampaignScheduled(
+    campaign: CampaignDocument,
+  ): Promise<void> {
+    const [owner, { total: totalContacts }] = await Promise.all([
+      this.userModel
+        .findById(campaign.createdBy)
+        .select("name email")
+        .lean()
+        .exec(),
+      this.contactsService.findAll(campaign.tenantId, {
+        tags: campaign.audienceTags.length ? campaign.audienceTags : undefined,
+        isOptedOut: false,
+        limit: 1,
+      }),
+    ]);
+    if (!owner?.email) return;
+
+    await this.emailService.sendCampaignScheduledEmail(owner.email, {
+      ownerName: owner.name,
+      campaignName: campaign.name,
+      scheduledFor: campaign.scheduledAt ?? new Date(),
+      audienceType: campaign.audienceType,
+      totalContacts,
+    });
   }
 
   private async removeScheduledJob(campaignId: string): Promise<void> {
@@ -405,7 +442,7 @@ export class CampaignsService {
 
     const final = await this.campaignModel
       .findById(campaignId)
-      .select("status sent failed")
+      .select("status sent failed delivered read replied totalContacts")
       .lean()
       .exec();
     if (final?.status === "RUNNING") {
@@ -420,7 +457,53 @@ export class CampaignsService {
         `Campaign "${campaign.name}" completed`,
         `Sent ${final.sent} message(s), ${final.failed} failed.`,
       );
+      this.notifyCampaignCompletedEmail(campaign, template.name, final).catch(
+        (err: unknown) =>
+          this.logger.error(
+            `Failed to send campaign-summary email for ${campaignId}`,
+            err,
+          ),
+      );
     }
+  }
+
+  private async notifyCampaignCompletedEmail(
+    campaign: CampaignDocument,
+    templateName: string,
+    final: {
+      sent: number;
+      failed: number;
+      delivered: number;
+      read: number;
+      replied: number;
+      totalContacts: number;
+    },
+  ): Promise<void> {
+    const owner = await this.userModel
+      .findById(campaign.createdBy)
+      .select("name email")
+      .lean()
+      .exec();
+    if (!owner?.email) return;
+
+    const pending = Math.max(
+      0,
+      final.totalContacts - final.sent - final.failed,
+    );
+
+    await this.emailService.sendCampaignSummaryEmail(owner.email, {
+      ownerName: owner.name,
+      campaignName: campaign.name,
+      sentAt: new Date(),
+      templateName,
+      audienceType: campaign.audienceType,
+      totalContacts: final.totalContacts,
+      delivered: final.delivered,
+      read: final.read,
+      replied: final.replied,
+      failed: final.failed,
+      pending,
+    });
   }
 
   // MetaService.handleMetaError throws BadRequestException with an object

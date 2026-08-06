@@ -62,6 +62,55 @@ export class TeamService {
     }
   }
 
+  private async notifyAdminsTeamMemberJoinedEmail(
+    tenantId: string,
+    newUserId: string,
+    newUser: { name: string; email: string },
+    role: UserRole,
+  ): Promise<void> {
+    const [admins, tenantOwner] = await Promise.all([
+      this.userModel
+        .find({
+          $or: [{ tenantId }, { _id: tenantId }],
+          role: { $in: [UserRole.OWNER, UserRole.ADMIN] },
+          _id: { $ne: newUserId },
+        })
+        .select("name email")
+        .lean()
+        .exec(),
+      this.userModel.findById(tenantId).select("city country").lean().exec(),
+    ]);
+
+    const location =
+      [tenantOwner?.city, tenantOwner?.country].filter(Boolean).join(", ") ||
+      "—";
+    const jobTitleByRole: Record<string, string> = {
+      OWNER: "Owner",
+      ADMIN: "Admin",
+      MANAGER: "Manager",
+      AGENT: "Agent",
+    };
+
+    for (const admin of admins) {
+      if (!admin.email) continue;
+      this.emailService
+        .sendTeamMemberJoinedEmail(admin.email, {
+          employeeName: newUser.name,
+          jobTitle: jobTitleByRole[role] ?? role,
+          department: "—",
+          location,
+          joinDate: new Date(),
+          email: newUser.email,
+        })
+        .catch((err: unknown) =>
+          this.logger.error(
+            `Failed to send team-member-joined email to ${admin.email}`,
+            err,
+          ),
+        );
+    }
+  }
+
   async getAssignableMembers(tenantId: string) {
     const members = await this.userModel
       .find({ tenantId })
@@ -300,6 +349,17 @@ export class TeamService {
       "team_member_joined",
       "New team member joined",
       `${user.name} (${user.email}) has joined your team.`,
+    );
+    this.notifyAdminsTeamMemberJoinedEmail(
+      invite.tenantId,
+      String(user._id),
+      { name: user.name, email: user.email },
+      invite.role,
+    ).catch((err: unknown) =>
+      this.logger.error(
+        `Failed to send team-member-joined emails for tenant ${invite.tenantId}`,
+        err,
+      ),
     );
 
     const accessToken = this.jwt.sign(

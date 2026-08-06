@@ -7,6 +7,7 @@ import {
 } from "../schemas/campaign-recipient.schema";
 import { Template, TemplateSchema } from "../schemas/template.schema";
 import { Contact, ContactSchema } from "../schemas/contact.schema";
+import { User, UserSchema } from "../users/schemas/user.schema";
 import { CampaignsService } from "./campaigns.service";
 import { CampaignsController } from "./campaigns.controller";
 import { CampaignProcessor } from "./campaign.processor";
@@ -23,6 +24,7 @@ import { NotificationsModule } from "../notifications/notifications.module";
       { name: CampaignRecipient.name, schema: CampaignRecipientSchema },
       { name: Template.name, schema: TemplateSchema },
       { name: Contact.name, schema: ContactSchema },
+      { name: User.name, schema: UserSchema },
     ]),
     ContactsModule,
     MetaModule,
