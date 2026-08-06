@@ -17,7 +17,7 @@ import { User, UserDocument } from "../users/schemas/user.schema";
 import { Plan, PlanDocument } from "./schemas/plan.schema";
 import { NotificationsService } from "../notifications/notifications.service";
 import { RazorpayService } from "./razorpay.service";
-import type { BillingCycle, PlanKey } from "./billing.types";
+import type { BillingCycle, Plan as PlanValue, PlanKey } from "./billing.types";
 import { getPlanPricing } from "./plans.config";
 import { UpdatePlanDto } from "./dto/update-plan.dto";
 
@@ -216,25 +216,26 @@ export class BillingService {
     const rzpSubId: string = rzpSub.id;
     const rzpShortUrl: string | null = rzpSub.short_url ?? null;
 
+    // Deliberately doesn't set plan/billingCycle/status here — this only
+    // creates the Razorpay subscription + checkout link, the customer
+    // hasn't paid (or even completed the mandate) yet. Flipping the
+    // tenant's plan now would grant paid access before any money moves,
+    // and if they abandon checkout there's nothing to undo it. The
+    // requested plan/billingCycle already round-trips through Razorpay's
+    // subscription `notes` (see createSubscription call above), so the
+    // subscription.activated/charged webhook handlers read it from there
+    // and apply it only once Razorpay confirms the subscription is real.
     await this.subModel.findOneAndUpdate(
       { tenantId },
       {
         $set: {
           tenantId,
-          plan,
-          billingCycle,
-          status: "TRIALING",
           razorpaySubId: rzpSubId,
           razorpayCustomerId,
           razorpayPlanId: pricing.razorpayPlanId,
         },
       },
       { upsert: true, new: true },
-    );
-
-    await this.userModel.updateMany(
-      { tenantId },
-      { $set: { billingPlan: plan, billingCycle } },
     );
 
     this.logger.log(
@@ -281,26 +282,36 @@ export class BillingService {
     const rzpSub = await this.razorpayService.fetchSubscription(
       data.razorpay_subscription_id,
     );
+    const rzpSubData = rzpSub as unknown as {
+      current_start?: number;
+      current_end?: number;
+      notes?: Record<string, string>;
+    };
 
-    const periodStart = new Date(
-      ((rzpSub as unknown as Record<string, number>).current_start ?? 0) * 1000,
-    );
-    const periodEnd = new Date(
-      ((rzpSub as unknown as Record<string, number>).current_end ?? 0) * 1000,
-    );
+    const periodStart = new Date((rzpSubData.current_start ?? 0) * 1000);
+    const periodEnd = new Date((rzpSubData.current_end ?? 0) * 1000);
+
+    // The requested plan/billingCycle only round-trips through Razorpay's
+    // subscription notes — createRazorpaySubscription deliberately doesn't
+    // write them onto `sub` up front, so `sub.plan` here is still whatever
+    // the tenant had before this purchase, not what they're paying for.
+    const plan = (rzpSubData.notes?.plan ?? sub.plan) as PlanValue;
+    const billingCycle = rzpSubData.notes?.billingCycle ?? sub.billingCycle;
 
     await this.subModel.updateOne(
       { tenantId },
       {
         $set: {
           status: "ACTIVE",
+          plan,
+          billingCycle,
           currentPeriodStart: periodStart,
           currentPeriodEnd: periodEnd,
         },
       },
     );
 
-    await this.syncUserPlan(tenantId, sub.plan);
+    await this.syncUserPlan(tenantId, plan);
 
     // Save payment record (idempotent)
     const exists = await this.paymentModel
@@ -310,8 +321,8 @@ export class BillingService {
 
     if (!exists) {
       const pricing = getPlanPricing(
-        sub.plan as PlanKey,
-        (sub.billingCycle ?? "monthly") as BillingCycle,
+        plan as PlanKey,
+        (billingCycle ?? "monthly") as BillingCycle,
       );
       await this.paymentModel.create({
         tenantId,
@@ -320,8 +331,8 @@ export class BillingService {
         amount: pricing?.amount ?? 0,
         currency: "INR",
         status: "success",
-        plan: sub.plan,
-        billingCycle: sub.billingCycle,
+        plan,
+        billingCycle,
       });
     }
 
@@ -329,20 +340,20 @@ export class BillingService {
       tenantId,
       userId,
       "payment_success",
-      `${sub.plan} plan activated ✅`,
-      `Your ${sub.billingCycle} ${sub.plan} subscription is now active.`,
+      `${plan} plan activated ✅`,
+      `Your ${billingCycle} ${plan} subscription is now active.`,
     );
 
     this.logger.log(
-      `[Billing] Payment verified for tenant ${tenantId}, plan ${sub.plan}`,
+      `[Billing] Payment verified for tenant ${tenantId}, plan ${plan}`,
     );
 
     return {
       success: true,
       data: {
         message: "Payment verified — plan activated",
-        plan: sub.plan,
-        billingCycle: sub.billingCycle,
+        plan,
+        billingCycle,
         currentPeriodEnd: periodEnd,
       },
     };
@@ -428,11 +439,18 @@ export class BillingService {
     switch (event) {
       case "subscription.activated": {
         if (!sub) break;
+        // The plan/billingCycle the customer actually requested only lives
+        // in the notes we set at creation (createRazorpaySubscription
+        // deliberately doesn't touch the tenant's plan pre-payment) — apply
+        // it now that Razorpay confirms the mandate is real.
+        const notes = sub.notes as Record<string, string> | undefined;
         await this.subModel.updateOne(
           { razorpaySubId: sub.id as string },
           {
             $set: {
               status: "ACTIVE",
+              ...(notes?.plan && { plan: notes.plan }),
+              ...(notes?.billingCycle && { billingCycle: notes.billingCycle }),
               currentPeriodStart: new Date(
                 (sub.current_start as number) * 1000,
               ),
@@ -474,11 +492,19 @@ export class BillingService {
           });
         }
 
+        // Same as subscription.activated — cover the case where "charged"
+        // is the first webhook we see for a brand-new subscription (plan
+        // not applied yet since createRazorpaySubscription doesn't set it).
+        const chargedNotes = sub.notes as Record<string, string> | undefined;
         await this.subModel.updateOne(
           { razorpaySubId: sub.id as string },
           {
             $set: {
               status: "ACTIVE",
+              ...(chargedNotes?.plan && { plan: chargedNotes.plan }),
+              ...(chargedNotes?.billingCycle && {
+                billingCycle: chargedNotes.billingCycle,
+              }),
               currentPeriodEnd: new Date((sub.current_end as number) * 1000),
             },
           },
