@@ -16,6 +16,7 @@ import {
   AutomationRuleSchema,
 } from "../schemas/automation-rule.schema";
 import { BillingModule } from "../billing/billing.module";
+import { TenantModule } from "../tenant/tenant.module";
 import { AnalyticsService } from "./analytics.service";
 import { AnalyticsController } from "./analytics.controller";
 import { DashboardController } from "./dashboard.controller";
@@ -37,6 +38,7 @@ import { MessageUsageService } from "./message-usage.service";
       { name: AutomationRule.name, schema: AutomationRuleSchema },
     ]),
     BillingModule,
+    TenantModule,
   ],
   providers: [
     {

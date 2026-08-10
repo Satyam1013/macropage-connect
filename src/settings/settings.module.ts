@@ -9,6 +9,7 @@ import { User, UserSchema } from "../users/schemas/user.schema";
 import { Tenant, TenantSchema } from "../schemas/tenant.schema";
 import { UploadModule } from "../upload/upload.module";
 import { BillingModule } from "../billing/billing.module";
+import { TenantModule } from "../tenant/tenant.module";
 import { SettingsService } from "./settings.service";
 import { SettingsController } from "./settings.controller";
 import { ApiKeyGuard } from "../auth/guards/api-key.guard";
@@ -23,6 +24,7 @@ import { ApiKeyGuard } from "../auth/guards/api-key.guard";
     ]),
     UploadModule,
     BillingModule,
+    TenantModule,
   ],
   providers: [SettingsService, ApiKeyGuard],
   controllers: [SettingsController],

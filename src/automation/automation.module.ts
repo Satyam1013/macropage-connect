@@ -15,6 +15,7 @@ import { AutomationService } from "./automation.service";
 import { AutomationController } from "./automation.controller";
 import { FlowEngineService } from "./flow-engine.service";
 import { BillingModule } from "../billing/billing.module";
+import { TenantModule } from "../tenant/tenant.module";
 import { ConversationsModule } from "../conversations/conversations.module";
 import { MetaModule } from "../meta/meta.module";
 import { GatewayModule } from "../gateway/gateway.module";
@@ -30,6 +31,7 @@ import { RolesGuard } from "../common/guards/roles.guard";
       { name: Contact.name, schema: ContactSchema },
     ]),
     BillingModule,
+    TenantModule,
     ConversationsModule,
     MetaModule,
     GatewayModule,
