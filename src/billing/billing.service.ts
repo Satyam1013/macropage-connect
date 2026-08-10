@@ -15,6 +15,12 @@ import { Invoice, InvoiceDocument } from "../schemas/invoice.schema";
 import { Payment, PaymentDocument } from "../schemas/payment.schema";
 import { User, UserDocument } from "../users/schemas/user.schema";
 import { Plan, PlanDocument } from "./schemas/plan.schema";
+import { Order, OrderDocument } from "../catalog/schemas/order.schema";
+import { Contact, ContactDocument } from "../schemas/contact.schema";
+import {
+  Conversation,
+  ConversationDocument,
+} from "../schemas/conversation.schema";
 import { NotificationsService } from "../notifications/notifications.service";
 import { RazorpayService } from "./razorpay.service";
 import type { BillingCycle, Plan as PlanValue, PlanKey } from "./billing.types";
@@ -61,6 +67,12 @@ export class BillingService {
     private readonly userModel: Model<UserDocument>,
     @InjectModel(Plan.name)
     private readonly planModel: Model<PlanDocument>,
+    @InjectModel(Order.name)
+    private readonly orderModel: Model<OrderDocument>,
+    @InjectModel(Contact.name)
+    private readonly contactModel: Model<ContactDocument>,
+    @InjectModel(Conversation.name)
+    private readonly convModel: Model<ConversationDocument>,
     private readonly razorpayService: RazorpayService,
     private readonly notificationsService: NotificationsService,
   ) {}
@@ -622,6 +634,60 @@ export class BillingService {
           { razorpaySubId: sub.id as string },
           { $set: { status: "CANCELLED", cancelledAt: new Date() } },
         );
+        break;
+      }
+
+      case "payment_link.paid": {
+        const paymentLink = p?.payment_link?.entity as
+          | Record<string, unknown>
+          | undefined;
+        const linkId = paymentLink?.id as string | undefined;
+        if (!linkId) break;
+
+        const order = await this.orderModel.findOneAndUpdate(
+          { razorpayPaymentLinkId: linkId },
+          { $set: { status: "paid", paidAt: new Date() } },
+          { new: true },
+        );
+        if (!order) break;
+
+        const contact = await this.contactModel
+          .findOne({ _id: order.contactId, tenantId: order.tenantId })
+          .select("name phone")
+          .lean()
+          .exec();
+
+        let notifyUserId: string | undefined;
+        if (order.conversationId) {
+          const conv = await this.convModel
+            .findOne({ _id: order.conversationId })
+            .select("assignedTo")
+            .lean()
+            .exec();
+          notifyUserId = conv?.assignedTo ?? undefined;
+        }
+        if (!notifyUserId) {
+          // tenantId is always the owner's own _id
+          const owner = await this.userModel
+            .findById(order.tenantId)
+            .select("_id")
+            .lean()
+            .exec();
+          notifyUserId = owner ? String(owner._id) : undefined;
+        }
+
+        if (notifyUserId) {
+          await this.notificationsService.create(
+            order.tenantId,
+            notifyUserId,
+            "order_paid",
+            "Order paid",
+            `${contact?.name ?? contact?.phone ?? "A customer"} paid ₹${(
+              order.totalAmount / 100
+            ).toFixed(2)} for their order.`,
+            { orderId: order.id, conversationId: order.conversationId },
+          );
+        }
         break;
       }
 

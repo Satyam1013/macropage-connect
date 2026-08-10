@@ -13,6 +13,10 @@ import { FlowEngineService } from "../automation/flow-engine.service";
 import { MediaDownloadService } from "../whatsapp/media-download.service";
 import { NotificationsService } from "../notifications/notifications.service";
 import { User, UserDocument } from "../users/schemas/user.schema";
+import {
+  OrderFulfillmentService,
+  RawOrderItem,
+} from "../catalog/order-fulfillment.service";
 
 interface InboundMediaField {
   id?: string;
@@ -36,6 +40,7 @@ export class WebhookService {
     private readonly flowEngineService: FlowEngineService,
     private readonly mediaDownloadService: MediaDownloadService,
     private readonly notificationsService: NotificationsService,
+    private readonly orderFulfillmentService: OrderFulfillmentService,
   ) {}
 
   verifyWebhook(query: Record<string, string>): string {
@@ -148,6 +153,7 @@ export class WebhookService {
       let mimeType: string | undefined;
       let fileName: string | undefined;
       let buttonReplyId: string | undefined;
+      let orderItems: RawOrderItem[] | undefined;
 
       switch (type) {
         case "text":
@@ -202,6 +208,19 @@ export class WebhookService {
         case "reaction":
           content = (msg.reaction as { emoji?: string })?.emoji ?? "";
           break;
+        case "order": {
+          const order = msg.order as
+            | {
+                catalog_id?: string;
+                text?: string;
+                product_items?: RawOrderItem[];
+              }
+            | undefined;
+          orderItems = order?.product_items ?? [];
+          content =
+            order?.text?.trim() || `Order — ${orderItems.length} item(s)`;
+          break;
+        }
         default:
           content = (msg.caption as string) ?? "";
       }
@@ -253,6 +272,38 @@ export class WebhookService {
               err,
             ),
           );
+      }
+
+      if (type === "order" && orderItems && orderItems.length > 0) {
+        try {
+          const order =
+            await this.orderFulfillmentService.createFromWebhookOrder(
+              tenantId,
+              contact.id,
+              conversation.id,
+              orderItems,
+            );
+
+          const orderNotifyUserId =
+            conversation.assignedTo ?? (await this.findOwnerId(tenantId));
+          if (orderNotifyUserId) {
+            await this.notificationsService.create(
+              tenantId,
+              orderNotifyUserId,
+              "new_order",
+              "New order received",
+              `${contact.name ?? contact.phone} placed an order worth ₹${(
+                order.totalAmount / 100
+              ).toFixed(2)}`,
+              { conversationId: conversation.id, orderId: order.id },
+            );
+          }
+        } catch (err) {
+          this.logger.error(
+            `Failed to process inbound order for tenant ${tenantId}`,
+            err,
+          );
+        }
       }
 
       // A conversation mid-flow owns the next inbound reply — automation

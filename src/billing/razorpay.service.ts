@@ -69,6 +69,24 @@ export class RazorpayService {
     ) as unknown as Promise<{ current_start?: number; current_end?: number }>;
   }
 
+  async createPaymentLink(data: {
+    amount: number;
+    currency: string;
+    description: string;
+    customer: { name: string; email?: string; contact?: string };
+    notes: Record<string, string>;
+  }): Promise<{ id: string; short_url: string }> {
+    const link = await this.razorpay.paymentLink.create({
+      amount: data.amount,
+      currency: data.currency,
+      description: data.description,
+      customer: data.customer,
+      notes: data.notes,
+      notify: { sms: false, email: false },
+    });
+    return { id: link.id, short_url: link.short_url };
+  }
+
   verifyWebhookSignature(
     rawBody: string,
     signature: string,

@@ -30,6 +30,7 @@ import { IntegrationPlatformsModule } from "./integration-platforms/integration-
 import { AdsModule } from "./ads/ads.module";
 import { DemoRequestsModule } from "./demo-requests/demo-requests.module";
 import { TagsModule } from "./tags/tags.module";
+import { CatalogModule } from "./catalog/catalog.module";
 import { MessagesStatsModule } from "./platform-admin/messages-stats/messages-stats.module";
 import { PlatformCustomersModule } from "./platform-admin/customers/customers.module";
 import { PlatformNotificationsModule } from "./platform-admin/notifications/notifications.module";
@@ -84,6 +85,7 @@ import { ScheduledNotificationsModule } from "./notifications/scheduled-notifica
     AdsModule,
     DemoRequestsModule,
     TagsModule,
+    CatalogModule,
     MessagesStatsModule,
     PlatformCustomersModule,
     PlatformNotificationsModule,

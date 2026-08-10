@@ -13,6 +13,7 @@ import { MetaModule } from "../meta/meta.module";
 import { UploadModule } from "../upload/upload.module";
 import { MediaDownloadService } from "../whatsapp/media-download.service";
 import { NotificationsModule } from "../notifications/notifications.module";
+import { CatalogModule } from "../catalog/catalog.module";
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { NotificationsModule } from "../notifications/notifications.module";
     MetaModule,
     UploadModule,
     NotificationsModule,
+    CatalogModule,
   ],
   providers: [WebhookService, MediaDownloadService],
   controllers: [WebhookController],
