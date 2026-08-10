@@ -28,12 +28,14 @@ import { CreateSubscriptionDto } from "./dto/create-subscription.dto";
 import { VerifyPaymentDto } from "./dto/verify-payment.dto";
 import { CancelSubscriptionDto } from "./dto/cancel-subscription.dto";
 import { UpdatePlanDto } from "./dto/update-plan.dto";
+import { TenantResolverService } from "../tenant/tenant-resolver.service";
 
 @Controller("billing")
 export class BillingController {
   constructor(
     private readonly billingService: BillingService,
     private readonly razorpayService: RazorpayService,
+    private readonly tenantResolver: TenantResolverService,
   ) {}
 
   // ── Public ─────────────────────────────────────────────────────────────────
@@ -68,10 +70,20 @@ export class BillingController {
 
   // ── Owner-only ─────────────────────────────────────────────────────────────
 
+  // Billing lives on a person's own MAIN account only — sub accounts
+  // created via POST /auth/create-account share it rather than carrying
+  // an independent plan (see TenantResolverService.resolveBillingTenantId).
+  private resolveBillingTenantId(req: AuthReq): Promise<string> {
+    return this.tenantResolver.resolveBillingTenantId(
+      req.user.id,
+      req.user.tenantId ?? req.user.id,
+    );
+  }
+
   @Get("subscription")
   @UseGuards(JwtAuthGuard)
-  getSubscription(@Request() req: AuthReq) {
-    const tenantId = req.user.tenantId ?? req.user.id;
+  async getSubscription(@Request() req: AuthReq) {
+    const tenantId = await this.resolveBillingTenantId(req);
     return this.billingService.getOrCreateSubscription(tenantId);
   }
 
@@ -79,11 +91,11 @@ export class BillingController {
   @HttpCode(HttpStatus.CREATED)
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.OWNER)
-  createSubscription(
+  async createSubscription(
     @Request() req: AuthReq,
     @Body() dto: CreateSubscriptionDto,
   ) {
-    const tenantId = req.user.tenantId ?? req.user.id;
+    const tenantId = await this.resolveBillingTenantId(req);
     return this.billingService.createRazorpaySubscription(
       tenantId,
       req.user.id,
@@ -95,19 +107,19 @@ export class BillingController {
   @Post("verify-payment")
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.OWNER)
-  verifyPayment(@Request() req: AuthReq, @Body() dto: VerifyPaymentDto) {
-    const tenantId = req.user.tenantId ?? req.user.id;
+  async verifyPayment(@Request() req: AuthReq, @Body() dto: VerifyPaymentDto) {
+    const tenantId = await this.resolveBillingTenantId(req);
     return this.billingService.verifyPayment(tenantId, req.user.id, dto);
   }
 
   @Delete("subscription")
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.OWNER)
-  cancelSubscription(
+  async cancelSubscription(
     @Request() req: AuthReq,
     @Body() dto: CancelSubscriptionDto,
   ) {
-    const tenantId = req.user.tenantId ?? req.user.id;
+    const tenantId = await this.resolveBillingTenantId(req);
     return this.billingService.cancelSubscription(
       tenantId,
       req.user.id,
@@ -118,12 +130,12 @@ export class BillingController {
   @Get("payments")
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.OWNER)
-  getPaymentHistory(
+  async getPaymentHistory(
     @Request() req: AuthReq,
     @Query("page") page?: string,
     @Query("limit") limit?: string,
   ) {
-    const tenantId = req.user.tenantId ?? req.user.id;
+    const tenantId = await this.resolveBillingTenantId(req);
     return this.billingService.getPaymentHistory(
       tenantId,
       page ? Number(page) : 1,
@@ -133,16 +145,16 @@ export class BillingController {
 
   @Get("invoices")
   @UseGuards(JwtAuthGuard)
-  getInvoices(@Request() req: AuthReq) {
-    const tenantId = req.user.tenantId ?? req.user.id;
+  async getInvoices(@Request() req: AuthReq) {
+    const tenantId = await this.resolveBillingTenantId(req);
     return this.billingService.getInvoices(tenantId);
   }
 
   @Get("payment-method")
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.OWNER)
-  getPaymentMethod(@Request() req: AuthReq) {
-    const tenantId = req.user.tenantId ?? req.user.id;
+  async getPaymentMethod(@Request() req: AuthReq) {
+    const tenantId = await this.resolveBillingTenantId(req);
     return this.billingService.getPaymentMethod(tenantId);
   }
 

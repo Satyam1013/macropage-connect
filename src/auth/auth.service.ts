@@ -559,8 +559,10 @@ export class AuthService {
       role: UserRole.OWNER,
     });
 
-    // Same as a fresh signup — auto-provision a 14-day trial subscription.
-    await this.billingService.getOrCreateSubscription(tenant.id);
+    // No independent Subscription for this tenant — billing lives on the
+    // person's own primary account only (userId), which is what
+    // resolveBillingTenantId() redirects billing/plan-gating routes to
+    // for any tenant this person owns. See TenantResolverService.
 
     // Skip the selection step — creating an account is itself the "select"
     // action, there's no sensible alternative next step.

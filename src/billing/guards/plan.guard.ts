@@ -11,12 +11,14 @@ import { PLAN_FEATURE_KEY } from "../../common/decorators/require-plan.decorator
 import { BillingService } from "../billing.service";
 import type { Plan } from "../billing.types";
 import type { AuthReq } from "../../auth/dto/auth-request.interface";
+import { TenantResolverService } from "../../tenant/tenant-resolver.service";
 
 @Injectable()
 export class PlanGuard implements CanActivate {
   constructor(
     private readonly reflector: Reflector,
     private readonly billingService: BillingService,
+    private readonly tenantResolver: TenantResolverService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -28,7 +30,13 @@ export class PlanGuard implements CanActivate {
     if (!feature) return true;
 
     const req = context.switchToHttp().getRequest<AuthReq>();
-    const tenantId = req.user.tenantId ?? req.user.id;
+    // Feature access is gated by the person's own MAIN account plan, not
+    // whichever sub account they're currently in — see
+    // TenantResolverService.resolveBillingTenantId.
+    const tenantId = await this.tenantResolver.resolveBillingTenantId(
+      req.user.id,
+      req.user.tenantId ?? req.user.id,
+    );
 
     const sub = await this.billingService.getSubscription(tenantId);
 

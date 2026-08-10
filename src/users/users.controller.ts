@@ -21,6 +21,7 @@ import { UsersService } from "./users.service";
 import { ActivityService } from "./activity.service";
 import { UploadService } from "../upload/upload.service";
 import { BillingService } from "../billing/billing.service";
+import { TenantResolverService } from "../tenant/tenant-resolver.service";
 import type { AuthReq } from "../auth/dto/auth-request.interface";
 
 class UpdateProfileDto {
@@ -46,6 +47,7 @@ export class UsersController {
     private readonly activityService: ActivityService,
     private readonly uploadService: UploadService,
     private readonly billingService: BillingService,
+    private readonly tenantResolver: TenantResolverService,
   ) {}
 
   @Get("me")
@@ -55,8 +57,14 @@ export class UsersController {
     if (!user) return { success: true, data: { user: null } };
 
     const tenantId = user.tenantId ?? user.id;
+    // Plan/subscription is a property of the person's own MAIN account
+    // only — see TenantResolverService.resolveBillingTenantId.
+    const billingTenantId = await this.tenantResolver.resolveBillingTenantId(
+      user.id,
+      tenantId,
+    );
     const [sub, tenantFields] = await Promise.all([
-      this.billingService.getSubscription(tenantId),
+      this.billingService.getSubscription(billingTenantId),
       this.usersService.resolveTenantFields(user),
     ]);
 

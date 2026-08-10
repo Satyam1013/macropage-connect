@@ -20,6 +20,7 @@ import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { UsersService } from "./users.service";
 import { UploadService } from "../upload/upload.service";
 import { BillingService } from "../billing/billing.service";
+import { TenantResolverService } from "../tenant/tenant-resolver.service";
 import type { AuthReq } from "../auth/dto/auth-request.interface";
 
 // Every field needs a validator, or the global ValidationPipe's
@@ -49,6 +50,7 @@ export class MeController {
     private readonly usersService: UsersService,
     private readonly uploadService: UploadService,
     private readonly billingService: BillingService,
+    private readonly tenantResolver: TenantResolverService,
   ) {}
 
   @Get()
@@ -58,8 +60,16 @@ export class MeController {
     if (!user) return { success: true, data: { user: null } };
 
     const tenantId = user.tenantId ?? user.id;
+    // Plan/subscription is a property of the person's own MAIN account
+    // only — see TenantResolverService.resolveBillingTenantId. Company
+    // name/logo (tenantFields below) still reflect whichever account is
+    // currently selected, since that's what the viewed workspace is.
+    const billingTenantId = await this.tenantResolver.resolveBillingTenantId(
+      user.id,
+      tenantId,
+    );
     const [sub, tenantFields] = await Promise.all([
-      this.billingService.getSubscription(tenantId),
+      this.billingService.getSubscription(billingTenantId),
       this.usersService.resolveTenantFields(user),
     ]);
 

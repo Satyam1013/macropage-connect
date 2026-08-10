@@ -9,6 +9,7 @@ import { Tenant, TenantSchema } from "../schemas/tenant.schema";
 import { ActivityLog, ActivityLogSchema } from "../schemas/activity-log.schema";
 import { UploadModule } from "../upload/upload.module";
 import { BillingModule } from "../billing/billing.module";
+import { TenantModule } from "../tenant/tenant.module";
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { BillingModule } from "../billing/billing.module";
     ]),
     UploadModule,
     BillingModule,
+    TenantModule,
   ],
   controllers: [UsersController, MeController],
   providers: [UsersService, ActivityService],

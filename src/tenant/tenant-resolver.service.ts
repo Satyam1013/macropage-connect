@@ -61,4 +61,28 @@ export class TenantResolverService {
       .exec();
     return owner ? { city: owner.city, country: owner.country } : null;
   }
+
+  // Billing is a property of a person's own MAIN account only — sub
+  // accounts they create (POST /auth/create-account) share the main
+  // account's plan rather than carrying their own Subscription. Redirects
+  // to userId when currentTenantId is either userId itself, or a
+  // standalone Tenant the caller personally owns. Leaves currentTenantId
+  // untouched when it belongs to someone else's business (an invited
+  // team member, even one invited as OWNER-role co-admin) — that tenant's
+  // billing is genuinely independent, not the invitee's own.
+  async resolveBillingTenantId(
+    userId: string,
+    currentTenantId: string,
+  ): Promise<string> {
+    if (currentTenantId === userId) return userId;
+
+    const tenant = await this.tenantModel
+      .findById(currentTenantId)
+      .select("ownerId")
+      .lean()
+      .exec();
+    if (tenant && tenant.ownerId === userId) return userId;
+
+    return currentTenantId;
+  }
 }
