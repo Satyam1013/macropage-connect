@@ -6,7 +6,6 @@ import {
   WebhookEndpointSchema,
 } from "../schemas/webhook-endpoint.schema";
 import { User, UserSchema } from "../users/schemas/user.schema";
-import { Tenant, TenantSchema } from "../schemas/tenant.schema";
 import { UploadModule } from "../upload/upload.module";
 import { BillingModule } from "../billing/billing.module";
 import { SettingsService } from "./settings.service";
@@ -19,7 +18,6 @@ import { ApiKeyGuard } from "../auth/guards/api-key.guard";
       { name: APIKey.name, schema: APIKeySchema },
       { name: WebhookEndpoint.name, schema: WebhookEndpointSchema },
       { name: User.name, schema: UserSchema },
-      { name: Tenant.name, schema: TenantSchema },
     ]),
     UploadModule,
     BillingModule,

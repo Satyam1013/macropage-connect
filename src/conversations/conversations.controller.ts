@@ -17,7 +17,6 @@ import {
 import { ConversationsService } from "./conversations.service";
 import {
   SendMessageDto,
-  SendCatalogMessageDto,
   AddNoteDto,
   UpdateConversationDto,
 } from "./dto/send-message.dto";
@@ -114,22 +113,6 @@ export class ConversationsController {
       tenantId,
       id,
       dto,
-      req.user.id,
-    );
-  }
-
-  @Post(":id/catalog")
-  @HttpCode(HttpStatus.CREATED)
-  sendCatalogMessage(
-    @Request() req: AuthReq,
-    @Param("id") id: string,
-    @Body() dto: SendCatalogMessageDto,
-  ) {
-    const tenantId = req.user.tenantId ?? req.user.id;
-    return this.conversationsService.sendCatalogMessage(
-      tenantId,
-      id,
-      dto.productIds,
       req.user.id,
     );
   }

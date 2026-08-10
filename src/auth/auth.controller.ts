@@ -18,8 +18,6 @@ import { SignupDto } from "./dto/signup.dto";
 import { OAuthDto } from "./dto/oauth.dto";
 import { ForgotPasswordDto } from "./dto/forgot-password.dto";
 import { ResetPasswordDto } from "./dto/reset-password.dto";
-import { SelectAccountDto } from "./dto/select-account.dto";
-import { CreateAccountDto } from "./dto/create-account.dto";
 import { JwtAuthGuard } from "./guards/jwt-auth.guard";
 import { UserPayload } from "./dto/auth-response.interface";
 
@@ -108,34 +106,5 @@ export class AuthController {
     const user = await this.authService.getMe(req.user.id);
     if (!user) throw new NotFoundException("User not found");
     return { success: true, data: { user } };
-  }
-
-  @UseGuards(JwtAuthGuard)
-  @Get("my-accounts")
-  getMyAccounts(@Request() req: { user: UserPayload }) {
-    return this.authService.getMyAccounts(req.user.id);
-  }
-
-  @UseGuards(JwtAuthGuard)
-  @Post("select-account")
-  @HttpCode(HttpStatus.OK)
-  selectAccount(
-    @Request() req: { user: UserPayload },
-    @Body() dto: SelectAccountDto,
-  ) {
-    return this.authService.selectAccount(req.user.id, dto.tenantId);
-  }
-
-  @UseGuards(JwtAuthGuard)
-  @Post("create-account")
-  @HttpCode(HttpStatus.CREATED)
-  createAccount(
-    @Request() req: { user: UserPayload },
-    @Body() dto: CreateAccountDto,
-  ) {
-    return this.authService.createAdditionalAccount(
-      req.user.id,
-      dto.businessName,
-    );
   }
 }

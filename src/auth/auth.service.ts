@@ -30,26 +30,8 @@ import {
   PasswordResetTokenDocument,
 } from "../schemas/password-reset-token.schema";
 import { Session, SessionDocument } from "../schemas/session.schema";
-import {
-  UserAccountMembership,
-  UserAccountMembershipDocument,
-} from "./schemas/user-account-membership.schema";
-import { Tenant, TenantDocument } from "../schemas/tenant.schema";
 import { EmailService } from "../queue/email.service";
 import { BillingService } from "../billing/billing.service";
-import { UserRole } from "./auth.constants";
-
-// How many accounts a person can OWN, gated by their primary account's
-// plan (the account where tenantId === their own _id — the one from their
-// original signup). "Scale" on the pricing page is the BUSINESS plan key.
-const ACCOUNT_LIMIT_BY_PLAN: Record<string, number> = {
-  TRIAL: 1,
-  STARTER: 1,
-  GROWTH: 3,
-  BUSINESS: 5,
-  ENTERPRISE: Infinity,
-};
-const DEFAULT_ACCOUNT_LIMIT = 1;
 
 @Injectable()
 export class AuthService {
@@ -66,10 +48,6 @@ export class AuthService {
     private readonly resetTokenModel: Model<PasswordResetTokenDocument>,
     @InjectModel(Session.name)
     private readonly sessionModel: Model<SessionDocument>,
-    @InjectModel(UserAccountMembership.name)
-    private readonly membershipModel: Model<UserAccountMembershipDocument>,
-    @InjectModel(Tenant.name)
-    private readonly tenantModel: Model<TenantDocument>,
     private readonly activityService: ActivityService,
     private readonly billingService: BillingService,
   ) {}
@@ -89,13 +67,6 @@ export class AuthService {
     if (existing) throw new ConflictException("Email already registered");
 
     const user = await this.users.create(dto);
-    // A fresh signup owns their own account (tenantId === own _id, per
-    // the existing convention) — mirror that as their first membership.
-    await this.membershipModel.create({
-      userId: user.id,
-      tenantId: user.id,
-      role: user.role,
-    });
 
     const otp = String(Math.floor(100000 + Math.random() * 900000));
     const otpHash = crypto.createHash("sha256").update(otp).digest("hex");
@@ -236,14 +207,6 @@ export class AuthService {
       name: payload.name ?? payload.email.split("@")[0],
       avatarUrl: payload.picture,
     });
-
-    if (isNew) {
-      await this.membershipModel.create({
-        userId: user.id,
-        tenantId: user.id,
-        role: user.role,
-      });
-    }
 
     await this.users.updateLastLogin(user.id);
     void this.activityService.log({
@@ -462,133 +425,12 @@ export class AuthService {
     return { deletedCount: result.deletedCount ?? 0 };
   }
 
-  // ─── Account Selection ────────────────────────────────────────────────────
-
-  async getMyAccounts(userId: string) {
-    const memberships = await this.membershipModel
-      .find({ userId, isActive: true })
-      .lean()
-      .exec();
-    if (!memberships.length) return { success: true, data: [] };
-
-    const tenantIds = [...new Set(memberships.map((m) => m.tenantId))];
-    const owners = await this.users.findManyByIds(tenantIds);
-    const ownerMap = new Map(owners.map((o) => [String(o._id), o]));
-
-    const accounts = memberships.map((m) => {
-      const owner = ownerMap.get(m.tenantId);
-      return {
-        tenantId: m.tenantId,
-        name: owner?.company ?? owner?.name ?? "Unknown",
-        logoUrl: owner?.logoUrl ?? null,
-        plan: owner?.billingPlan ?? owner?.plan ?? "FREE",
-        role: m.role,
-        lastAccessedAt: m.lastAccessedAt ?? null,
-      };
-    });
-
-    return { success: true, data: accounts };
-  }
-
-  async selectAccount(userId: string, tenantId: string) {
-    const membership = await this.membershipModel
-      .findOne({ userId, tenantId, isActive: true })
-      .exec();
-    if (!membership) {
-      throw new ForbiddenException({
-        code: "NOT_A_MEMBER",
-        message: "You do not have access to this account.",
-      });
-    }
-
-    await this.users.applySelectedAccount(userId, tenantId, membership.role);
-    await this.membershipModel.updateOne(
-      { _id: membership._id },
-      { $set: { lastAccessedAt: new Date() } },
-    );
-
-    const user = await this.users.findById(userId);
-    return {
-      success: true,
-      data: {
-        tenantId,
-        role: membership.role,
-        user: user ? await this.users.toPublicProfile(user) : null,
-      },
-    };
-  }
-
-  // Every account a person creates via this endpoint is a standalone
-  // Tenant document (see schemas/tenant.schema.ts) — unlike the legacy
-  // convention where tenantId is just an owner User's own _id, this app's
-  // primary signup path. TenantResolverService/team.service.ts/etc. all
-  // already handle both.
-  async createAdditionalAccount(userId: string, businessName: string) {
-    const user = await this.users.findById(userId);
-    if (!user) throw new NotFoundException("User not found");
-
-    // Gated by the plan of the person's PRIMARY account — the one where
-    // tenantId === their own _id, i.e. their original signup.
-    const primarySub = await this.billingService.getSubscription(userId);
-    const primaryPlan = primarySub?.plan ?? "TRIAL";
-    const limit = ACCOUNT_LIMIT_BY_PLAN[primaryPlan] ?? DEFAULT_ACCOUNT_LIMIT;
-
-    const ownedCount = await this.membershipModel.countDocuments({
-      userId,
-      role: UserRole.OWNER,
-      isActive: true,
-    });
-    if (ownedCount >= limit) {
-      throw new ForbiddenException({
-        code: "ACCOUNT_LIMIT_REACHED",
-        message:
-          limit === Infinity
-            ? "Could not create account."
-            : `Your ${primaryPlan} plan allows up to ${limit} account${limit === 1 ? "" : "s"}. Upgrade to create more.`,
-      });
-    }
-
-    const tenant = await this.tenantModel.create({
-      name: businessName,
-      ownerId: userId,
-    });
-
-    await this.membershipModel.create({
-      userId,
-      tenantId: tenant.id,
-      role: UserRole.OWNER,
-    });
-
-    // Same as a fresh signup — auto-provision a 14-day trial subscription.
-    await this.billingService.getOrCreateSubscription(tenant.id);
-
-    // Skip the selection step — creating an account is itself the "select"
-    // action, there's no sensible alternative next step.
-    await this.users.applySelectedAccount(userId, tenant.id, UserRole.OWNER);
-
-    const refreshed = await this.users.findById(userId);
-    return {
-      success: true,
-      data: {
-        message: "Account created successfully",
-        tenantId: tenant.id,
-        businessName,
-        role: UserRole.OWNER,
-        user: refreshed ? await this.users.toPublicProfile(refreshed) : null,
-      },
-    };
-  }
-
   // ─── Helpers ──────────────────────────────────────────────────────────────
 
   private async buildAuthResponse(
     user: UserDocument,
     message: string,
   ): Promise<AuthResponse> {
-    // Every login requires an explicit account selection afterward — see
-    // jwt-auth.guard.ts, which blocks all other routes while this is true.
-    await this.users.markPendingAccountSelection(user.id, true);
-
     const accessToken = this.signAccessToken(user.id, user.email);
     const refreshToken = this.signRefreshToken(user.id, user.email);
 
@@ -598,7 +440,6 @@ export class AuthService {
         accessToken,
         refreshToken,
         user: await this.users.toPublicProfile(user),
-        requiresAccountSelection: true,
       },
       message,
     };

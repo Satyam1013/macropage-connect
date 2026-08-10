@@ -19,11 +19,6 @@ import {
   PasswordResetTokenSchema,
 } from "../schemas/password-reset-token.schema";
 import { Session, SessionSchema } from "../schemas/session.schema";
-import {
-  UserAccountMembership,
-  UserAccountMembershipSchema,
-} from "./schemas/user-account-membership.schema";
-import { Tenant, TenantSchema } from "../schemas/tenant.schema";
 
 @Module({
   imports: [
@@ -36,11 +31,6 @@ import { Tenant, TenantSchema } from "../schemas/tenant.schema";
       { name: RefreshToken.name, schema: RefreshTokenSchema },
       { name: PasswordResetToken.name, schema: PasswordResetTokenSchema },
       { name: Session.name, schema: SessionSchema },
-      {
-        name: UserAccountMembership.name,
-        schema: UserAccountMembershipSchema,
-      },
-      { name: Tenant.name, schema: TenantSchema },
     ]),
     JwtModule.registerAsync({
       imports: [ConfigModule],

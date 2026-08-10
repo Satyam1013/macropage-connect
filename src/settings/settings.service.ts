@@ -13,23 +13,7 @@ import {
   WebhookEndpointDocument,
 } from "../schemas/webhook-endpoint.schema";
 import { User, UserDocument } from "../users/schemas/user.schema";
-import { Tenant, TenantDocument } from "../schemas/tenant.schema";
 import { UploadService } from "../upload/upload.service";
-
-interface AccountUpdateDto {
-  companyName?: string;
-  website?: string;
-  description?: string;
-  industry?: string;
-  address?: string;
-  city?: string;
-  state?: string;
-  country?: string;
-  postalCode?: string;
-  timezone?: string;
-  language?: string;
-  currency?: string;
-}
 
 @Injectable()
 export class SettingsService {
@@ -40,41 +24,12 @@ export class SettingsService {
     private readonly webhookModel: Model<WebhookEndpointDocument>,
     @InjectModel(User.name)
     private readonly userModel: Model<UserDocument>,
-    @InjectModel(Tenant.name)
-    private readonly tenantModel: Model<TenantDocument>,
     private readonly uploadService: UploadService,
   ) {}
 
   // ─── Account (company) settings ──────────────────────────────────────────
-  // tenantId may point at a standalone Tenant doc (created via
-  // POST /auth/create-account) or, for the legacy convention, an owner
-  // User's own doc — every method here tries Tenant first.
-
-  private tenantToAccount(tenant: TenantDocument) {
-    return {
-      _id: tenant._id,
-      name: tenant.name,
-      company: tenant.name,
-      email: tenant.email,
-      website: tenant.website,
-      description: tenant.description,
-      industry: tenant.industry,
-      address: tenant.address,
-      city: tenant.city,
-      state: tenant.state,
-      country: tenant.country,
-      postalCode: tenant.postalCode,
-      timezone: tenant.timezone,
-      language: tenant.language,
-      logoUrl: tenant.logoUrl,
-      createdAt: tenant.createdAt,
-    };
-  }
 
   async getAccount(tenantId: string) {
-    const tenant = await this.tenantModel.findById(tenantId).exec();
-    if (tenant) return { success: true, data: this.tenantToAccount(tenant) };
-
     const user = await this.userModel
       .findById(tenantId)
       .select(
@@ -86,30 +41,23 @@ export class SettingsService {
     return { success: true, data: user };
   }
 
-  async updateAccount(tenantId: string, dto: AccountUpdateDto) {
-    const tenant = await this.tenantModel.findById(tenantId).exec();
-    if (tenant) {
-      const update: Record<string, unknown> = {};
-      if (dto.companyName !== undefined) update.name = dto.companyName;
-      if (dto.website !== undefined) update.website = dto.website;
-      if (dto.description !== undefined) update.description = dto.description;
-      if (dto.industry !== undefined) update.industry = dto.industry;
-      if (dto.address !== undefined) update.address = dto.address;
-      if (dto.city !== undefined) update.city = dto.city;
-      if (dto.state !== undefined) update.state = dto.state;
-      if (dto.country !== undefined) update.country = dto.country;
-      if (dto.postalCode !== undefined) update.postalCode = dto.postalCode;
-      if (dto.timezone !== undefined) update.timezone = dto.timezone;
-      if (dto.language !== undefined) update.language = dto.language;
-      if (dto.currency !== undefined) update.currency = dto.currency;
-
-      const updated = await this.tenantModel
-        .findByIdAndUpdate(tenantId, update, { returnDocument: "after" })
-        .exec();
-      if (!updated) throw new NotFoundException("Account not found");
-      return { success: true, data: this.tenantToAccount(updated) };
-    }
-
+  async updateAccount(
+    tenantId: string,
+    dto: {
+      companyName?: string;
+      website?: string;
+      description?: string;
+      industry?: string;
+      address?: string;
+      city?: string;
+      state?: string;
+      country?: string;
+      postalCode?: string;
+      timezone?: string;
+      language?: string;
+      currency?: string;
+    },
+  ) {
     const update: Record<string, unknown> = {};
     if (dto.companyName !== undefined) update.company = dto.companyName;
     if (dto.website !== undefined) update.website = dto.website;
@@ -143,17 +91,9 @@ export class SettingsService {
     }
 
     const result = await this.uploadService.uploadImage(tenantId, file);
-    const isTenant = await this.tenantModel.exists({ _id: tenantId });
-    if (isTenant) {
-      await this.tenantModel.updateOne(
-        { _id: tenantId },
-        { logoUrl: result.url },
-      );
-    } else {
-      await this.userModel.findByIdAndUpdate(tenantId, {
-        logoUrl: result.url,
-      });
-    }
+    await this.userModel.findByIdAndUpdate(tenantId, {
+      logoUrl: result.url,
+    });
     return { success: true, data: { logoUrl: result.url } };
   }
 

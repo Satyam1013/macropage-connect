@@ -3,6 +3,7 @@ import {
   Logger,
   NotFoundException,
   BadRequestException,
+  ConflictException,
 } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
 import { JwtService } from "@nestjs/jwt";
@@ -12,14 +13,9 @@ import * as crypto from "crypto";
 import * as bcrypt from "bcryptjs";
 import { User, UserDocument } from "../users/schemas/user.schema";
 import { TeamInvite, TeamInviteDocument } from "../schemas/team-invite.schema";
-import {
-  UserAccountMembership,
-  UserAccountMembershipDocument,
-} from "../auth/schemas/user-account-membership.schema";
 import { EmailService } from "../queue/email.service";
 import { UserRole } from "../auth/auth.constants";
 import { NotificationsService } from "../notifications/notifications.service";
-import { TenantResolverService } from "../tenant/tenant-resolver.service";
 
 @Injectable()
 export class TeamService {
@@ -29,11 +25,8 @@ export class TeamService {
     @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
     @InjectModel(TeamInvite.name)
     private readonly inviteModel: Model<TeamInviteDocument>,
-    @InjectModel(UserAccountMembership.name)
-    private readonly membershipModel: Model<UserAccountMembershipDocument>,
     private readonly emailService: EmailService,
     private readonly notificationsService: NotificationsService,
-    private readonly tenantResolver: TenantResolverService,
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
   ) {}
@@ -46,16 +39,11 @@ export class TeamService {
     body: string,
   ): Promise<void> {
     // The tenant owner's own document never has `tenantId` set — it IS the
-    // tenantId for the legacy convention; for a standalone Tenant doc the
-    // owner is resolved separately since their _id never equals tenantId.
-    const ownerId = await this.tenantResolver.resolveOwnerId(tenantId);
+    // tenantId — so admins must be matched by tenantId OR by being that
+    // root user (_id === tenantId).
     const admins = await this.userModel
       .find({
-        $or: [
-          { tenantId },
-          { _id: tenantId },
-          ...(ownerId ? [{ _id: ownerId }] : []),
-        ],
+        $or: [{ tenantId }, { _id: tenantId }],
         role: { $in: [UserRole.OWNER, UserRole.ADMIN] },
         _id: { $ne: excludeUserId },
       })
@@ -80,28 +68,22 @@ export class TeamService {
     newUser: { name: string; email: string },
     role: UserRole,
   ): Promise<void> {
-    const ownerId = await this.tenantResolver.resolveOwnerId(tenantId);
-    const [admins, tenantLocation] = await Promise.all([
+    const [admins, tenantOwner] = await Promise.all([
       this.userModel
         .find({
-          $or: [
-            { tenantId },
-            { _id: tenantId },
-            ...(ownerId ? [{ _id: ownerId }] : []),
-          ],
+          $or: [{ tenantId }, { _id: tenantId }],
           role: { $in: [UserRole.OWNER, UserRole.ADMIN] },
           _id: { $ne: newUserId },
         })
         .select("name email")
         .lean()
         .exec(),
-      this.tenantResolver.resolveLocation(tenantId),
+      this.userModel.findById(tenantId).select("city country").lean().exec(),
     ]);
 
     const location =
-      [tenantLocation?.city, tenantLocation?.country]
-        .filter(Boolean)
-        .join(", ") || "—";
+      [tenantOwner?.city, tenantOwner?.country].filter(Boolean).join(", ") ||
+      "—";
     const jobTitleByRole: Record<string, string> = {
       OWNER: "Owner",
       ADMIN: "Admin",
@@ -337,42 +319,24 @@ export class TeamService {
     const existingUser = await this.userModel
       .findOne({ email: invite.email })
       .exec();
-
-    let user: UserDocument;
     if (existingUser) {
-      // Already has an account elsewhere — add a membership to THIS tenant
-      // rather than creating a duplicate user. Auto-select it (matching a
-      // fresh signup's UX) so they land straight in the account they just
-      // joined instead of hitting the account-selection gate immediately.
-      user = existingUser;
-      await this.userModel.updateOne(
-        { _id: user._id },
-        {
-          $set: {
-            tenantId: invite.tenantId,
-            role: invite.role,
-            pendingAccountSelection: false,
-          },
-        },
-      );
-    } else {
-      const hashedPassword = await bcrypt.hash(dto.password, 12);
-      user = await this.userModel.create({
-        tenantId: invite.tenantId,
-        name: dto.name,
-        email: invite.email,
-        password: hashedPassword,
-        role: invite.role,
-        emailVerified: true,
-        onboardingComplete: true,
+      throw new ConflictException({
+        code: "EMAIL_EXISTS",
+        message: "An account with this email already exists.",
       });
     }
 
-    await this.membershipModel.findOneAndUpdate(
-      { userId: user.id, tenantId: invite.tenantId },
-      { $set: { role: invite.role, isActive: true } },
-      { upsert: true },
-    );
+    const hashedPassword = await bcrypt.hash(dto.password, 12);
+
+    const user = await this.userModel.create({
+      tenantId: invite.tenantId,
+      name: dto.name,
+      email: invite.email,
+      password: hashedPassword,
+      role: invite.role,
+      emailVerified: true,
+      onboardingComplete: true,
+    });
 
     await this.inviteModel.updateOne(
       { _id: invite._id },
@@ -432,11 +396,8 @@ export class TeamService {
           id: user.id,
           name: user.name,
           email: user.email,
-          // Use the invite's role/tenantId, not user.role/.tenantId — for
-          // an existing user those fields were updated via updateOne()
-          // above and this in-memory doc was never refetched.
-          role: invite.role,
-          tenantId: invite.tenantId,
+          role: user.role,
+          tenantId: user.tenantId,
         },
       },
     };

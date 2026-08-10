@@ -10,7 +10,6 @@ import {
 import { Message, MessageDocument } from "../schemas/message.schema";
 import { Campaign, CampaignDocument } from "../schemas/campaign.schema";
 import { NotificationsService } from "./notifications.service";
-import { TenantResolverService } from "../tenant/tenant-resolver.service";
 
 const TIER_LIMITS: Record<string, number> = {
   TIER_1K: 1000,
@@ -41,11 +40,17 @@ export class ScheduledNotificationsService {
     @InjectModel(Campaign.name)
     private readonly campaignModel: Model<CampaignDocument>,
     private readonly notificationsService: NotificationsService,
-    private readonly tenantResolver: TenantResolverService,
   ) {}
 
-  private findOwnerId(tenantId: string): Promise<string | undefined> {
-    return this.tenantResolver.resolveOwnerId(tenantId);
+  // tenantId is always the owner's own _id — invited team members are the
+  // only users that ever get a distinct `tenantId` field stored on them.
+  private async findOwnerId(tenantId: string): Promise<string | undefined> {
+    const owner = await this.userModel
+      .findById(tenantId)
+      .select("_id")
+      .lean()
+      .exec();
+    return owner ? String(owner._id) : undefined;
   }
 
   @Cron(CronExpression.EVERY_DAY_AT_9AM)

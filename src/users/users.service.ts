@@ -7,7 +7,6 @@ import { UserRole } from "../auth/auth.constants";
 import { SignupDto } from "../auth/dto/signup.dto";
 import { UserPayload } from "../auth/dto/auth-response.interface";
 import { User, UserDocument } from "./schemas/user.schema";
-import { Tenant, TenantDocument } from "../schemas/tenant.schema";
 
 export type { UserDocument };
 
@@ -15,8 +14,6 @@ export type { UserDocument };
 export class UsersService {
   constructor(
     @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
-    @InjectModel(Tenant.name)
-    private readonly tenantModel: Model<TenantDocument>,
   ) {}
 
   findByEmail(email: string): Promise<UserDocument | null> {
@@ -25,45 +22,6 @@ export class UsersService {
 
   findById(id: string): Promise<UserDocument | null> {
     return this.userModel.findById(id).exec();
-  }
-
-  findManyByIds(ids: string[]) {
-    return this.userModel
-      .find({ _id: { $in: ids } })
-      .select("name company logoUrl plan billingPlan")
-      .lean()
-      .exec();
-  }
-
-  markPendingAccountSelection(userId: string, value: boolean): Promise<void> {
-    return this.userModel
-      .updateOne({ _id: userId }, { $set: { pendingAccountSelection: value } })
-      .exec()
-      .then(() => undefined);
-  }
-
-  // Applies the account a user just switched into. Self-selecting an
-  // account they own clears tenantId rather than setting it to their own
-  // id — resolveTenantFields() above treats an unset tenantId as "read my
-  // own doc" and skips an extra owner lookup for that (common) case.
-  applySelectedAccount(
-    userId: string,
-    tenantId: string,
-    role: UserRole,
-  ): Promise<void> {
-    return this.userModel
-      .updateOne(
-        { _id: userId },
-        {
-          $set: {
-            tenantId: tenantId === userId ? null : tenantId,
-            role,
-            pendingAccountSelection: false,
-          },
-        },
-      )
-      .exec()
-      .then(() => undefined);
   }
 
   findByEmailAndOtp(
@@ -218,32 +176,6 @@ export class UsersService {
     >
   > {
     if (!user.tenantId) return user;
-
-    const tenant = await this.tenantModel.findById(user.tenantId).lean().exec();
-    if (tenant) {
-      // Branding/setup fields live on the Tenant doc; plan/billing fields
-      // don't (Subscription is already tenantId-native for those) — read
-      // them off the owner's own User doc, which syncUserPlan() keeps
-      // synced for standalone tenants too (see billing.service.ts).
-      const owner = await this.userModel
-        .findById(tenant.ownerId)
-        .select(
-          "plan billingPlan billingCycle trialEndsAt subscriptionType paidUser",
-        )
-        .lean()
-        .exec();
-      return {
-        company: tenant.name,
-        logoUrl: tenant.logoUrl,
-        whatsappSetupDone: tenant.whatsappSetupDone,
-        plan: owner?.plan ?? "FREE",
-        billingPlan: owner?.billingPlan,
-        billingCycle: owner?.billingCycle,
-        trialEndsAt: owner?.trialEndsAt,
-        subscriptionType: owner?.subscriptionType ?? "free",
-        paidUser: owner?.paidUser ?? false,
-      };
-    }
 
     const owner = await this.userModel
       .findById(user.tenantId)

@@ -8,17 +8,18 @@ import {
   WABAAccountDocument,
 } from "../schemas/waba-account.schema";
 import { EncryptionService } from "./encryption.service";
+import { User, UserDocument } from "../users/schemas/user.schema";
 import { NotificationsService } from "../notifications/notifications.service";
-import { TenantResolverService } from "../tenant/tenant-resolver.service";
 
 @Injectable()
 export class MetaService {
   constructor(
     @InjectModel(WABAAccount.name)
     private readonly wabaModel: Model<WABAAccountDocument>,
+    @InjectModel(User.name)
+    private readonly userModel: Model<UserDocument>,
     private readonly encryption: EncryptionService,
     private readonly notificationsService: NotificationsService,
-    private readonly tenantResolver: TenantResolverService,
   ) {}
 
   async getClient(tenantId: string) {
@@ -219,12 +220,18 @@ export class MetaService {
     };
   }
 
+  // tenantId is always the owner's own _id — invited team members are the
+  // only users that ever get a distinct `tenantId` field stored on them.
   private async notifyOwnerTokenExpired(tenantId: string): Promise<void> {
-    const ownerId = await this.tenantResolver.resolveOwnerId(tenantId);
-    if (!ownerId) return;
+    const owner = await this.userModel
+      .findById(tenantId)
+      .select("_id")
+      .lean()
+      .exec();
+    if (!owner) return;
     await this.notificationsService.create(
       tenantId,
-      ownerId,
+      String(owner._id),
       "waba_token_expired",
       "WhatsApp token expired",
       "Your WhatsApp access token has expired. Please reconnect your account.",

@@ -6,8 +6,6 @@ import {
   WABAAccountDocument,
 } from "../schemas/waba-account.schema";
 import { User, UserDocument } from "../users/schemas/user.schema";
-import { Tenant, TenantDocument } from "../schemas/tenant.schema";
-import { TenantResolverService } from "../tenant/tenant-resolver.service";
 
 @Injectable()
 export class AdminService {
@@ -18,9 +16,6 @@ export class AdminService {
     private readonly wabaModel: Model<WABAAccountDocument>,
     @InjectModel(User.name)
     private readonly userModel: Model<UserDocument>,
-    @InjectModel(Tenant.name)
-    private readonly tenantModel: Model<TenantDocument>,
-    private readonly tenantResolver: TenantResolverService,
   ) {}
 
   async disconnectWabaByTenantId(tenantId: string) {
@@ -35,23 +30,10 @@ export class AdminService {
       `[Admin] Deleting WABAAccount for tenantId=${tenantId}, phoneNumberId=${waba.phoneNumberId ?? "empty"}`,
     );
     await this.wabaModel.deleteOne({ tenantId });
-    const ownerId = await this.tenantResolver.resolveOwnerId(tenantId);
-    await Promise.all([
-      this.userModel.updateOne(
-        {
-          $or: [
-            { _id: tenantId },
-            { tenantId },
-            ...(ownerId ? [{ _id: ownerId }] : []),
-          ],
-        },
-        { $set: { whatsappSetupDone: false } },
-      ),
-      this.tenantModel.updateOne(
-        { _id: tenantId },
-        { $set: { whatsappSetupDone: false } },
-      ),
-    ]);
+    await this.userModel.updateOne(
+      { $or: [{ _id: tenantId }, { tenantId }] },
+      { $set: { whatsappSetupDone: false } },
+    );
     return {
       success: true,
       data: {
