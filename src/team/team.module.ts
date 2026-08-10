@@ -4,6 +4,10 @@ import { JwtModule } from "@nestjs/jwt";
 import { ConfigModule, ConfigService } from "@nestjs/config";
 import { User, UserSchema } from "../users/schemas/user.schema";
 import { TeamInvite, TeamInviteSchema } from "../schemas/team-invite.schema";
+import {
+  UserAccountMembership,
+  UserAccountMembershipSchema,
+} from "../auth/schemas/user-account-membership.schema";
 import { TeamService } from "./team.service";
 import { TeamController } from "./team.controller";
 import { QueueModule } from "../queue/queue.module";
@@ -17,6 +21,10 @@ import { NotificationsModule } from "../notifications/notifications.module";
     MongooseModule.forFeature([
       { name: User.name, schema: UserSchema },
       { name: TeamInvite.name, schema: TeamInviteSchema },
+      {
+        name: UserAccountMembership.name,
+        schema: UserAccountMembershipSchema,
+      },
     ]),
     JwtModule.registerAsync({
       imports: [ConfigModule],

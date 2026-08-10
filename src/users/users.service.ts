@@ -24,6 +24,45 @@ export class UsersService {
     return this.userModel.findById(id).exec();
   }
 
+  findManyByIds(ids: string[]) {
+    return this.userModel
+      .find({ _id: { $in: ids } })
+      .select("name company logoUrl plan billingPlan")
+      .lean()
+      .exec();
+  }
+
+  markPendingAccountSelection(userId: string, value: boolean): Promise<void> {
+    return this.userModel
+      .updateOne({ _id: userId }, { $set: { pendingAccountSelection: value } })
+      .exec()
+      .then(() => undefined);
+  }
+
+  // Applies the account a user just switched into. Self-selecting an
+  // account they own clears tenantId rather than setting it to their own
+  // id — resolveTenantFields() above treats an unset tenantId as "read my
+  // own doc" and skips an extra owner lookup for that (common) case.
+  applySelectedAccount(
+    userId: string,
+    tenantId: string,
+    role: UserRole,
+  ): Promise<void> {
+    return this.userModel
+      .updateOne(
+        { _id: userId },
+        {
+          $set: {
+            tenantId: tenantId === userId ? null : tenantId,
+            role,
+            pendingAccountSelection: false,
+          },
+        },
+      )
+      .exec()
+      .then(() => undefined);
+  }
+
   findByEmailAndOtp(
     email: string,
     otpHash: string,

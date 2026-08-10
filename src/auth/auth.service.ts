@@ -30,6 +30,10 @@ import {
   PasswordResetTokenDocument,
 } from "../schemas/password-reset-token.schema";
 import { Session, SessionDocument } from "../schemas/session.schema";
+import {
+  UserAccountMembership,
+  UserAccountMembershipDocument,
+} from "./schemas/user-account-membership.schema";
 import { EmailService } from "../queue/email.service";
 import { BillingService } from "../billing/billing.service";
 
@@ -48,6 +52,8 @@ export class AuthService {
     private readonly resetTokenModel: Model<PasswordResetTokenDocument>,
     @InjectModel(Session.name)
     private readonly sessionModel: Model<SessionDocument>,
+    @InjectModel(UserAccountMembership.name)
+    private readonly membershipModel: Model<UserAccountMembershipDocument>,
     private readonly activityService: ActivityService,
     private readonly billingService: BillingService,
   ) {}
@@ -67,6 +73,13 @@ export class AuthService {
     if (existing) throw new ConflictException("Email already registered");
 
     const user = await this.users.create(dto);
+    // A fresh signup owns their own account (tenantId === own _id, per
+    // the existing convention) — mirror that as their first membership.
+    await this.membershipModel.create({
+      userId: user.id,
+      tenantId: user.id,
+      role: user.role,
+    });
 
     const otp = String(Math.floor(100000 + Math.random() * 900000));
     const otpHash = crypto.createHash("sha256").update(otp).digest("hex");
@@ -207,6 +220,14 @@ export class AuthService {
       name: payload.name ?? payload.email.split("@")[0],
       avatarUrl: payload.picture,
     });
+
+    if (isNew) {
+      await this.membershipModel.create({
+        userId: user.id,
+        tenantId: user.id,
+        role: user.role,
+      });
+    }
 
     await this.users.updateLastLogin(user.id);
     void this.activityService.log({
@@ -425,12 +446,72 @@ export class AuthService {
     return { deletedCount: result.deletedCount ?? 0 };
   }
 
+  // ─── Account Selection ────────────────────────────────────────────────────
+
+  async getMyAccounts(userId: string) {
+    const memberships = await this.membershipModel
+      .find({ userId, isActive: true })
+      .lean()
+      .exec();
+    if (!memberships.length) return { success: true, data: [] };
+
+    const tenantIds = [...new Set(memberships.map((m) => m.tenantId))];
+    const owners = await this.users.findManyByIds(tenantIds);
+    const ownerMap = new Map(owners.map((o) => [String(o._id), o]));
+
+    const accounts = memberships.map((m) => {
+      const owner = ownerMap.get(m.tenantId);
+      return {
+        tenantId: m.tenantId,
+        name: owner?.company ?? owner?.name ?? "Unknown",
+        logoUrl: owner?.logoUrl ?? null,
+        plan: owner?.billingPlan ?? owner?.plan ?? "FREE",
+        role: m.role,
+        lastAccessedAt: m.lastAccessedAt ?? null,
+      };
+    });
+
+    return { success: true, data: accounts };
+  }
+
+  async selectAccount(userId: string, tenantId: string) {
+    const membership = await this.membershipModel
+      .findOne({ userId, tenantId, isActive: true })
+      .exec();
+    if (!membership) {
+      throw new ForbiddenException({
+        code: "NOT_A_MEMBER",
+        message: "You do not have access to this account.",
+      });
+    }
+
+    await this.users.applySelectedAccount(userId, tenantId, membership.role);
+    await this.membershipModel.updateOne(
+      { _id: membership._id },
+      { $set: { lastAccessedAt: new Date() } },
+    );
+
+    const user = await this.users.findById(userId);
+    return {
+      success: true,
+      data: {
+        tenantId,
+        role: membership.role,
+        user: user ? await this.users.toPublicProfile(user) : null,
+      },
+    };
+  }
+
   // ─── Helpers ──────────────────────────────────────────────────────────────
 
   private async buildAuthResponse(
     user: UserDocument,
     message: string,
   ): Promise<AuthResponse> {
+    // Every login requires an explicit account selection afterward — see
+    // jwt-auth.guard.ts, which blocks all other routes while this is true.
+    await this.users.markPendingAccountSelection(user.id, true);
+
     const accessToken = this.signAccessToken(user.id, user.email);
     const refreshToken = this.signRefreshToken(user.id, user.email);
 
@@ -440,6 +521,7 @@ export class AuthService {
         accessToken,
         refreshToken,
         user: await this.users.toPublicProfile(user),
+        requiresAccountSelection: true,
       },
       message,
     };
