@@ -19,6 +19,7 @@ import { OAuthDto } from "./dto/oauth.dto";
 import { ForgotPasswordDto } from "./dto/forgot-password.dto";
 import { ResetPasswordDto } from "./dto/reset-password.dto";
 import { SelectAccountDto } from "./dto/select-account.dto";
+import { CreateAccountDto } from "./dto/create-account.dto";
 import { JwtAuthGuard } from "./guards/jwt-auth.guard";
 import { UserPayload } from "./dto/auth-response.interface";
 
@@ -123,5 +124,18 @@ export class AuthController {
     @Body() dto: SelectAccountDto,
   ) {
     return this.authService.selectAccount(req.user.id, dto.tenantId);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post("create-account")
+  @HttpCode(HttpStatus.CREATED)
+  createAccount(
+    @Request() req: { user: UserPayload },
+    @Body() dto: CreateAccountDto,
+  ) {
+    return this.authService.createAdditionalAccount(
+      req.user.id,
+      dto.businessName,
+    );
   }
 }

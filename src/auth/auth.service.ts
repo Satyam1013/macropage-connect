@@ -34,8 +34,22 @@ import {
   UserAccountMembership,
   UserAccountMembershipDocument,
 } from "./schemas/user-account-membership.schema";
+import { Tenant, TenantDocument } from "../schemas/tenant.schema";
 import { EmailService } from "../queue/email.service";
 import { BillingService } from "../billing/billing.service";
+import { UserRole } from "./auth.constants";
+
+// How many accounts a person can OWN, gated by their primary account's
+// plan (the account where tenantId === their own _id — the one from their
+// original signup). "Scale" on the pricing page is the BUSINESS plan key.
+const ACCOUNT_LIMIT_BY_PLAN: Record<string, number> = {
+  TRIAL: 1,
+  STARTER: 1,
+  GROWTH: 3,
+  BUSINESS: 5,
+  ENTERPRISE: Infinity,
+};
+const DEFAULT_ACCOUNT_LIMIT = 1;
 
 @Injectable()
 export class AuthService {
@@ -54,6 +68,8 @@ export class AuthService {
     private readonly sessionModel: Model<SessionDocument>,
     @InjectModel(UserAccountMembership.name)
     private readonly membershipModel: Model<UserAccountMembershipDocument>,
+    @InjectModel(Tenant.name)
+    private readonly tenantModel: Model<TenantDocument>,
     private readonly activityService: ActivityService,
     private readonly billingService: BillingService,
   ) {}
@@ -498,6 +514,67 @@ export class AuthService {
         tenantId,
         role: membership.role,
         user: user ? await this.users.toPublicProfile(user) : null,
+      },
+    };
+  }
+
+  // Every account a person creates via this endpoint is a standalone
+  // Tenant document (see schemas/tenant.schema.ts) — unlike the legacy
+  // convention where tenantId is just an owner User's own _id, this app's
+  // primary signup path. TenantResolverService/team.service.ts/etc. all
+  // already handle both.
+  async createAdditionalAccount(userId: string, businessName: string) {
+    const user = await this.users.findById(userId);
+    if (!user) throw new NotFoundException("User not found");
+
+    // Gated by the plan of the person's PRIMARY account — the one where
+    // tenantId === their own _id, i.e. their original signup.
+    const primarySub = await this.billingService.getSubscription(userId);
+    const primaryPlan = primarySub?.plan ?? "TRIAL";
+    const limit = ACCOUNT_LIMIT_BY_PLAN[primaryPlan] ?? DEFAULT_ACCOUNT_LIMIT;
+
+    const ownedCount = await this.membershipModel.countDocuments({
+      userId,
+      role: UserRole.OWNER,
+      isActive: true,
+    });
+    if (ownedCount >= limit) {
+      throw new ForbiddenException({
+        code: "ACCOUNT_LIMIT_REACHED",
+        message:
+          limit === Infinity
+            ? "Could not create account."
+            : `Your ${primaryPlan} plan allows up to ${limit} account${limit === 1 ? "" : "s"}. Upgrade to create more.`,
+      });
+    }
+
+    const tenant = await this.tenantModel.create({
+      name: businessName,
+      ownerId: userId,
+    });
+
+    await this.membershipModel.create({
+      userId,
+      tenantId: tenant.id,
+      role: UserRole.OWNER,
+    });
+
+    // Same as a fresh signup — auto-provision a 14-day trial subscription.
+    await this.billingService.getOrCreateSubscription(tenant.id);
+
+    // Skip the selection step — creating an account is itself the "select"
+    // action, there's no sensible alternative next step.
+    await this.users.applySelectedAccount(userId, tenant.id, UserRole.OWNER);
+
+    const refreshed = await this.users.findById(userId);
+    return {
+      success: true,
+      data: {
+        message: "Account created successfully",
+        tenantId: tenant.id,
+        businessName,
+        role: UserRole.OWNER,
+        user: refreshed ? await this.users.toPublicProfile(refreshed) : null,
       },
     };
   }

@@ -23,6 +23,7 @@ import {
   UserAccountMembership,
   UserAccountMembershipSchema,
 } from "./schemas/user-account-membership.schema";
+import { Tenant, TenantSchema } from "../schemas/tenant.schema";
 
 @Module({
   imports: [
@@ -39,6 +40,7 @@ import {
         name: UserAccountMembership.name,
         schema: UserAccountMembershipSchema,
       },
+      { name: Tenant.name, schema: TenantSchema },
     ]),
     JwtModule.registerAsync({
       imports: [ConfigModule],

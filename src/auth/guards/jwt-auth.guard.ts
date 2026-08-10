@@ -17,6 +17,7 @@ import type { UserDocument } from "../../users/users.service";
 const ACCOUNT_SELECTION_EXEMPT_PREFIXES = [
   "/api/v1/auth/my-accounts",
   "/api/v1/auth/select-account",
+  "/api/v1/auth/create-account",
   "/api/v1/auth/me",
   "/api/v1/auth/sessions",
 ];

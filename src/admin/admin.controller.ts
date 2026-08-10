@@ -15,7 +15,8 @@ export class AdminController {
   private checkSecret(secret: string | undefined) {
     const expected = process.env.ADMIN_SECRET;
     if (!expected) throw new UnauthorizedException("Admin not configured");
-    if (secret !== expected) throw new UnauthorizedException("Invalid admin secret");
+    if (secret !== expected)
+      throw new UnauthorizedException("Invalid admin secret");
   }
 
   @Delete("waba")
@@ -26,7 +27,8 @@ export class AdminController {
   ) {
     this.checkSecret(secret);
     if (tenantId) return this.adminService.disconnectWabaByTenantId(tenantId);
-    if (!email) throw new BadRequestException("email or tenantId query param required");
+    if (!email)
+      throw new BadRequestException("email or tenantId query param required");
     return this.adminService.disconnectWaba(email);
   }
 }

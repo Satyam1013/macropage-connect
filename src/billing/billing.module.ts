@@ -19,6 +19,7 @@ import { BillingController } from "./billing.controller";
 import { RazorpayService } from "./razorpay.service";
 import { PlanGuard } from "./guards/plan.guard";
 import { NotificationsModule } from "../notifications/notifications.module";
+import { TenantModule } from "../tenant/tenant.module";
 
 @Module({
   imports: [
@@ -36,6 +37,7 @@ import { NotificationsModule } from "../notifications/notifications.module";
       { name: Conversation.name, schema: ConversationSchema },
     ]),
     NotificationsModule,
+    TenantModule,
   ],
   providers: [BillingService, RazorpayService, PlanGuard],
   controllers: [BillingController],

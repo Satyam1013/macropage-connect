@@ -12,11 +12,11 @@ import { AutomationService } from "../automation/automation.service";
 import { FlowEngineService } from "../automation/flow-engine.service";
 import { MediaDownloadService } from "../whatsapp/media-download.service";
 import { NotificationsService } from "../notifications/notifications.service";
-import { User, UserDocument } from "../users/schemas/user.schema";
 import {
   OrderFulfillmentService,
   RawOrderItem,
 } from "../catalog/order-fulfillment.service";
+import { TenantResolverService } from "../tenant/tenant-resolver.service";
 
 interface InboundMediaField {
   id?: string;
@@ -32,8 +32,6 @@ export class WebhookService {
   constructor(
     @InjectModel(WABAAccount.name)
     private readonly wabaModel: Model<WABAAccountDocument>,
-    @InjectModel(User.name)
-    private readonly userModel: Model<UserDocument>,
     private readonly contactsService: ContactsService,
     private readonly conversationsService: ConversationsService,
     private readonly automationService: AutomationService,
@@ -41,6 +39,7 @@ export class WebhookService {
     private readonly mediaDownloadService: MediaDownloadService,
     private readonly notificationsService: NotificationsService,
     private readonly orderFulfillmentService: OrderFulfillmentService,
+    private readonly tenantResolver: TenantResolverService,
   ) {}
 
   verifyWebhook(query: Record<string, string>): string {
@@ -113,15 +112,8 @@ export class WebhookService {
     }
   }
 
-  // tenantId is always the owner's own _id — invited team members are the
-  // only users that ever get a distinct `tenantId` field stored on them.
-  private async findOwnerId(tenantId: string): Promise<string | undefined> {
-    const owner = await this.userModel
-      .findById(tenantId)
-      .select("_id")
-      .lean()
-      .exec();
-    return owner ? String(owner._id) : undefined;
+  private findOwnerId(tenantId: string): Promise<string | undefined> {
+    return this.tenantResolver.resolveOwnerId(tenantId);
   }
 
   private async handleInboundMessage(

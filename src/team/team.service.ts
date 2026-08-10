@@ -19,6 +19,7 @@ import {
 import { EmailService } from "../queue/email.service";
 import { UserRole } from "../auth/auth.constants";
 import { NotificationsService } from "../notifications/notifications.service";
+import { TenantResolverService } from "../tenant/tenant-resolver.service";
 
 @Injectable()
 export class TeamService {
@@ -32,6 +33,7 @@ export class TeamService {
     private readonly membershipModel: Model<UserAccountMembershipDocument>,
     private readonly emailService: EmailService,
     private readonly notificationsService: NotificationsService,
+    private readonly tenantResolver: TenantResolverService,
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
   ) {}
@@ -44,11 +46,16 @@ export class TeamService {
     body: string,
   ): Promise<void> {
     // The tenant owner's own document never has `tenantId` set — it IS the
-    // tenantId — so admins must be matched by tenantId OR by being that
-    // root user (_id === tenantId).
+    // tenantId for the legacy convention; for a standalone Tenant doc the
+    // owner is resolved separately since their _id never equals tenantId.
+    const ownerId = await this.tenantResolver.resolveOwnerId(tenantId);
     const admins = await this.userModel
       .find({
-        $or: [{ tenantId }, { _id: tenantId }],
+        $or: [
+          { tenantId },
+          { _id: tenantId },
+          ...(ownerId ? [{ _id: ownerId }] : []),
+        ],
         role: { $in: [UserRole.OWNER, UserRole.ADMIN] },
         _id: { $ne: excludeUserId },
       })
@@ -73,22 +80,28 @@ export class TeamService {
     newUser: { name: string; email: string },
     role: UserRole,
   ): Promise<void> {
-    const [admins, tenantOwner] = await Promise.all([
+    const ownerId = await this.tenantResolver.resolveOwnerId(tenantId);
+    const [admins, tenantLocation] = await Promise.all([
       this.userModel
         .find({
-          $or: [{ tenantId }, { _id: tenantId }],
+          $or: [
+            { tenantId },
+            { _id: tenantId },
+            ...(ownerId ? [{ _id: ownerId }] : []),
+          ],
           role: { $in: [UserRole.OWNER, UserRole.ADMIN] },
           _id: { $ne: newUserId },
         })
         .select("name email")
         .lean()
         .exec(),
-      this.userModel.findById(tenantId).select("city country").lean().exec(),
+      this.tenantResolver.resolveLocation(tenantId),
     ]);
 
     const location =
-      [tenantOwner?.city, tenantOwner?.country].filter(Boolean).join(", ") ||
-      "—";
+      [tenantLocation?.city, tenantLocation?.country]
+        .filter(Boolean)
+        .join(", ") || "—";
     const jobTitleByRole: Record<string, string> = {
       OWNER: "Owner",
       ADMIN: "Admin",

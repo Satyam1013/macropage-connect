@@ -14,6 +14,7 @@ import { QueueModule } from "../queue/queue.module";
 import { EmailService } from "../queue/email.service";
 import { UsersModule } from "../users/users.module";
 import { NotificationsModule } from "../notifications/notifications.module";
+import { TenantModule } from "../tenant/tenant.module";
 
 @Module({
   imports: [
@@ -36,6 +37,7 @@ import { NotificationsModule } from "../notifications/notifications.module";
     QueueModule,
     UsersModule,
     NotificationsModule,
+    TenantModule,
   ],
   providers: [TeamService, EmailService],
   controllers: [TeamController],

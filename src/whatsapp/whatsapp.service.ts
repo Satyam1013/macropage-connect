@@ -14,6 +14,7 @@ import {
   WABAAccountDocument,
 } from "../schemas/waba-account.schema";
 import { User, UserDocument } from "../users/schemas/user.schema";
+import { Tenant, TenantDocument } from "../schemas/tenant.schema";
 import { Message, MessageDocument } from "../schemas/message.schema";
 import { Template, TemplateDocument } from "../schemas/template.schema";
 import { EncryptionService } from "../meta/encryption.service";
@@ -36,6 +37,8 @@ export class WhatsappService {
     private readonly wabaModel: Model<WABAAccountDocument>,
     @InjectModel(User.name)
     private readonly userModel: Model<UserDocument>,
+    @InjectModel(Tenant.name)
+    private readonly tenantModel: Model<TenantDocument>,
     @InjectModel(Message.name)
     private readonly messageModel: Model<MessageDocument>,
     @InjectModel(Template.name)
@@ -45,14 +48,17 @@ export class WhatsappService {
   ) {}
 
   async getStatus(tenantId: string) {
-    const [user, waba, approvedTemplates, totalTemplates] = await Promise.all([
-      this.userModel.findById(tenantId).exec(),
-      this.wabaModel.findOne({ tenantId }).exec(),
-      this.templateModel.countDocuments({ tenantId, status: "APPROVED" }),
-      this.templateModel.countDocuments({ tenantId }),
-    ]);
+    const [tenant, user, waba, approvedTemplates, totalTemplates] =
+      await Promise.all([
+        this.tenantModel.findById(tenantId).exec(),
+        this.userModel.findById(tenantId).exec(),
+        this.wabaModel.findOne({ tenantId }).exec(),
+        this.templateModel.countDocuments({ tenantId, status: "APPROVED" }),
+        this.templateModel.countDocuments({ tenantId }),
+      ]);
 
-    const businessInfoSaved = user?.businessInfoSaved ?? false;
+    const businessInfoSaved =
+      tenant?.businessInfoSaved ?? user?.businessInfoSaved ?? false;
     const metaConnected = waba?.metaConnected ?? false;
     const phoneVerified = waba?.phoneVerified ?? false;
     const testMessageSent = waba?.testMessageSent ?? false;
@@ -111,14 +117,25 @@ export class WhatsappService {
       });
     }
 
-    await this.userModel.findByIdAndUpdate(tenantId, {
-      company: dto.businessName,
+    const isTenant = await this.tenantModel.exists({ _id: tenantId });
+    const update = {
       industry: dto.category,
       description: dto.description,
       ...(dto.website && { website: dto.website }),
       ...(dto.address && { address: dto.address }),
       businessInfoSaved: true,
-    });
+    };
+    if (isTenant) {
+      await this.tenantModel.findByIdAndUpdate(tenantId, {
+        name: dto.businessName,
+        ...update,
+      });
+    } else {
+      await this.userModel.findByIdAndUpdate(tenantId, {
+        company: dto.businessName,
+        ...update,
+      });
+    }
 
     return {
       success: true,
@@ -579,8 +596,15 @@ export class WhatsappService {
       });
     }
 
+    const isTenant = await this.tenantModel.exists({ _id: tenantId });
     await Promise.all([
-      this.userModel.findByIdAndUpdate(tenantId, { whatsappSetupDone: true }),
+      isTenant
+        ? this.tenantModel.findByIdAndUpdate(tenantId, {
+            whatsappSetupDone: true,
+          })
+        : this.userModel.findByIdAndUpdate(tenantId, {
+            whatsappSetupDone: true,
+          }),
       this.wabaModel.updateOne(
         { tenantId },
         { phoneVerified: true, testMessageSent: true },

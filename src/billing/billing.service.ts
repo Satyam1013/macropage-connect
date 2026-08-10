@@ -22,6 +22,7 @@ import {
   ConversationDocument,
 } from "../schemas/conversation.schema";
 import { NotificationsService } from "../notifications/notifications.service";
+import { TenantResolverService } from "../tenant/tenant-resolver.service";
 import { RazorpayService } from "./razorpay.service";
 import type { BillingCycle, Plan as PlanValue, PlanKey } from "./billing.types";
 import { getPlanPricing } from "./plans.config";
@@ -75,6 +76,7 @@ export class BillingService {
     private readonly convModel: Model<ConversationDocument>,
     private readonly razorpayService: RazorpayService,
     private readonly notificationsService: NotificationsService,
+    private readonly tenantResolver: TenantResolverService,
   ) {}
 
   // ── Public plans list ─────────────────────────────────────────────────────
@@ -578,17 +580,13 @@ export class BillingService {
         if (dbSub) {
           await this.syncUserPlan(dbSub.tenantId, dbSub.plan);
 
-          // tenantId is always the owner's own _id — invited team members are
-          // the only users that ever get a distinct `tenantId` field stored.
-          const owner = await this.userModel
-            .findById(dbSub.tenantId)
-            .select("_id")
-            .lean()
-            .exec();
-          if (owner) {
+          const ownerId = await this.tenantResolver.resolveOwnerId(
+            dbSub.tenantId,
+          );
+          if (ownerId) {
             void this.notificationsService.create(
               dbSub.tenantId,
-              String(owner._id),
+              ownerId,
               "payment_success",
               "Payment received ✅",
               `Your ${dbSub.billingCycle} ${dbSub.plan} plan has been renewed.`,
@@ -610,15 +608,13 @@ export class BillingService {
           .lean()
           .exec();
         if (dbSub) {
-          const owner = await this.userModel
-            .findById(dbSub.tenantId)
-            .select("_id")
-            .lean()
-            .exec();
-          if (owner) {
+          const ownerId = await this.tenantResolver.resolveOwnerId(
+            dbSub.tenantId,
+          );
+          if (ownerId) {
             void this.notificationsService.create(
               dbSub.tenantId,
-              String(owner._id),
+              ownerId,
               "payment_failed",
               "Payment failed ⚠️",
               "Your subscription payment failed. Please update your payment method.",
@@ -667,13 +663,9 @@ export class BillingService {
           notifyUserId = conv?.assignedTo ?? undefined;
         }
         if (!notifyUserId) {
-          // tenantId is always the owner's own _id
-          const owner = await this.userModel
-            .findById(order.tenantId)
-            .select("_id")
-            .lean()
-            .exec();
-          notifyUserId = owner ? String(owner._id) : undefined;
+          notifyUserId = await this.tenantResolver.resolveOwnerId(
+            order.tenantId,
+          );
         }
 
         if (notifyUserId) {
@@ -709,11 +701,12 @@ export class BillingService {
           ? "pro"
           : "free";
 
-    // tenantId identifies a tenant as "owner's own _id" everywhere in this
-    // app (req.user.tenantId ?? req.user.id), but the owner's own user doc
-    // never has a tenantId field set on itself — only team members do. A
-    // bare { tenantId } filter therefore updates every team member but
-    // skips the owner entirely, which is who actually pays.
+    // A bare { tenantId } filter updates every team member but skips the
+    // owner entirely — who actually pays. For the legacy convention the
+    // owner's own _id IS the tenantId; for a standalone Tenant doc the
+    // owner is whoever resolveOwnerId() resolves via Tenant.ownerId
+    // (their own User.tenantId only gets set once they've selected this
+    // account at least once, so { tenantId } alone isn't reliable either).
     const update: Record<string, unknown> = {
       plan: isPaid ? "PRO" : "FREE",
       billingPlan: subPlan,
@@ -724,8 +717,15 @@ export class BillingService {
     // trial-countdown banner keeps showing after upgrading.
     if (isPaid) update.trialEndsAt = null;
 
+    const ownerId = await this.tenantResolver.resolveOwnerId(tenantId);
     await this.userModel.updateMany(
-      { $or: [{ tenantId }, { _id: tenantId }] },
+      {
+        $or: [
+          { tenantId },
+          { _id: tenantId },
+          ...(ownerId ? [{ _id: ownerId }] : []),
+        ],
+      },
       { $set: update },
     );
     this.logger.log(
