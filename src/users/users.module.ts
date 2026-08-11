@@ -11,8 +11,17 @@ import { UploadModule } from "../upload/upload.module";
 import { BillingModule } from "../billing/billing.module";
 import { TenantModule } from "../tenant/tenant.module";
 
+import { ProjectAccessModule } from "../common/guards/project-access.module";
+import {
+  UserAccountMembership,
+  UserAccountMembershipSchema,
+} from "../auth/schemas/user-account-membership.schema";
 @Module({
   imports: [
+    ProjectAccessModule,
+    MongooseModule.forFeature([
+      { name: UserAccountMembership.name, schema: UserAccountMembershipSchema },
+    ]),
     MongooseModule.forFeature([
       { name: User.name, schema: UserSchema },
       { name: Tenant.name, schema: TenantSchema },

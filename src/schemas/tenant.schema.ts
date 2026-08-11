@@ -9,7 +9,7 @@ export type TenantDocument = HydratedDocument<Tenant> & {
 @Schema({ timestamps: true })
 export class Tenant {
   // The user who created this tenant — its "notify/email this person"
-  // anchor. A tenant a person creates via POST /auth/create-account is a
+  // anchor. A tenant a person creates via POST /auth/create-project is a
   // standalone document (unlike the legacy convention where tenantId is
   // just an owner User's own _id); this field is what call sites needing
   // "who owns tenant X" resolve against instead.

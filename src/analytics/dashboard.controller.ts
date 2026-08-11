@@ -1,31 +1,32 @@
 import { Controller, Get, Query, UseGuards, Request } from "@nestjs/common";
 import { AnalyticsService } from "./analytics.service";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
-import type { AuthReq } from "../auth/dto/auth-request.interface";
+import { ProjectAccessGuard } from "../common/guards/project-access.guard";
+import type { ProjectAuthReq } from "../auth/dto/auth-request.interface";
 
-@UseGuards(JwtAuthGuard)
-@Controller("analytics/dashboard")
+@UseGuards(JwtAuthGuard, ProjectAccessGuard)
+@Controller("projects/:projectId/analytics/dashboard")
 export class DashboardController {
   constructor(private readonly analyticsService: AnalyticsService) {}
 
   @Get("stats")
   getStats(
-    @Request() req: AuthReq,
+    @Request() req: ProjectAuthReq,
     @Query("from") from?: string,
     @Query("to") to?: string,
   ) {
-    const tenantId = req.user.tenantId ?? req.user.id;
+    const tenantId = req.projectId;
     return this.analyticsService.getDashboardStats(tenantId, from, to);
   }
 
   @Get("chart")
   getChart(
-    @Request() req: AuthReq,
+    @Request() req: ProjectAuthReq,
     @Query("from") from?: string,
     @Query("to") to?: string,
     @Query("groupBy") groupBy?: string,
   ) {
-    const tenantId = req.user.tenantId ?? req.user.id;
+    const tenantId = req.projectId;
     return this.analyticsService.getDashboardChart(
       tenantId,
       from,
@@ -35,8 +36,8 @@ export class DashboardController {
   }
 
   @Get("recent")
-  getRecent(@Request() req: AuthReq, @Query("limit") limit?: string) {
-    const tenantId = req.user.tenantId ?? req.user.id;
+  getRecent(@Request() req: ProjectAuthReq, @Query("limit") limit?: string) {
+    const tenantId = req.projectId;
     return this.analyticsService.getDashboardRecent(
       tenantId,
       limit ? Number(limit) : 10,
@@ -46,8 +47,8 @@ export class DashboardController {
   }
 
   @Get("health")
-  getHealth(@Request() req: AuthReq) {
-    const tenantId = req.user.tenantId ?? req.user.id;
+  getHealth(@Request() req: ProjectAuthReq) {
+    const tenantId = req.projectId;
     return this.analyticsService.getDashboardHealth(tenantId);
   }
 }

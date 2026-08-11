@@ -15,71 +15,72 @@ import {
 import { TemplatesService } from "./templates.service";
 import { CreateTemplateDto } from "./dto/create-template.dto";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
-import type { AuthReq } from "../auth/dto/auth-request.interface";
+import { ProjectAccessGuard } from "../common/guards/project-access.guard";
+import type { ProjectAuthReq } from "../auth/dto/auth-request.interface";
 
-@UseGuards(JwtAuthGuard)
-@Controller("templates")
+@UseGuards(JwtAuthGuard, ProjectAccessGuard)
+@Controller("projects/:projectId/templates")
 export class TemplatesController {
   constructor(private readonly templatesService: TemplatesService) {}
 
   @Get()
-  findAll(@Request() req: AuthReq, @Query("status") status?: string) {
-    const tenantId = req.user.tenantId ?? req.user.id;
+  findAll(@Request() req: ProjectAuthReq, @Query("status") status?: string) {
+    const tenantId = req.projectId;
     return this.templatesService.findAll(tenantId, status);
   }
 
   @Get("sync")
-  sync(@Request() req: AuthReq) {
-    const tenantId = req.user.tenantId ?? req.user.id;
+  sync(@Request() req: ProjectAuthReq) {
+    const tenantId = req.projectId;
     return this.templatesService.syncFromMeta(tenantId);
   }
 
   @Get(":id")
-  findOne(@Request() req: AuthReq, @Param("id") id: string) {
-    const tenantId = req.user.tenantId ?? req.user.id;
+  findOne(@Request() req: ProjectAuthReq, @Param("id") id: string) {
+    const tenantId = req.projectId;
     return this.templatesService.findOne(tenantId, id);
   }
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  create(@Request() req: AuthReq, @Body() dto: CreateTemplateDto) {
-    const tenantId = req.user.tenantId ?? req.user.id;
+  create(@Request() req: ProjectAuthReq, @Body() dto: CreateTemplateDto) {
+    const tenantId = req.projectId;
     return this.templatesService.create(tenantId, dto);
   }
 
   @Post("draft")
   @HttpCode(HttpStatus.CREATED)
-  saveDraft(@Request() req: AuthReq, @Body() dto: CreateTemplateDto) {
-    const tenantId = req.user.tenantId ?? req.user.id;
+  saveDraft(@Request() req: ProjectAuthReq, @Body() dto: CreateTemplateDto) {
+    const tenantId = req.projectId;
     return this.templatesService.saveDraft(tenantId, dto);
   }
 
   @Patch(":id/draft")
   @HttpCode(HttpStatus.OK)
   updateDraft(
-    @Request() req: AuthReq,
+    @Request() req: ProjectAuthReq,
     @Param("id") id: string,
     @Body() dto: Partial<CreateTemplateDto>,
   ) {
-    const tenantId = req.user.tenantId ?? req.user.id;
+    const tenantId = req.projectId;
     return this.templatesService.updateDraft(tenantId, id, dto);
   }
 
   @Patch(":id")
   @HttpCode(HttpStatus.OK)
   update(
-    @Request() req: AuthReq,
+    @Request() req: ProjectAuthReq,
     @Param("id") id: string,
     @Body() dto: Partial<CreateTemplateDto>,
   ) {
-    const tenantId = req.user.tenantId ?? req.user.id;
+    const tenantId = req.projectId;
     return this.templatesService.update(tenantId, id, dto);
   }
 
   @Delete(":id")
   @HttpCode(HttpStatus.NO_CONTENT)
-  remove(@Request() req: AuthReq, @Param("id") id: string) {
-    const tenantId = req.user.tenantId ?? req.user.id;
+  remove(@Request() req: ProjectAuthReq, @Param("id") id: string) {
+    const tenantId = req.projectId;
     return this.templatesService.remove(tenantId, id);
   }
 }

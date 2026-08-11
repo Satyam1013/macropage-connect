@@ -13,69 +13,70 @@ import {
 } from "@nestjs/common";
 import { CampaignsService } from "./campaigns.service";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
-import type { AuthReq } from "../auth/dto/auth-request.interface";
+import { ProjectAccessGuard } from "../common/guards/project-access.guard";
+import type { ProjectAuthReq } from "../auth/dto/auth-request.interface";
 
-@UseGuards(JwtAuthGuard)
-@Controller("campaigns")
+@UseGuards(JwtAuthGuard, ProjectAccessGuard)
+@Controller("projects/:projectId/campaigns")
 export class CampaignsController {
   constructor(private readonly campaignsService: CampaignsService) {}
 
   @Get()
-  findAll(@Request() req: AuthReq, @Query("status") status?: string) {
-    const tenantId = req.user.tenantId ?? req.user.id;
+  findAll(@Request() req: ProjectAuthReq, @Query("status") status?: string) {
+    const tenantId = req.projectId;
     return this.campaignsService.findAll(tenantId, status);
   }
 
   @Get("templates")
-  getTemplates(@Request() req: AuthReq) {
-    const tenantId = req.user.tenantId ?? req.user.id;
+  getTemplates(@Request() req: ProjectAuthReq) {
+    const tenantId = req.projectId;
     return this.campaignsService.getTemplates(tenantId);
   }
 
   @Get(":id")
-  findOne(@Request() req: AuthReq, @Param("id") id: string) {
-    const tenantId = req.user.tenantId ?? req.user.id;
+  findOne(@Request() req: ProjectAuthReq, @Param("id") id: string) {
+    const tenantId = req.projectId;
     return this.campaignsService.findOne(tenantId, id);
   }
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  create(@Request() req: AuthReq, @Body() dto: Record<string, unknown>) {
-    const tenantId = req.user.tenantId ?? req.user.id;
+  create(@Request() req: ProjectAuthReq, @Body() dto: Record<string, unknown>) {
+    const tenantId = req.projectId;
     return this.campaignsService.create(tenantId, req.user.id, dto);
   }
 
   @Post(":id/launch")
-  launch(@Request() req: AuthReq, @Param("id") id: string) {
-    const tenantId = req.user.tenantId ?? req.user.id;
+  launch(@Request() req: ProjectAuthReq, @Param("id") id: string) {
+    const tenantId = req.projectId;
     return this.campaignsService.launch(tenantId, id);
   }
 
   @Post(":id/retry")
-  retry(@Request() req: AuthReq, @Param("id") id: string) {
-    const tenantId = req.user.tenantId ?? req.user.id;
+  retry(@Request() req: ProjectAuthReq, @Param("id") id: string) {
+    const tenantId = req.projectId;
     return this.campaignsService.retry(tenantId, id);
   }
 
   @Patch(":id/pause")
-  pause(@Request() req: AuthReq, @Param("id") id: string) {
-    const tenantId = req.user.tenantId ?? req.user.id;
+  pause(@Request() req: ProjectAuthReq, @Param("id") id: string) {
+    const tenantId = req.projectId;
     return this.campaignsService.pause(tenantId, id);
   }
 
   @Patch(":id/cancel")
-  cancel(@Request() req: AuthReq, @Param("id") id: string) {
-    const tenantId = req.user.tenantId ?? req.user.id;
+  cancel(@Request() req: ProjectAuthReq, @Param("id") id: string) {
+    const tenantId = req.projectId;
     return this.campaignsService.cancel(tenantId, id);
   }
 
   @Get(":id/recipients")
   getRecipients(
-    @Request() req: AuthReq,
+    @Request() req: ProjectAuthReq,
     @Param("id") id: string,
     @Query("page") page?: string,
   ) {
-    const tenantId = req.user.tenantId ?? req.user.id;
+    const tenantId = req.projectId;
     return this.campaignsService.getRecipients(
       tenantId,
       id,

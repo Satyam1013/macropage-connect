@@ -21,8 +21,13 @@ export class RolesGuard implements CanActivate {
 
     const request = context.switchToHttp().getRequest<{
       user?: { role?: string };
+      projectRole?: string;
     }>();
-    const userRole = request.user?.role;
+    // projectRole (set by ProjectAccessGuard, which must run first) reflects
+    // the caller's role on THIS URL's :projectId — request.user.role only
+    // reflects whichever project was last selected via the legacy
+    // session-based flow and is stale/wrong once routes are project-scoped.
+    const userRole = request.projectRole ?? request.user?.role;
 
     if (!userRole) {
       throw new ForbiddenException("No role assigned");

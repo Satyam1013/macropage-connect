@@ -203,6 +203,11 @@ export class UsersService {
   // members must read them off the owner, not their own record.
   async resolveTenantFields(
     user: UserDocument,
+    // Project-scoped routes (projects/:projectId/...) pass the URL's
+    // projectId here so the response reflects THAT project, not whichever
+    // one this User doc's own tenantId field last recorded (session-based
+    // convention, pre-dates URL-based project scoping).
+    overrideTenantId?: string,
   ): Promise<
     Pick<
       UserDocument,
@@ -217,9 +222,10 @@ export class UsersService {
       | "paidUser"
     >
   > {
-    if (!user.tenantId) return user;
+    const tenantId = overrideTenantId ?? user.tenantId;
+    if (!tenantId) return user;
 
-    const tenant = await this.tenantModel.findById(user.tenantId).lean().exec();
+    const tenant = await this.tenantModel.findById(tenantId).lean().exec();
     if (tenant) {
       // Branding/setup fields live on the Tenant doc; plan/billing fields
       // don't (Subscription is already tenantId-native for those) — read
@@ -246,7 +252,7 @@ export class UsersService {
     }
 
     const owner = await this.userModel
-      .findById(user.tenantId)
+      .findById(tenantId)
       .select(
         "company logoUrl whatsappSetupDone plan billingPlan billingCycle trialEndsAt subscriptionType paidUser",
       )

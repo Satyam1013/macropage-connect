@@ -22,20 +22,21 @@ import {
   UpdateConversationDto,
 } from "./dto/send-message.dto";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
+import { ProjectAccessGuard } from "../common/guards/project-access.guard";
 import { RolesGuard } from "../common/guards/roles.guard";
 import { Roles } from "../common/decorators/roles.decorator";
 import { UserRole } from "../auth/auth.constants";
-import type { AuthReq } from "../auth/dto/auth-request.interface";
+import type { ProjectAuthReq } from "../auth/dto/auth-request.interface";
 
-@UseGuards(JwtAuthGuard)
-@Controller("conversations")
+@UseGuards(JwtAuthGuard, ProjectAccessGuard)
+@Controller("projects/:projectId/conversations")
 export class ConversationsController {
   constructor(private readonly conversationsService: ConversationsService) {}
 
   @Post("initiate")
   @HttpCode(HttpStatus.CREATED)
   initiate(
-    @Request() req: AuthReq,
+    @Request() req: ProjectAuthReq,
     @Body()
     body: {
       contactId: string;
@@ -43,7 +44,7 @@ export class ConversationsController {
       templateVars?: Record<string, string>;
     },
   ) {
-    const tenantId = req.user.tenantId ?? req.user.id;
+    const tenantId = req.projectId;
     return this.conversationsService.initiateConversation(
       tenantId,
       body.contactId,
@@ -55,13 +56,13 @@ export class ConversationsController {
 
   @Get()
   findAll(
-    @Request() req: AuthReq,
+    @Request() req: ProjectAuthReq,
     @Query("status") status?: string,
     @Query("assignedTo") assignedTo?: string,
     @Query("page") page?: string,
     @Query("limit") limit?: string,
   ) {
-    const tenantId = req.user.tenantId ?? req.user.id;
+    const tenantId = req.projectId;
     return this.conversationsService.findAll(
       tenantId,
       req.user.id,
@@ -76,8 +77,8 @@ export class ConversationsController {
   }
 
   @Get(":id")
-  findOne(@Request() req: AuthReq, @Param("id") id: string) {
-    const tenantId = req.user.tenantId ?? req.user.id;
+  findOne(@Request() req: ProjectAuthReq, @Param("id") id: string) {
+    const tenantId = req.projectId;
     return this.conversationsService.findOne(
       tenantId,
       id,
@@ -90,11 +91,11 @@ export class ConversationsController {
   @Header("Cache-Control", "no-cache, no-store, must-revalidate")
   @Header("Pragma", "no-cache")
   getMessages(
-    @Request() req: AuthReq,
+    @Request() req: ProjectAuthReq,
     @Param("id") id: string,
     @Query("page") page?: string,
   ) {
-    const tenantId = req.user.tenantId ?? req.user.id;
+    const tenantId = req.projectId;
     return this.conversationsService.getMessages(
       tenantId,
       id,
@@ -105,11 +106,11 @@ export class ConversationsController {
   @Post(":id/messages")
   @HttpCode(HttpStatus.CREATED)
   sendMessage(
-    @Request() req: AuthReq,
+    @Request() req: ProjectAuthReq,
     @Param("id") id: string,
     @Body() dto: SendMessageDto,
   ) {
-    const tenantId = req.user.tenantId ?? req.user.id;
+    const tenantId = req.projectId;
     return this.conversationsService.sendMessage(
       tenantId,
       id,
@@ -121,11 +122,11 @@ export class ConversationsController {
   @Post(":id/catalog")
   @HttpCode(HttpStatus.CREATED)
   sendCatalogMessage(
-    @Request() req: AuthReq,
+    @Request() req: ProjectAuthReq,
     @Param("id") id: string,
     @Body() dto: SendCatalogMessageDto,
   ) {
-    const tenantId = req.user.tenantId ?? req.user.id;
+    const tenantId = req.projectId;
     return this.conversationsService.sendCatalogMessage(
       tenantId,
       id,
@@ -137,27 +138,27 @@ export class ConversationsController {
   @Post(":id/notes")
   @HttpCode(HttpStatus.CREATED)
   addNote(
-    @Request() req: AuthReq,
+    @Request() req: ProjectAuthReq,
     @Param("id") id: string,
     @Body() dto: AddNoteDto,
   ) {
-    const tenantId = req.user.tenantId ?? req.user.id;
+    const tenantId = req.projectId;
     return this.conversationsService.addNote(tenantId, id, dto, req.user.id);
   }
 
   @Patch(":id")
   update(
-    @Request() req: AuthReq,
+    @Request() req: ProjectAuthReq,
     @Param("id") id: string,
     @Body() dto: UpdateConversationDto,
   ) {
-    const tenantId = req.user.tenantId ?? req.user.id;
+    const tenantId = req.projectId;
     return this.conversationsService.updateConversation(tenantId, id, dto);
   }
 
   @Patch(":id/resolve")
-  resolve(@Request() req: AuthReq, @Param("id") id: string) {
-    const tenantId = req.user.tenantId ?? req.user.id;
+  resolve(@Request() req: ProjectAuthReq, @Param("id") id: string) {
+    const tenantId = req.projectId;
     return this.conversationsService.resolveConversation(tenantId, id);
   }
 
@@ -165,11 +166,11 @@ export class ConversationsController {
   @UseGuards(RolesGuard)
   @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.MANAGER)
   assignConversation(
-    @Request() req: AuthReq,
+    @Request() req: ProjectAuthReq,
     @Param("id") id: string,
     @Body("assignToUserId") assignToUserId: string,
   ) {
-    const tenantId = req.user.tenantId ?? req.user.id;
+    const tenantId = req.projectId;
     return this.conversationsService.assignConversation(
       tenantId,
       id,
@@ -183,8 +184,11 @@ export class ConversationsController {
   @UseGuards(RolesGuard)
   @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.MANAGER)
   @HttpCode(HttpStatus.OK)
-  unassignConversation(@Request() req: AuthReq, @Param("id") id: string) {
-    const tenantId = req.user.tenantId ?? req.user.id;
+  unassignConversation(
+    @Request() req: ProjectAuthReq,
+    @Param("id") id: string,
+  ) {
+    const tenantId = req.projectId;
     return this.conversationsService.unassignConversation(tenantId, id);
   }
 }

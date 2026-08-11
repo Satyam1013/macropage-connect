@@ -131,7 +131,10 @@ export class HelpService implements OnModuleInit {
   }
 
   async getVideoTutorials(): Promise<VideoTutorialDocument[]> {
-    return this.videoTutorialModel.find().sort({ order: 1, createdAt: 1 }).exec();
+    return this.videoTutorialModel
+      .find()
+      .sort({ order: 1, createdAt: 1 })
+      .exec();
   }
 
   createVideoTutorial(dto: CreateVideoTutorialDto) {

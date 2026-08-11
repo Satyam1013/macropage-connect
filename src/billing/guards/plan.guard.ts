@@ -31,11 +31,14 @@ export class PlanGuard implements CanActivate {
 
     const req = context.switchToHttp().getRequest<AuthReq>();
     // Feature access is gated by the person's own MAIN account plan, not
-    // whichever sub account they're currently in — see
-    // TenantResolverService.resolveBillingTenantId.
+    // whichever project they're currently in — see
+    // TenantResolverService.resolveBillingTenantId. req.projectId (set by
+    // ProjectAccessGuard, which must run first) is the URL's :projectId;
+    // req.user.tenantId is only a fallback for any route not yet
+    // project-scoped.
     const tenantId = await this.tenantResolver.resolveBillingTenantId(
       req.user.id,
-      req.user.tenantId ?? req.user.id,
+      req.projectId ?? req.user.tenantId ?? req.user.id,
     );
 
     const sub = await this.billingService.getSubscription(tenantId);

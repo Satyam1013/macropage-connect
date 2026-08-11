@@ -14,26 +14,27 @@ import {
 import { NotificationsService } from "./notifications.service";
 import { UpdatePreferencesDto } from "./dto/update-preferences.dto";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
-import type { AuthReq } from "../auth/dto/auth-request.interface";
+import { ProjectAccessGuard } from "../common/guards/project-access.guard";
+import type { ProjectAuthReq } from "../auth/dto/auth-request.interface";
 
-@UseGuards(JwtAuthGuard)
-@Controller("notifications")
+@UseGuards(JwtAuthGuard, ProjectAccessGuard)
+@Controller("projects/:projectId/notifications")
 export class NotificationsController {
   constructor(private readonly notificationsService: NotificationsService) {}
 
   @Get("preferences")
-  getPreferences(@Request() req: AuthReq) {
-    const tenantId = req.user.tenantId ?? req.user.id;
+  getPreferences(@Request() req: ProjectAuthReq) {
+    const tenantId = req.projectId;
     return this.notificationsService.getPreferences(tenantId, req.user.id);
   }
 
   @Put("preferences")
   @HttpCode(HttpStatus.OK)
   updatePreferences(
-    @Request() req: AuthReq,
+    @Request() req: ProjectAuthReq,
     @Body() dto: UpdatePreferencesDto,
   ) {
-    const tenantId = req.user.tenantId ?? req.user.id;
+    const tenantId = req.projectId;
     return this.notificationsService.updatePreferences(
       tenantId,
       req.user.id,
@@ -42,14 +43,14 @@ export class NotificationsController {
   }
 
   @Get("unread-count")
-  getUnreadCount(@Request() req: AuthReq) {
-    const tenantId = req.user.tenantId ?? req.user.id;
+  getUnreadCount(@Request() req: ProjectAuthReq) {
+    const tenantId = req.projectId;
     return this.notificationsService.getUnreadCount(tenantId, req.user.id);
   }
 
   @Get()
-  findAll(@Request() req: AuthReq, @Query("page") page?: string) {
-    const tenantId = req.user.tenantId ?? req.user.id;
+  findAll(@Request() req: ProjectAuthReq, @Query("page") page?: string) {
+    const tenantId = req.projectId;
     return this.notificationsService.findAll(
       tenantId,
       req.user.id,
@@ -59,14 +60,14 @@ export class NotificationsController {
 
   @Patch(":id/read")
   @HttpCode(HttpStatus.NO_CONTENT)
-  markRead(@Request() req: AuthReq, @Param("id") id: string) {
+  markRead(@Request() req: ProjectAuthReq, @Param("id") id: string) {
     return this.notificationsService.markRead(id, req.user.id);
   }
 
   @Patch("read-all")
   @HttpCode(HttpStatus.NO_CONTENT)
-  markAllRead(@Request() req: AuthReq) {
-    const tenantId = req.user.tenantId ?? req.user.id;
+  markAllRead(@Request() req: ProjectAuthReq) {
+    const tenantId = req.projectId;
     return this.notificationsService.markAllRead(tenantId, req.user.id);
   }
 }

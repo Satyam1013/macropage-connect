@@ -15,11 +15,19 @@ import {
   ConversationSchema,
 } from "../schemas/conversation.schema";
 import { BillingService } from "./billing.service";
-import { BillingController } from "./billing.controller";
+import {
+  BillingController,
+  BillingProjectController,
+} from "./billing.controller";
 import { RazorpayService } from "./razorpay.service";
 import { PlanGuard } from "./guards/plan.guard";
 import { NotificationsModule } from "../notifications/notifications.module";
 import { TenantModule } from "../tenant/tenant.module";
+import { ProjectAccessModule } from "../common/guards/project-access.module";
+import {
+  UserAccountMembership,
+  UserAccountMembershipSchema,
+} from "../auth/schemas/user-account-membership.schema";
 
 @Module({
   imports: [
@@ -38,9 +46,13 @@ import { TenantModule } from "../tenant/tenant.module";
     ]),
     NotificationsModule,
     TenantModule,
+    ProjectAccessModule,
+    MongooseModule.forFeature([
+      { name: UserAccountMembership.name, schema: UserAccountMembershipSchema },
+    ]),
   ],
   providers: [BillingService, RazorpayService, PlanGuard],
-  controllers: [BillingController],
+  controllers: [BillingController, BillingProjectController],
   exports: [BillingService, PlanGuard, RazorpayService],
 })
 export class BillingModule {}

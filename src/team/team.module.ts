@@ -9,12 +9,13 @@ import {
   UserAccountMembershipSchema,
 } from "../auth/schemas/user-account-membership.schema";
 import { TeamService } from "./team.service";
-import { TeamController } from "./team.controller";
+import { TeamController, TeamProjectController } from "./team.controller";
 import { QueueModule } from "../queue/queue.module";
 import { EmailService } from "../queue/email.service";
 import { UsersModule } from "../users/users.module";
 import { NotificationsModule } from "../notifications/notifications.module";
 import { TenantModule } from "../tenant/tenant.module";
+import { ProjectAccessModule } from "../common/guards/project-access.module";
 
 @Module({
   imports: [
@@ -38,9 +39,10 @@ import { TenantModule } from "../tenant/tenant.module";
     UsersModule,
     NotificationsModule,
     TenantModule,
+    ProjectAccessModule,
   ],
   providers: [TeamService, EmailService],
-  controllers: [TeamController],
+  controllers: [TeamController, TeamProjectController],
   exports: [TeamService],
 })
 export class TeamModule {}

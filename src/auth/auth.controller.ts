@@ -18,8 +18,8 @@ import { SignupDto } from "./dto/signup.dto";
 import { OAuthDto } from "./dto/oauth.dto";
 import { ForgotPasswordDto } from "./dto/forgot-password.dto";
 import { ResetPasswordDto } from "./dto/reset-password.dto";
-import { SelectAccountDto } from "./dto/select-account.dto";
-import { CreateAccountDto } from "./dto/create-account.dto";
+import { SelectProjectDto } from "./dto/select-project.dto";
+import { CreateProjectDto } from "./dto/create-project.dto";
 import { JwtAuthGuard } from "./guards/jwt-auth.guard";
 import { UserPayload } from "./dto/auth-response.interface";
 
@@ -111,31 +111,28 @@ export class AuthController {
   }
 
   @UseGuards(JwtAuthGuard)
-  @Get("my-accounts")
-  getMyAccounts(@Request() req: { user: UserPayload }) {
-    return this.authService.getMyAccounts(req.user.id);
+  @Get("my-projects")
+  getMyProjects(@Request() req: { user: UserPayload }) {
+    return this.authService.getMyProjects(req.user.id);
   }
 
   @UseGuards(JwtAuthGuard)
-  @Post("select-account")
+  @Post("select-project")
   @HttpCode(HttpStatus.OK)
-  selectAccount(
+  selectProject(
     @Request() req: { user: UserPayload },
-    @Body() dto: SelectAccountDto,
+    @Body() dto: SelectProjectDto,
   ) {
-    return this.authService.selectAccount(req.user.id, dto.tenantId);
+    return this.authService.selectProject(req.user.id, dto.projectId);
   }
 
   @UseGuards(JwtAuthGuard)
-  @Post("create-account")
+  @Post("create-project")
   @HttpCode(HttpStatus.CREATED)
-  createAccount(
+  createProject(
     @Request() req: { user: UserPayload },
-    @Body() dto: CreateAccountDto,
+    @Body() dto: CreateProjectDto,
   ) {
-    return this.authService.createAdditionalAccount(
-      req.user.id,
-      dto.businessName,
-    );
+    return this.authService.createProject(req.user.id, dto.projectName);
   }
 }

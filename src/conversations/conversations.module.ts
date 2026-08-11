@@ -19,8 +19,17 @@ import { CampaignsModule } from "../campaigns/campaigns.module";
 import { AnalyticsModule } from "../analytics/analytics.module";
 import { UsersModule } from "../users/users.module";
 
+import { ProjectAccessModule } from "../common/guards/project-access.module";
+import {
+  UserAccountMembership,
+  UserAccountMembershipSchema,
+} from "../auth/schemas/user-account-membership.schema";
 @Module({
   imports: [
+    ProjectAccessModule,
+    MongooseModule.forFeature([
+      { name: UserAccountMembership.name, schema: UserAccountMembershipSchema },
+    ]),
     MongooseModule.forFeature([
       { name: Conversation.name, schema: ConversationSchema },
       { name: Message.name, schema: MessageSchema },

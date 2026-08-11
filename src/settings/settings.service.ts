@@ -47,7 +47,7 @@ export class SettingsService {
 
   // ─── Account (company) settings ──────────────────────────────────────────
   // tenantId may point at a standalone Tenant doc (created via
-  // POST /auth/create-account) or, for the legacy convention, an owner
+  // POST /auth/create-project) or, for the legacy convention, an owner
   // User's own doc — every method here tries Tenant first.
 
   private tenantToAccount(tenant: TenantDocument) {

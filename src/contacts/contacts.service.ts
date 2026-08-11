@@ -283,8 +283,9 @@ export class ContactsService {
         },
       ];
     });
-    const totalCampaigns = new Set(campaignHistory.map((item) => item.campaignId))
-      .size;
+    const totalCampaigns = new Set(
+      campaignHistory.map((item) => item.campaignId),
+    ).size;
     const totalMessages = campaignHistory.filter((item) =>
       ["sent", "delivered", "read"].includes(item.recipientStatus),
     ).length;

@@ -14,8 +14,17 @@ import { SettingsService } from "./settings.service";
 import { SettingsController } from "./settings.controller";
 import { ApiKeyGuard } from "../auth/guards/api-key.guard";
 
+import { ProjectAccessModule } from "../common/guards/project-access.module";
+import {
+  UserAccountMembership,
+  UserAccountMembershipSchema,
+} from "../auth/schemas/user-account-membership.schema";
 @Module({
   imports: [
+    ProjectAccessModule,
+    MongooseModule.forFeature([
+      { name: UserAccountMembership.name, schema: UserAccountMembershipSchema },
+    ]),
     MongooseModule.forFeature([
       { name: APIKey.name, schema: APIKeySchema },
       { name: WebhookEndpoint.name, schema: WebhookEndpointSchema },

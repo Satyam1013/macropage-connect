@@ -27,7 +27,7 @@ export interface AuthResponse {
     accessToken?: string;
     refreshToken?: string;
     user: UserPayload;
-    requiresAccountSelection?: boolean;
+    requiresProjectSelection?: boolean;
   };
   message: string;
 }

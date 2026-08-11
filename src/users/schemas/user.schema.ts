@@ -154,8 +154,8 @@ export class User {
   @Prop()
   lastLoginAt?: Date;
 
-  // Set true on every login; cleared by POST /auth/select-account. While
-  // true, JwtAuthGuard blocks every route except my-accounts/select-account
+  // Set true on every login; cleared by POST /auth/select-project. While
+  // true, JwtAuthGuard blocks every route except my-projects/select-project
   // (see jwt-auth.guard.ts) — this is the actual access gate, since nothing
   // in this app reads tenantId from the JWT (req.user is re-fetched from
   // Mongo on every request by jwt.strategy.ts).

@@ -24,8 +24,17 @@ import { ANALYTICS_REDIS } from "./analytics.constants";
 import { MessageUsage, MessageUsageSchema } from "./message-usage.schema";
 import { MessageUsageService } from "./message-usage.service";
 
+import { ProjectAccessModule } from "../common/guards/project-access.module";
+import {
+  UserAccountMembership,
+  UserAccountMembershipSchema,
+} from "../auth/schemas/user-account-membership.schema";
 @Module({
   imports: [
+    ProjectAccessModule,
+    MongooseModule.forFeature([
+      { name: UserAccountMembership.name, schema: UserAccountMembershipSchema },
+    ]),
     ConfigModule,
     MongooseModule.forFeature([
       { name: Conversation.name, schema: ConversationSchema },

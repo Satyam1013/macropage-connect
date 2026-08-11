@@ -7,17 +7,17 @@ import { AuthGuard } from "@nestjs/passport";
 import type { Request } from "express";
 import type { UserDocument } from "../../users/users.service";
 
-// Routes reachable on a "pending account selection" session — i.e. before
-// POST /auth/select-account is called (see AuthService.login/selectAccount).
+// Routes reachable on a "pending project selection" session — i.e. before
+// POST /auth/select-project is called (see AuthService.login/selectProject).
 // Every other JwtAuthGuard-protected route across the app is blocked until
 // then: this app has no @TenantId() decorator, every controller resolves
 // tenant via `req.user.tenantId ?? req.user.id`, which would otherwise let
-// an owner silently reach their own account's data without ever selecting
+// an owner silently reach their own project's data without ever selecting
 // it — the JWT itself carries no tenantId, so this can't be caught upstream.
-const ACCOUNT_SELECTION_EXEMPT_PREFIXES = [
-  "/api/v1/auth/my-accounts",
-  "/api/v1/auth/select-account",
-  "/api/v1/auth/create-account",
+const PROJECT_SELECTION_EXEMPT_PREFIXES = [
+  "/api/v1/auth/my-projects",
+  "/api/v1/auth/select-project",
+  "/api/v1/auth/create-project",
   "/api/v1/auth/me",
   "/api/v1/auth/sessions",
 ];
@@ -32,13 +32,13 @@ export class JwtAuthGuard extends AuthGuard("jwt") {
     const user = req.user as UserDocument | undefined;
     if (!user?.pendingAccountSelection) return true;
 
-    if (ACCOUNT_SELECTION_EXEMPT_PREFIXES.some((p) => req.path.startsWith(p))) {
+    if (PROJECT_SELECTION_EXEMPT_PREFIXES.some((p) => req.path.startsWith(p))) {
       return true;
     }
 
     throw new ForbiddenException({
-      code: "ACCOUNT_SELECTION_REQUIRED",
-      message: "Select an account before continuing.",
+      code: "PROJECT_SELECTION_REQUIRED",
+      message: "Select a project before continuing.",
     });
   }
 }

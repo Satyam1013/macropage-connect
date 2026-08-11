@@ -8,7 +8,7 @@ import { User, UserDocument } from "../users/schemas/user.schema";
 //   - legacy: tenantId IS an owner User's own _id (owner never has a
 //     `tenantId` field set on their own doc — see the comment repeated
 //     across webhook.service.ts, team.service.ts, billing.service.ts).
-//   - standalone Tenant docs (created via POST /auth/create-account),
+//   - standalone Tenant docs (created via POST /auth/create-project),
 //     which carry their own `ownerId` pointing at the actual person.
 // Every "who do I notify/email for this tenant" call site should go
 // through resolveOwnerId() instead of `userModel.findById(tenantId)`
@@ -63,7 +63,7 @@ export class TenantResolverService {
   }
 
   // Billing is a property of a person's own MAIN account only — sub
-  // accounts they create (POST /auth/create-account) share the main
+  // accounts they create (POST /auth/create-project) share the main
   // account's plan rather than carrying their own Subscription. Redirects
   // to userId when currentTenantId is either userId itself, or a
   // standalone Tenant the caller personally owns. Leaves currentTenantId

@@ -39,17 +39,17 @@ import { EmailService } from "../queue/email.service";
 import { BillingService } from "../billing/billing.service";
 import { UserRole } from "./auth.constants";
 
-// How many accounts a person can OWN, gated by their primary account's
-// plan (the account where tenantId === their own _id — the one from their
+// How many projects a person can OWN, gated by their primary project's
+// plan (the project where tenantId === their own _id — the one from their
 // original signup). "Scale" on the pricing page is the BUSINESS plan key.
-const ACCOUNT_LIMIT_BY_PLAN: Record<string, number> = {
+const PROJECT_LIMIT_BY_PLAN: Record<string, number> = {
   TRIAL: 1,
   STARTER: 1,
   GROWTH: 3,
   BUSINESS: 5,
   ENTERPRISE: Infinity,
 };
-const DEFAULT_ACCOUNT_LIMIT = 1;
+const DEFAULT_PROJECT_LIMIT = 1;
 
 @Injectable()
 export class AuthService {
@@ -462,9 +462,14 @@ export class AuthService {
     return { deletedCount: result.deletedCount ?? 0 };
   }
 
-  // ─── Account Selection ────────────────────────────────────────────────────
+  // ─── Project Selection ────────────────────────────────────────────────────
+  // "Project" is the user-facing term for what's internally still a
+  // tenant/account (tenantId, UserAccountMembership, TenantResolverService
+  // etc. are unchanged) — renaming those would mean a data migration across
+  // every tenantId-scoped collection for zero external benefit, since none
+  // of that is visible outside this auth layer's own request/response shape.
 
-  async getMyAccounts(userId: string) {
+  async getMyProjects(userId: string) {
     const memberships = await this.membershipModel
       .find({ userId, isActive: true })
       .lean()
@@ -475,11 +480,11 @@ export class AuthService {
     const owners = await this.users.findManyByIds(tenantIds);
     const ownerMap = new Map(owners.map((o) => [String(o._id), o]));
 
-    const accounts = memberships.map((m) => {
+    const projects = memberships.map((m) => {
       const owner = ownerMap.get(m.tenantId);
       return {
-        tenantId: m.tenantId,
-        name: owner?.company ?? owner?.name ?? "Unknown",
+        projectId: m.tenantId,
+        projectName: owner?.company ?? owner?.name ?? "Unknown",
         logoUrl: owner?.logoUrl ?? null,
         plan: owner?.billingPlan ?? owner?.plan ?? "FREE",
         role: m.role,
@@ -487,21 +492,21 @@ export class AuthService {
       };
     });
 
-    return { success: true, data: accounts };
+    return { success: true, data: projects };
   }
 
-  async selectAccount(userId: string, tenantId: string) {
+  async selectProject(userId: string, projectId: string) {
     const membership = await this.membershipModel
-      .findOne({ userId, tenantId, isActive: true })
+      .findOne({ userId, tenantId: projectId, isActive: true })
       .exec();
     if (!membership) {
       throw new ForbiddenException({
         code: "NOT_A_MEMBER",
-        message: "You do not have access to this account.",
+        message: "You do not have access to this project.",
       });
     }
 
-    await this.users.applySelectedAccount(userId, tenantId, membership.role);
+    await this.users.applySelectedAccount(userId, projectId, membership.role);
     await this.membershipModel.updateOne(
       { _id: membership._id },
       { $set: { lastAccessedAt: new Date() } },
@@ -511,27 +516,27 @@ export class AuthService {
     return {
       success: true,
       data: {
-        tenantId,
+        projectId,
         role: membership.role,
         user: user ? await this.users.toPublicProfile(user) : null,
       },
     };
   }
 
-  // Every account a person creates via this endpoint is a standalone
+  // Every project a person creates via this endpoint is a standalone
   // Tenant document (see schemas/tenant.schema.ts) — unlike the legacy
   // convention where tenantId is just an owner User's own _id, this app's
   // primary signup path. TenantResolverService/team.service.ts/etc. all
   // already handle both.
-  async createAdditionalAccount(userId: string, businessName: string) {
+  async createProject(userId: string, projectName: string) {
     const user = await this.users.findById(userId);
     if (!user) throw new NotFoundException("User not found");
 
-    // Gated by the plan of the person's PRIMARY account — the one where
+    // Gated by the plan of the person's PRIMARY project — the one where
     // tenantId === their own _id, i.e. their original signup.
     const primarySub = await this.billingService.getSubscription(userId);
     const primaryPlan = primarySub?.plan ?? "TRIAL";
-    const limit = ACCOUNT_LIMIT_BY_PLAN[primaryPlan] ?? DEFAULT_ACCOUNT_LIMIT;
+    const limit = PROJECT_LIMIT_BY_PLAN[primaryPlan] ?? DEFAULT_PROJECT_LIMIT;
 
     const ownedCount = await this.membershipModel.countDocuments({
       userId,
@@ -540,16 +545,16 @@ export class AuthService {
     });
     if (ownedCount >= limit) {
       throw new ForbiddenException({
-        code: "ACCOUNT_LIMIT_REACHED",
+        code: "PROJECT_LIMIT_REACHED",
         message:
           limit === Infinity
-            ? "Could not create account."
-            : `Your ${primaryPlan} plan allows up to ${limit} account${limit === 1 ? "" : "s"}. Upgrade to create more.`,
+            ? "Could not create project."
+            : `Your ${primaryPlan} plan allows up to ${limit} project${limit === 1 ? "" : "s"}. Upgrade to create more.`,
       });
     }
 
     const tenant = await this.tenantModel.create({
-      name: businessName,
+      name: projectName,
       ownerId: userId,
     });
 
@@ -559,12 +564,12 @@ export class AuthService {
       role: UserRole.OWNER,
     });
 
-    // No independent Subscription for this tenant — billing lives on the
-    // person's own primary account only (userId), which is what
+    // No independent Subscription for this project — billing lives on the
+    // person's own primary project only (userId), which is what
     // resolveBillingTenantId() redirects billing/plan-gating routes to
-    // for any tenant this person owns. See TenantResolverService.
+    // for any project this person owns. See TenantResolverService.
 
-    // Skip the selection step — creating an account is itself the "select"
+    // Skip the selection step — creating a project is itself the "select"
     // action, there's no sensible alternative next step.
     await this.users.applySelectedAccount(userId, tenant.id, UserRole.OWNER);
 
@@ -572,9 +577,9 @@ export class AuthService {
     return {
       success: true,
       data: {
-        message: "Account created successfully",
-        tenantId: tenant.id,
-        businessName,
+        message: "Project created successfully",
+        projectId: tenant.id,
+        projectName,
         role: UserRole.OWNER,
         user: refreshed ? await this.users.toPublicProfile(refreshed) : null,
       },
@@ -600,7 +605,7 @@ export class AuthService {
         accessToken,
         refreshToken,
         user: await this.users.toPublicProfile(user),
-        requiresAccountSelection: true,
+        requiresProjectSelection: true,
       },
       message,
     };

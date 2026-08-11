@@ -17,25 +17,26 @@ import {
 import { FileInterceptor } from "@nestjs/platform-express";
 import { SettingsService } from "./settings.service";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
+import { ProjectAccessGuard } from "../common/guards/project-access.guard";
 import { PlanGuard } from "../billing/guards/plan.guard";
 import { RequirePlan } from "../common/decorators/require-plan.decorator";
-import type { AuthReq } from "../auth/dto/auth-request.interface";
+import type { ProjectAuthReq } from "../auth/dto/auth-request.interface";
 
-@UseGuards(JwtAuthGuard)
-@Controller("settings")
+@UseGuards(JwtAuthGuard, ProjectAccessGuard)
+@Controller("projects/:projectId/settings")
 export class SettingsController {
   constructor(private readonly settingsService: SettingsService) {}
 
   // ── Account / Company settings ────────────────────────────────────────────
 
   @Get("account")
-  getAccount(@Request() req: AuthReq) {
-    return this.settingsService.getAccount(req.user.tenantId ?? req.user.id);
+  getAccount(@Request() req: ProjectAuthReq) {
+    return this.settingsService.getAccount(req.projectId);
   }
 
   @Patch("account")
   updateAccount(
-    @Request() req: AuthReq,
+    @Request() req: ProjectAuthReq,
     @Body()
     dto: {
       companyName?: string;
@@ -51,34 +52,28 @@ export class SettingsController {
       currency?: string;
     },
   ) {
-    return this.settingsService.updateAccount(
-      req.user.tenantId ?? req.user.id,
-      dto,
-    );
+    return this.settingsService.updateAccount(req.projectId, dto);
   }
 
   @Post("account/logo")
   @UseInterceptors(FileInterceptor("file"))
   uploadLogo(
-    @Request() req: AuthReq,
+    @Request() req: ProjectAuthReq,
     @UploadedFile() file: Express.Multer.File,
   ) {
-    return this.settingsService.uploadLogo(
-      req.user.tenantId ?? req.user.id,
-      file,
-    );
+    return this.settingsService.uploadLogo(req.projectId, file);
   }
 
   // ── User profile ──────────────────────────────────────────────────────────
 
   @Get("profile")
-  getProfile(@Request() req: AuthReq) {
+  getProfile(@Request() req: ProjectAuthReq) {
     return this.settingsService.getProfile(req.user.id);
   }
 
   @Patch("profile")
   updateProfile(
-    @Request() req: AuthReq,
+    @Request() req: ProjectAuthReq,
     @Body()
     dto: {
       name?: string;
@@ -95,13 +90,13 @@ export class SettingsController {
   // ── Notification preferences ──────────────────────────────────────────────
 
   @Get("notifications")
-  getNotifications(@Request() req: AuthReq) {
+  getNotifications(@Request() req: ProjectAuthReq) {
     return this.settingsService.getNotificationPrefs(req.user.id);
   }
 
   @Put("notifications")
   updateNotifications(
-    @Request() req: AuthReq,
+    @Request() req: ProjectAuthReq,
     @Body() dto: Record<string, unknown>,
   ) {
     return this.settingsService.updateNotificationPrefs(req.user.id, dto);
@@ -112,8 +107,8 @@ export class SettingsController {
   @Get("api-keys")
   @UseGuards(PlanGuard)
   @RequirePlan("apiAccess")
-  listApiKeys(@Request() req: AuthReq) {
-    return this.settingsService.listApiKeys(req.user.tenantId ?? req.user.id);
+  listApiKeys(@Request() req: ProjectAuthReq) {
+    return this.settingsService.listApiKeys(req.projectId);
   }
 
   @Post("api-keys")
@@ -121,11 +116,11 @@ export class SettingsController {
   @UseGuards(PlanGuard)
   @RequirePlan("apiAccess")
   createApiKey(
-    @Request() req: AuthReq,
+    @Request() req: ProjectAuthReq,
     @Body() body: { name: string; permissions: string[] },
   ) {
     return this.settingsService.createApiKey(
-      req.user.tenantId ?? req.user.id,
+      req.projectId,
       body.name,
       body.permissions,
     );
@@ -133,28 +128,25 @@ export class SettingsController {
 
   @Delete("api-keys/:id")
   @HttpCode(HttpStatus.NO_CONTENT)
-  revokeApiKey(@Request() req: AuthReq, @Param("id") id: string) {
-    return this.settingsService.revokeApiKey(
-      req.user.tenantId ?? req.user.id,
-      id,
-    );
+  revokeApiKey(@Request() req: ProjectAuthReq, @Param("id") id: string) {
+    return this.settingsService.revokeApiKey(req.projectId, id);
   }
 
   // ── Webhooks ──────────────────────────────────────────────────────────────
 
   @Get("webhooks")
-  listWebhooks(@Request() req: AuthReq) {
-    return this.settingsService.listWebhooks(req.user.tenantId ?? req.user.id);
+  listWebhooks(@Request() req: ProjectAuthReq) {
+    return this.settingsService.listWebhooks(req.projectId);
   }
 
   @Post("webhooks")
   @HttpCode(HttpStatus.CREATED)
   createWebhook(
-    @Request() req: AuthReq,
+    @Request() req: ProjectAuthReq,
     @Body() body: { url: string; events: string[]; description?: string },
   ) {
     return this.settingsService.createWebhook(
-      req.user.tenantId ?? req.user.id,
+      req.projectId,
       body.url,
       body.events,
       body.description,
@@ -163,31 +155,21 @@ export class SettingsController {
 
   @Patch("webhooks/:id")
   updateWebhook(
-    @Request() req: AuthReq,
+    @Request() req: ProjectAuthReq,
     @Param("id") id: string,
     @Body() dto: { url?: string; events?: string[]; isEnabled?: boolean },
   ) {
-    return this.settingsService.updateWebhook(
-      req.user.tenantId ?? req.user.id,
-      id,
-      dto,
-    );
+    return this.settingsService.updateWebhook(req.projectId, id, dto);
   }
 
   @Delete("webhooks/:id")
   @HttpCode(HttpStatus.NO_CONTENT)
-  deleteWebhook(@Request() req: AuthReq, @Param("id") id: string) {
-    return this.settingsService.deleteWebhook(
-      req.user.tenantId ?? req.user.id,
-      id,
-    );
+  deleteWebhook(@Request() req: ProjectAuthReq, @Param("id") id: string) {
+    return this.settingsService.deleteWebhook(req.projectId, id);
   }
 
   @Post("webhooks/:id/test")
-  testWebhook(@Request() req: AuthReq, @Param("id") id: string) {
-    return this.settingsService.testWebhook(
-      req.user.tenantId ?? req.user.id,
-      id,
-    );
+  testWebhook(@Request() req: ProjectAuthReq, @Param("id") id: string) {
+    return this.settingsService.testWebhook(req.projectId, id);
   }
 }

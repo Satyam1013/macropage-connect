@@ -1,8 +1,8 @@
 import { IsString, IsNotEmpty, MinLength } from "class-validator";
 
-export class CreateAccountDto {
+export class CreateProjectDto {
   @IsString()
   @IsNotEmpty()
   @MinLength(2)
-  businessName!: string;
+  projectName!: string;
 }

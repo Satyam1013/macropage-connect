@@ -21,8 +21,17 @@ import { MetaModule } from "../meta/meta.module";
 import { GatewayModule } from "../gateway/gateway.module";
 import { RolesGuard } from "../common/guards/roles.guard";
 
+import { ProjectAccessModule } from "../common/guards/project-access.module";
+import {
+  UserAccountMembership,
+  UserAccountMembershipSchema,
+} from "../auth/schemas/user-account-membership.schema";
 @Module({
   imports: [
+    ProjectAccessModule,
+    MongooseModule.forFeature([
+      { name: UserAccountMembership.name, schema: UserAccountMembershipSchema },
+    ]),
     MongooseModule.forFeature([
       { name: AutomationRule.name, schema: AutomationRuleSchema },
       { name: Flow.name, schema: FlowSchema },

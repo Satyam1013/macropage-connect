@@ -1,7 +1,7 @@
 import { IsString, IsNotEmpty } from "class-validator";
 
-export class SelectAccountDto {
+export class SelectProjectDto {
   @IsString()
   @IsNotEmpty()
-  tenantId!: string;
+  projectId!: string;
 }
