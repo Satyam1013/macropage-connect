@@ -106,6 +106,37 @@ export class WhatsappService {
     };
   }
 
+  async getBusinessInfo(tenantId: string) {
+    const tenant = await this.tenantModel.findById(tenantId).exec();
+    if (tenant) {
+      return {
+        success: true,
+        data: {
+          businessName: tenant.name,
+          category: tenant.industry ?? null,
+          description: tenant.description ?? null,
+          website: tenant.website ?? null,
+          address: tenant.address ?? null,
+          businessInfoSaved: tenant.businessInfoSaved,
+        },
+      };
+    }
+
+    const user = await this.userModel.findById(tenantId).exec();
+    if (!user) throw new NotFoundException("Account not found");
+    return {
+      success: true,
+      data: {
+        businessName: user.company ?? null,
+        category: user.industry ?? null,
+        description: user.description ?? null,
+        website: user.website ?? null,
+        address: user.address ?? null,
+        businessInfoSaved: user.businessInfoSaved,
+      },
+    };
+  }
+
   async saveBusinessInfo(tenantId: string, dto: BusinessInfoDto) {
     if (!dto.businessName || !dto.category || !dto.description) {
       throw new BadRequestException({

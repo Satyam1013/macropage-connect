@@ -33,6 +33,11 @@ export class WhatsappController {
     return this.whatsappService.getStatus(tenantId);
   }
 
+  @Get("setup/business-info")
+  getBusinessInfo(@Request() req: ProjectAuthReq) {
+    return this.whatsappService.getBusinessInfo(req.projectId);
+  }
+
   @Post("setup/business-info")
   @HttpCode(HttpStatus.OK)
   saveBusinessInfo(
