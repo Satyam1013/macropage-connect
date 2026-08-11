@@ -9,7 +9,9 @@ import { Flow, FlowSchema } from "../schemas/flow.schema";
 import { CatalogService } from "./catalog.service";
 import { ProductsService } from "./products.service";
 import { OrderFulfillmentService } from "./order-fulfillment.service";
+import { OrdersService } from "./orders.service";
 import { ProductsController } from "./products.controller";
+import { OrdersController } from "./orders.controller";
 import { MetaModule } from "../meta/meta.module";
 import { BillingModule } from "../billing/billing.module";
 import { AutomationModule } from "../automation/automation.module";
@@ -45,8 +47,18 @@ import {
     AutomationModule,
     ConversationsModule,
   ],
-  providers: [CatalogService, ProductsService, OrderFulfillmentService],
-  controllers: [ProductsController],
-  exports: [CatalogService, ProductsService, OrderFulfillmentService],
+  providers: [
+    CatalogService,
+    ProductsService,
+    OrderFulfillmentService,
+    OrdersService,
+  ],
+  controllers: [ProductsController, OrdersController],
+  exports: [
+    CatalogService,
+    ProductsService,
+    OrderFulfillmentService,
+    OrdersService,
+  ],
 })
 export class CatalogModule {}
