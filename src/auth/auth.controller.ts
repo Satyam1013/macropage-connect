@@ -82,6 +82,13 @@ export class AuthController {
   }
 
   @UseGuards(JwtAuthGuard)
+  @Post("logout")
+  @HttpCode(HttpStatus.OK)
+  logout(@Request() req: { user: UserPayload }) {
+    return this.authService.logout(req.user.id);
+  }
+
+  @UseGuards(JwtAuthGuard)
   @Get("sessions")
   getSessions(@Request() req: { user: UserPayload }) {
     return this.authService.getSessions(req.user.id);

@@ -462,6 +462,30 @@ export class AuthService {
     return { deletedCount: result.deletedCount ?? 0 };
   }
 
+  // Access tokens are stateless (15min expiry, verified by signature only —
+  // see JwtStrategy) so there's nothing server-side to invalidate for them.
+  // This clears any stored refresh-token/session records for the user and
+  // logs the event; actually forgetting the tokens is the client's job
+  // (drop them from storage after this call succeeds).
+  async logout(userId: string): Promise<{ message: string }> {
+    await Promise.all([
+      this.refreshTokenModel.deleteMany({ userId }).exec(),
+      this.sessionModel.deleteMany({ userId }).exec(),
+    ]);
+
+    const user = await this.users.findById(userId);
+    if (user) {
+      void this.activityService.log({
+        tenantId: user.tenantId ?? user.id,
+        userId: user.id,
+        type: "LOGOUT",
+        description: "Logged out",
+      });
+    }
+
+    return { message: "Logged out successfully" };
+  }
+
   // ─── Project Selection ────────────────────────────────────────────────────
   // "Project" is the user-facing term for what's internally still a
   // tenant/account (tenantId, UserAccountMembership, TenantResolverService
