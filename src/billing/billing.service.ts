@@ -206,29 +206,52 @@ export class BillingService {
     const sub = await this.subModel.findOne({ tenantId }).lean().exec();
     let razorpayCustomerId = sub?.razorpayCustomerId;
 
-    if (!razorpayCustomerId) {
-      const customer = await this.razorpayService.createCustomer({
-        name: user.name,
-        email: user.email,
-        phone: user.phone,
-      });
-      razorpayCustomerId = String(customer.id);
+    // Razorpay errors reject with { statusCode, error: { description } } —
+    // without this catch, any Razorpay-side rejection (bad plan id, invalid
+    // customer, transient API error, ...) bubbles up as an unhandled
+    // exception and Nest turns it into an opaque 500. Surface the real
+    // reason as a 400 instead.
+    let rzpSubId: string;
+    let rzpShortUrl: string | null;
+    try {
+      if (!razorpayCustomerId) {
+        const customer = await this.razorpayService.createCustomer({
+          name: user.name,
+          email: user.email,
+          phone: user.phone,
+        });
+        razorpayCustomerId = String(customer.id);
+      }
+
+      const totalCount =
+        billingCycle === "yearly"
+          ? 10
+          : billingCycle === "quarterly"
+            ? 40
+            : 120;
+
+      // Explicit type annotation breaks ESLint's unsafe-assignment taint from the SDK cast
+      const rzpSub: { id: string; short_url?: string } =
+        await this.razorpayService.createSubscription({
+          planId: pricing.razorpayPlanId,
+          customerId: razorpayCustomerId,
+          totalCount,
+          quantity: 1,
+          notes: { tenantId, plan, billingCycle },
+        });
+      rzpSubId = rzpSub.id;
+      rzpShortUrl = rzpSub.short_url ?? null;
+    } catch (err) {
+      const description = (err as { error?: { description?: string } })?.error
+        ?.description;
+      this.logger.error(
+        `[Billing] Razorpay subscription creation failed for tenant ${tenantId}: ${description ?? String(err)}`,
+      );
+      throw new BadRequestException(
+        description ??
+          "Failed to start checkout with Razorpay. Please try again.",
+      );
     }
-
-    const totalCount =
-      billingCycle === "yearly" ? 10 : billingCycle === "quarterly" ? 40 : 120;
-
-    // Explicit type annotation breaks ESLint's unsafe-assignment taint from the SDK cast
-    const rzpSub: { id: string; short_url?: string } =
-      await this.razorpayService.createSubscription({
-        planId: pricing.razorpayPlanId,
-        customerId: razorpayCustomerId,
-        totalCount,
-        quantity: 1,
-        notes: { tenantId, plan, billingCycle },
-      });
-    const rzpSubId: string = rzpSub.id;
-    const rzpShortUrl: string | null = rzpSub.short_url ?? null;
 
     // Deliberately doesn't set plan/billingCycle/status/razorpaySubId/
     // razorpayPlanId here — this only creates the Razorpay subscription +

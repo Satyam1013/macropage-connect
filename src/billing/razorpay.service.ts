@@ -19,10 +19,17 @@ export class RazorpayService {
     email: string;
     phone?: string;
   }): Promise<{ id: string }> {
+    // fail_existing defaults to `1` (throw) on Razorpay's side — without
+    // this, a customer who already has a Razorpay record from an earlier
+    // attempt (e.g. checkout was started but never completed, so we never
+    // persisted razorpayCustomerId locally) gets a hard "customer already
+    // exists" error on every future subscribe attempt. `0` makes this call
+    // idempotent: return the existing customer instead of erroring.
     const raw = await (this.razorpay.customers.create({
       name: data.name,
       email: data.email,
       contact: data.phone ?? "",
+      fail_existing: 0,
     }) as unknown as Promise<Record<string, unknown>>);
     return { id: typeof raw.id === "string" ? raw.id : String(raw.id) };
   }
