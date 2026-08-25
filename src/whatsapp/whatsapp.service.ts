@@ -221,25 +221,31 @@ export class WhatsappService {
       });
     }
 
-    // Step 3 — discover WABA if not provided
+    // Step 3 — discover WABA (if not provided) and the owning Business ID.
+    // The Business ID is fetched regardless of whether wabaId was passed
+    // explicitly — it's needed later to create a product catalog, which
+    // lives under the business (owned_product_catalogs), not the WABA.
     let wabaId = dto.wabaId;
-    if (!wabaId) {
-      try {
-        const bizResp = await axios.get(`${BASE}/me/businesses`, {
-          params: {
-            fields: "id,name,whatsapp_business_accounts",
-            access_token: longToken,
-          },
-        });
-        const biz = (
-          bizResp.data as {
-            data?: Array<{
-              whatsapp_business_accounts?: { data?: Array<{ id: string }> };
-            }>;
-          }
-        ).data?.[0];
-        wabaId = biz?.whatsapp_business_accounts?.data?.[0]?.id;
-      } catch {
+    let metaBusinessId: string | undefined;
+    try {
+      const bizResp = await axios.get(`${BASE}/me/businesses`, {
+        params: {
+          fields: "id,name,whatsapp_business_accounts",
+          access_token: longToken,
+        },
+      });
+      const biz = (
+        bizResp.data as {
+          data?: Array<{
+            id?: string;
+            whatsapp_business_accounts?: { data?: Array<{ id: string }> };
+          }>;
+        }
+      ).data?.[0];
+      metaBusinessId = biz?.id;
+      wabaId = wabaId ?? biz?.whatsapp_business_accounts?.data?.[0]?.id;
+    } catch {
+      if (!wabaId) {
         throw new BadRequestException({
           success: false,
           error: {
@@ -331,6 +337,7 @@ export class WhatsappService {
           phoneNumberId,
           phoneNumber: phone.display_phone_number,
           displayName: phone.verified_name,
+          ...(metaBusinessId && { metaBusinessId }),
           accessToken: encrypted,
           tokenExpiresAt: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000),
           metaConnected: true,

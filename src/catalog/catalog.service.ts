@@ -38,15 +38,29 @@ export class CatalogService {
       );
     }
 
+    if (!waba.metaBusinessId) {
+      throw new BadRequestException(
+        "Business ID not found — please reconnect WhatsApp",
+      );
+    }
+
     const accessToken = this.encryptionService.decrypt(waba.accessToken);
 
-    // Create a new product catalog under the business's Meta Business Manager
-    const response = await axios.post<{ id: string }>(
-      `${META_GRAPH_BASE}/${waba.wabaId}/product_catalogs`,
+    // Step A — create the catalog under the Business (not the WABA)
+    const catalogResponse = await axios.post<{ id: string }>(
+      `${META_GRAPH_BASE}/${waba.metaBusinessId}/owned_product_catalogs`,
       {
         name: `${waba.displayName ?? "Macropage"} Catalog`,
         vertical: "commerce",
       },
+      { headers: { Authorization: `Bearer ${accessToken}` } },
+    );
+    const metaCatalogId = catalogResponse.data.id;
+
+    // Step B — connect that catalog to the WABA
+    await axios.post(
+      `${META_GRAPH_BASE}/${waba.wabaId}/product_catalogs`,
+      { catalog_id: metaCatalogId },
       { headers: { Authorization: `Bearer ${accessToken}` } },
     );
 
@@ -55,7 +69,8 @@ export class CatalogService {
       {
         $set: {
           tenantId,
-          metaCatalogId: response.data.id,
+          metaCatalogId,
+          metaBusinessId: waba.metaBusinessId,
           isConnected: true,
           connectedAt: new Date(),
         },
@@ -63,7 +78,7 @@ export class CatalogService {
       { upsert: true, new: true },
     );
 
-    // Link catalog to the WABA so it's usable in WhatsApp messages
+    // Enable commerce settings on the phone number
     await axios.post(
       `${META_GRAPH_BASE}/${waba.phoneNumberId}/whatsapp_commerce_settings`,
       {
