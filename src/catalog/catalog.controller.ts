@@ -27,19 +27,19 @@ export class CatalogController {
   }
 
   // Explicit connect action — user-initiated, NOT triggered silently by
-  // product creation. Body carries the auth code from the Facebook popup
-  // (launchCatalogConnect() on the frontend).
+  // product creation. Body carries the access token from the Facebook
+  // popup (launchCatalogConnect() on the frontend).
   @Post("connect")
   @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.MANAGER)
   connect(@Request() req: ProjectAuthReq, @Body() dto: ConnectCatalogDto) {
-    return this.catalogService.connectCatalog(req.projectId, dto.code);
+    return this.catalogService.connectCatalog(req.projectId, dto.accessToken);
   }
 
-  // Reconnect also requires a fresh popup code — there's no server-side-only
+  // Reconnect also requires a fresh popup token — there's no server-side-only
   // reconnect path since the catalog is chosen inside the popup each time.
   @Post("reconnect")
   @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.MANAGER)
   reconnect(@Request() req: ProjectAuthReq, @Body() dto: ConnectCatalogDto) {
-    return this.catalogService.connectCatalog(req.projectId, dto.code);
+    return this.catalogService.connectCatalog(req.projectId, dto.accessToken);
   }
 }

@@ -52,10 +52,10 @@ export class CatalogService {
   }
 
   // ── Explicit connect action — only ever triggered by the user hitting
-  // POST /catalog/connect (or /reconnect) with a fresh popup auth code,
+  // POST /catalog/connect (or /reconnect) with a fresh popup access token,
   // never silently as a side effect of another operation ──
 
-  async connectCatalog(tenantId: string, code: string) {
+  async connectCatalog(tenantId: string, accessToken: string) {
     const waba = await this.wabaModel.findOne({ tenantId });
     if (!waba?.metaConnected) {
       throw new BadRequestException({
@@ -73,58 +73,39 @@ export class CatalogService {
       });
     }
 
-    if (!code) {
+    if (!accessToken) {
       throw new BadRequestException({
-        code: "MISSING_CODE",
-        message: "No authorization code received from Facebook.",
+        code: "MISSING_TOKEN",
+        message: "No access token received from Facebook.",
       });
     }
 
     try {
-      // Step A — exchange the popup's short-lived code for a user access
-      // token, same pattern as WhatsappService.connectMeta()'s Step 1.
-      const tokenResponse = await axios.get<{ access_token?: string }>(
-        `${META_GRAPH_BASE}/oauth/access_token`,
-        {
-          params: {
-            client_id: process.env.META_APP_ID,
-            client_secret: process.env.META_APP_SECRET,
-            code,
-          },
-        },
-      );
-
-      const userAccessToken = tokenResponse.data.access_token;
-      if (!userAccessToken) {
-        throw new BadRequestException("Could not exchange code for token");
-      }
-
-      // Step B — fetch the catalog(s) now visible under this business
-      // after the merchant created/selected one inside the popup.
+      // The popup returns a usable access token directly — no code
+      // exchange needed. Fetch the catalog(s) now visible under this
+      // business after the merchant created/selected one inside the popup.
       const catalogsResponse = await axios.get<{
         data?: Array<{ id: string; name?: string; vertical?: string }>;
       }>(`${META_GRAPH_BASE}/${waba.metaBusinessId}/owned_product_catalogs`, {
-        params: { access_token: userAccessToken, fields: "id,name,vertical" },
+        params: { access_token: accessToken, fields: "id,name,vertical" },
       });
 
       const catalogs = catalogsResponse.data.data ?? [];
       if (catalogs.length === 0) {
         throw new BadRequestException({
           code: "NO_CATALOG_FOUND",
-          message: "No catalog was created or selected. Please try again.",
+          message: "No catalog was found or created. Please try again.",
         });
       }
 
       // Prefer a catalog with the correct commerce vertical if multiple
       // exist; otherwise take the first one returned.
       const catalog =
-        catalogs.find(
-          (c) => c.vertical === "commerce" || c.vertical === "COMMERCE",
-        ) ?? catalogs[0];
+        catalogs.find((c) => c.vertical?.toLowerCase() === "commerce") ??
+        catalogs[0];
 
-      // Step C — link the catalog to the WABA using the SYSTEM USER token
-      // (permanent, already stored/encrypted) — not the short-lived popup
-      // token from Step A.
+      // Link the catalog to the WABA using the SYSTEM USER token
+      // (permanent, already stored/encrypted) — not the popup token above.
       const systemToken = this.encryptionService.decrypt(waba.accessToken);
 
       await axios.post(
@@ -133,7 +114,7 @@ export class CatalogService {
         { headers: { Authorization: `Bearer ${systemToken}` } },
       );
 
-      // Step D — enable commerce settings on the phone number
+      // Enable commerce settings on the phone number
       await axios.post(
         `${META_GRAPH_BASE}/${waba.phoneNumberId}/whatsapp_commerce_settings`,
         { is_catalog_visible: true, is_cart_enabled: true },
