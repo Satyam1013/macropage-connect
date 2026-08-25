@@ -23,7 +23,7 @@ export class Catalog {
   @Prop()
   connectedAt?: Date;
 
-  @Prop({ default: null })
+  @Prop({ type: String, default: null })
   connectionError?: string | null;
 }
 
