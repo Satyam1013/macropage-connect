@@ -59,6 +59,7 @@ export class CatalogService {
     const waba = await this.wabaModel.findOne({ tenantId });
     if (!waba?.metaConnected) {
       throw new BadRequestException({
+        success: false,
         code: "WHATSAPP_NOT_CONNECTED",
         message:
           "Connect your WhatsApp Business Account first, before setting up your catalog.",
@@ -67,6 +68,7 @@ export class CatalogService {
 
     if (!waba.metaBusinessId) {
       throw new BadRequestException({
+        success: false,
         code: "BUSINESS_ID_MISSING",
         message:
           "Business ID not found. Please reconnect WhatsApp to refresh this.",
@@ -75,24 +77,49 @@ export class CatalogService {
 
     if (!accessToken) {
       throw new BadRequestException({
+        success: false,
         code: "MISSING_TOKEN",
         message: "No access token received from Facebook.",
       });
     }
 
+    // Tags which Graph API call actually failed in the logs — Meta's error
+    // messages ("Invalid parameter", etc.) are too generic on their own to
+    // tell the three calls below apart.
+    const logStep = (step: string, err: unknown) => {
+      const detail =
+        (axios.isAxiosError(err) &&
+          (err.response?.data as { error?: { message?: string } })?.error
+            ?.message) ||
+        (err instanceof Error ? err.message : String(err));
+      this.logger.error(
+        `Catalog connect [${step}] failed for tenant ${tenantId}: ${detail}`,
+      );
+    };
+
     try {
       // The popup returns a usable access token directly — no code
       // exchange needed. Fetch the catalog(s) now visible under this
       // business after the merchant created/selected one inside the popup.
-      const catalogsResponse = await axios.get<{
-        data?: Array<{ id: string; name?: string; vertical?: string }>;
-      }>(`${META_GRAPH_BASE}/${waba.metaBusinessId}/owned_product_catalogs`, {
-        params: { access_token: accessToken, fields: "id,name,vertical" },
-      });
+      let catalogsResponse: {
+        data: {
+          data?: Array<{ id: string; name?: string; vertical?: string }>;
+        };
+      };
+      try {
+        catalogsResponse = await axios.get(
+          `${META_GRAPH_BASE}/${waba.metaBusinessId}/owned_product_catalogs`,
+          { params: { access_token: accessToken, fields: "id,name,vertical" } },
+        );
+      } catch (err) {
+        logStep("fetch-catalogs", err);
+        throw err;
+      }
 
       const catalogs = catalogsResponse.data.data ?? [];
       if (catalogs.length === 0) {
         throw new BadRequestException({
+          success: false,
           code: "NO_CATALOG_FOUND",
           message: "No catalog was found or created. Please try again.",
         });
@@ -108,18 +135,28 @@ export class CatalogService {
       // (permanent, already stored/encrypted) — not the popup token above.
       const systemToken = this.encryptionService.decrypt(waba.accessToken);
 
-      await axios.post(
-        `${META_GRAPH_BASE}/${waba.wabaId}/product_catalogs`,
-        { catalog_id: catalog.id },
-        { headers: { Authorization: `Bearer ${systemToken}` } },
-      );
+      try {
+        await axios.post(
+          `${META_GRAPH_BASE}/${waba.wabaId}/product_catalogs`,
+          { catalog_id: catalog.id },
+          { headers: { Authorization: `Bearer ${systemToken}` } },
+        );
+      } catch (err) {
+        logStep("link-to-waba", err);
+        throw err;
+      }
 
-      // Enable commerce settings on the phone number
-      await axios.post(
-        `${META_GRAPH_BASE}/${waba.phoneNumberId}/whatsapp_commerce_settings`,
-        { is_catalog_visible: true, is_cart_enabled: true },
-        { headers: { Authorization: `Bearer ${systemToken}` } },
-      );
+      try {
+        // Enable commerce settings on the phone number
+        await axios.post(
+          `${META_GRAPH_BASE}/${waba.phoneNumberId}/whatsapp_commerce_settings`,
+          { is_catalog_visible: true, is_cart_enabled: true },
+          { headers: { Authorization: `Bearer ${systemToken}` } },
+        );
+      } catch (err) {
+        logStep("commerce-settings", err);
+        throw err;
+      }
 
       const saved = await this.catalogModel.findOneAndUpdate(
         { tenantId },
@@ -169,6 +206,7 @@ export class CatalogService {
       );
 
       throw new BadRequestException({
+        success: false,
         code: "CATALOG_CONNECT_FAILED",
         message: metaMessage,
       });
