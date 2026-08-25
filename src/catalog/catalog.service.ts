@@ -52,10 +52,10 @@ export class CatalogService {
   }
 
   // ── Explicit connect action — only ever triggered by the user hitting
-  // POST /catalog/connect, never silently as a side effect of another
-  // operation (e.g. creating a product) ──
+  // POST /catalog/connect (or /reconnect) with a fresh popup auth code,
+  // never silently as a side effect of another operation ──
 
-  async connectCatalog(tenantId: string, isReconnect = false) {
+  async connectCatalog(tenantId: string, code: string) {
     const waba = await this.wabaModel.findOne({ tenantId });
     if (!waba?.metaConnected) {
       throw new BadRequestException({
@@ -73,48 +73,79 @@ export class CatalogService {
       });
     }
 
-    const existing = await this.catalogModel.findOne({ tenantId });
-    if (existing?.isConnected && !isReconnect) {
-      return {
-        success: true,
-        data: { message: "Catalog already connected", ...existing.toObject() },
-      };
+    if (!code) {
+      throw new BadRequestException({
+        code: "MISSING_CODE",
+        message: "No authorization code received from Facebook.",
+      });
     }
 
-    const accessToken = this.encryptionService.decrypt(waba.accessToken);
-
     try {
-      // Step A — create the catalog under the Business (not the WABA)
-      const catalogResponse = await axios.post<{ id: string }>(
-        `${META_GRAPH_BASE}/${waba.metaBusinessId}/owned_product_catalogs`,
+      // Step A — exchange the popup's short-lived code for a user access
+      // token, same pattern as WhatsappService.connectMeta()'s Step 1.
+      const tokenResponse = await axios.get<{ access_token?: string }>(
+        `${META_GRAPH_BASE}/oauth/access_token`,
         {
-          name: `${waba.displayName ?? "Macropage"} Catalog`,
-          vertical: "commerce",
+          params: {
+            client_id: process.env.META_APP_ID,
+            client_secret: process.env.META_APP_SECRET,
+            code,
+          },
         },
-        { headers: { Authorization: `Bearer ${accessToken}` } },
       );
-      const metaCatalogId = catalogResponse.data.id;
 
-      // Step B — connect that catalog to the WABA
+      const userAccessToken = tokenResponse.data.access_token;
+      if (!userAccessToken) {
+        throw new BadRequestException("Could not exchange code for token");
+      }
+
+      // Step B — fetch the catalog(s) now visible under this business
+      // after the merchant created/selected one inside the popup.
+      const catalogsResponse = await axios.get<{
+        data?: Array<{ id: string; name?: string; vertical?: string }>;
+      }>(`${META_GRAPH_BASE}/${waba.metaBusinessId}/owned_product_catalogs`, {
+        params: { access_token: userAccessToken, fields: "id,name,vertical" },
+      });
+
+      const catalogs = catalogsResponse.data.data ?? [];
+      if (catalogs.length === 0) {
+        throw new BadRequestException({
+          code: "NO_CATALOG_FOUND",
+          message: "No catalog was created or selected. Please try again.",
+        });
+      }
+
+      // Prefer a catalog with the correct commerce vertical if multiple
+      // exist; otherwise take the first one returned.
+      const catalog =
+        catalogs.find(
+          (c) => c.vertical === "commerce" || c.vertical === "COMMERCE",
+        ) ?? catalogs[0];
+
+      // Step C — link the catalog to the WABA using the SYSTEM USER token
+      // (permanent, already stored/encrypted) — not the short-lived popup
+      // token from Step A.
+      const systemToken = this.encryptionService.decrypt(waba.accessToken);
+
       await axios.post(
         `${META_GRAPH_BASE}/${waba.wabaId}/product_catalogs`,
-        { catalog_id: metaCatalogId },
-        { headers: { Authorization: `Bearer ${accessToken}` } },
+        { catalog_id: catalog.id },
+        { headers: { Authorization: `Bearer ${systemToken}` } },
       );
 
-      // Step C — enable commerce settings on the phone number
+      // Step D — enable commerce settings on the phone number
       await axios.post(
         `${META_GRAPH_BASE}/${waba.phoneNumberId}/whatsapp_commerce_settings`,
         { is_catalog_visible: true, is_cart_enabled: true },
-        { headers: { Authorization: `Bearer ${accessToken}` } },
+        { headers: { Authorization: `Bearer ${systemToken}` } },
       );
 
-      const catalog = await this.catalogModel.findOneAndUpdate(
+      const saved = await this.catalogModel.findOneAndUpdate(
         { tenantId },
         {
           $set: {
             tenantId,
-            metaCatalogId,
+            metaCatalogId: catalog.id,
             metaBusinessId: waba.metaBusinessId,
             isConnected: true,
             connectedAt: new Date(),
@@ -124,12 +155,16 @@ export class CatalogService {
         { upsert: true, new: true },
       );
 
+      this.logger.log(
+        `Catalog connected for tenant ${tenantId}: ${catalog.id}`,
+      );
+
       return {
         success: true,
         data: {
           message: "Catalog connected successfully",
-          metaCatalogId,
-          connectedAt: catalog.connectedAt,
+          metaCatalogId: catalog.id,
+          connectedAt: saved.connectedAt,
         },
       };
     } catch (err) {
@@ -137,6 +172,7 @@ export class CatalogService {
         (axios.isAxiosError(err) &&
           (err.response?.data as { error?: { message?: string } })?.error
             ?.message) ||
+        (err instanceof Error ? err.message : undefined) ||
         "Failed to connect catalog";
 
       // Persisted so getStatus() can show the merchant exactly what Meta
@@ -145,6 +181,10 @@ export class CatalogService {
         { tenantId },
         { $set: { isConnected: false, connectionError: metaMessage } },
         { upsert: true },
+      );
+
+      this.logger.error(
+        `Catalog connect failed for tenant ${tenantId}: ${metaMessage}`,
       );
 
       throw new BadRequestException({
