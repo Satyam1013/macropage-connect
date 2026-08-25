@@ -22,6 +22,9 @@ export class Catalog {
 
   @Prop()
   connectedAt?: Date;
+
+  @Prop({ default: null })
+  connectionError?: string | null;
 }
 
 export const CatalogSchema = SchemaFactory.createForClass(Catalog);

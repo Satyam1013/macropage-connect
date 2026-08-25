@@ -1,7 +1,8 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { BadRequestException, Injectable, Logger } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
 import { Model } from "mongoose";
 import { Product, ProductDocument } from "./schemas/product.schema";
+import { Catalog, CatalogDocument } from "./schemas/catalog.schema";
 import { CatalogService } from "./catalog.service";
 import { CreateProductDto } from "./dto/create-product.dto";
 import { UpdateProductDto } from "./dto/update-product.dto";
@@ -13,17 +14,32 @@ export class ProductsService {
   constructor(
     @InjectModel(Product.name)
     private readonly productModel: Model<ProductDocument>,
+    @InjectModel(Catalog.name)
+    private readonly catalogModel: Model<CatalogDocument>,
     private readonly catalogService: CatalogService,
   ) {}
 
   async create(tenantId: string, dto: CreateProductDto) {
+    // Guard: catalog must already be connected. The frontend gates the
+    // products page behind catalog setup, but never trust that alone —
+    // enforce it at the API layer too.
+    const catalog = await this.catalogModel.findOne({
+      tenantId,
+      isConnected: true,
+    });
+    if (!catalog) {
+      throw new BadRequestException({
+        code: "CATALOG_NOT_CONNECTED",
+        message: "Connect your catalog before adding products.",
+      });
+    }
+
     const product = await this.productModel.create({ tenantId, ...dto });
 
-    // Ensure catalog exists, then sync (fire and forget, don't block the
-    // create response on Meta's API)
+    // Sync directly (fire and forget, don't block the create response on
+    // Meta's API) — catalog is guaranteed to exist, no more ensureCatalog().
     this.catalogService
-      .ensureCatalog(tenantId)
-      .then(() => this.catalogService.syncProductToMeta(tenantId, product.id))
+      .syncProductToMeta(tenantId, product.id)
       .catch((err: Error) => this.logger.error(`Sync failed: ${err.message}`));
 
     return { success: true, data: product };
@@ -54,10 +70,15 @@ export class ProductsService {
   }
 
   async findAll(tenantId: string) {
-    const products = await this.productModel
-      .find({ tenantId })
-      .sort({ createdAt: -1 })
-      .lean();
-    return { success: true, data: products };
+    const [catalog, products] = await Promise.all([
+      this.catalogModel.findOne({ tenantId }).lean(),
+      this.productModel.find({ tenantId }).sort({ createdAt: -1 }).lean(),
+    ]);
+
+    return {
+      success: true,
+      data: products,
+      meta: { catalogConnected: catalog?.isConnected ?? false },
+    };
   }
 }

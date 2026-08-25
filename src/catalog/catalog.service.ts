@@ -25,70 +25,133 @@ export class CatalogService {
     private readonly encryptionService: EncryptionService,
   ) {}
 
-  // ── Create or connect a catalog for this tenant ──
+  // ── Check status — read only, no side effects ──
 
-  async ensureCatalog(tenantId: string) {
-    let catalog = await this.catalogModel.findOne({ tenantId });
-    if (catalog?.isConnected) return catalog;
+  async getStatus(tenantId: string) {
+    const [catalog, waba] = await Promise.all([
+      this.catalogModel.findOne({ tenantId }).lean(),
+      this.wabaModel
+        .findOne({ tenantId })
+        .select("metaConnected metaBusinessId")
+        .lean(),
+    ]);
 
+    return {
+      success: true,
+      data: {
+        isConnected: catalog?.isConnected ?? false,
+        metaCatalogId: catalog?.metaCatalogId ?? null,
+        connectedAt: catalog?.connectedAt ?? null,
+        connectionError: catalog?.connectionError ?? null,
+        // Frontend needs to know if WhatsApp itself is connected first —
+        // catalog setup requires WhatsApp to already be connected.
+        whatsappConnected: waba?.metaConnected ?? false,
+        hasBusinessId: !!waba?.metaBusinessId,
+      },
+    };
+  }
+
+  // ── Explicit connect action — only ever triggered by the user hitting
+  // POST /catalog/connect, never silently as a side effect of another
+  // operation (e.g. creating a product) ──
+
+  async connectCatalog(tenantId: string, isReconnect = false) {
     const waba = await this.wabaModel.findOne({ tenantId });
     if (!waba?.metaConnected) {
-      throw new BadRequestException(
-        "Connect WhatsApp before setting up your catalog",
-      );
+      throw new BadRequestException({
+        code: "WHATSAPP_NOT_CONNECTED",
+        message:
+          "Connect your WhatsApp Business Account first, before setting up your catalog.",
+      });
     }
 
     if (!waba.metaBusinessId) {
-      throw new BadRequestException(
-        "Business ID not found — please reconnect WhatsApp",
-      );
+      throw new BadRequestException({
+        code: "BUSINESS_ID_MISSING",
+        message:
+          "Business ID not found. Please reconnect WhatsApp to refresh this.",
+      });
+    }
+
+    const existing = await this.catalogModel.findOne({ tenantId });
+    if (existing?.isConnected && !isReconnect) {
+      return {
+        success: true,
+        data: { message: "Catalog already connected", ...existing.toObject() },
+      };
     }
 
     const accessToken = this.encryptionService.decrypt(waba.accessToken);
 
-    // Step A — create the catalog under the Business (not the WABA)
-    const catalogResponse = await axios.post<{ id: string }>(
-      `${META_GRAPH_BASE}/${waba.metaBusinessId}/owned_product_catalogs`,
-      {
-        name: `${waba.displayName ?? "Macropage"} Catalog`,
-        vertical: "commerce",
-      },
-      { headers: { Authorization: `Bearer ${accessToken}` } },
-    );
-    const metaCatalogId = catalogResponse.data.id;
-
-    // Step B — connect that catalog to the WABA
-    await axios.post(
-      `${META_GRAPH_BASE}/${waba.wabaId}/product_catalogs`,
-      { catalog_id: metaCatalogId },
-      { headers: { Authorization: `Bearer ${accessToken}` } },
-    );
-
-    catalog = await this.catalogModel.findOneAndUpdate(
-      { tenantId },
-      {
-        $set: {
-          tenantId,
-          metaCatalogId,
-          metaBusinessId: waba.metaBusinessId,
-          isConnected: true,
-          connectedAt: new Date(),
+    try {
+      // Step A — create the catalog under the Business (not the WABA)
+      const catalogResponse = await axios.post<{ id: string }>(
+        `${META_GRAPH_BASE}/${waba.metaBusinessId}/owned_product_catalogs`,
+        {
+          name: `${waba.displayName ?? "Macropage"} Catalog`,
+          vertical: "commerce",
         },
-      },
-      { upsert: true, new: true },
-    );
+        { headers: { Authorization: `Bearer ${accessToken}` } },
+      );
+      const metaCatalogId = catalogResponse.data.id;
 
-    // Enable commerce settings on the phone number
-    await axios.post(
-      `${META_GRAPH_BASE}/${waba.phoneNumberId}/whatsapp_commerce_settings`,
-      {
-        is_catalog_visible: true,
-        is_cart_enabled: true,
-      },
-      { headers: { Authorization: `Bearer ${accessToken}` } },
-    );
+      // Step B — connect that catalog to the WABA
+      await axios.post(
+        `${META_GRAPH_BASE}/${waba.wabaId}/product_catalogs`,
+        { catalog_id: metaCatalogId },
+        { headers: { Authorization: `Bearer ${accessToken}` } },
+      );
 
-    return catalog;
+      // Step C — enable commerce settings on the phone number
+      await axios.post(
+        `${META_GRAPH_BASE}/${waba.phoneNumberId}/whatsapp_commerce_settings`,
+        { is_catalog_visible: true, is_cart_enabled: true },
+        { headers: { Authorization: `Bearer ${accessToken}` } },
+      );
+
+      const catalog = await this.catalogModel.findOneAndUpdate(
+        { tenantId },
+        {
+          $set: {
+            tenantId,
+            metaCatalogId,
+            metaBusinessId: waba.metaBusinessId,
+            isConnected: true,
+            connectedAt: new Date(),
+            connectionError: null,
+          },
+        },
+        { upsert: true, new: true },
+      );
+
+      return {
+        success: true,
+        data: {
+          message: "Catalog connected successfully",
+          metaCatalogId,
+          connectedAt: catalog.connectedAt,
+        },
+      };
+    } catch (err) {
+      const metaMessage =
+        (axios.isAxiosError(err) &&
+          (err.response?.data as { error?: { message?: string } })?.error
+            ?.message) ||
+        "Failed to connect catalog";
+
+      // Persisted so getStatus() can show the merchant exactly what Meta
+      // said went wrong, and so support can debug later.
+      await this.catalogModel.findOneAndUpdate(
+        { tenantId },
+        { $set: { isConnected: false, connectionError: metaMessage } },
+        { upsert: true },
+      );
+
+      throw new BadRequestException({
+        code: "CATALOG_CONNECT_FAILED",
+        message: metaMessage,
+      });
+    }
   }
 
   // ── Push a product to Meta's catalog ──────

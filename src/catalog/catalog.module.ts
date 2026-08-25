@@ -12,6 +12,7 @@ import { OrderFulfillmentService } from "./order-fulfillment.service";
 import { OrdersService } from "./orders.service";
 import { ProductsController } from "./products.controller";
 import { OrdersController } from "./orders.controller";
+import { CatalogController } from "./catalog.controller";
 import { MetaModule } from "../meta/meta.module";
 import { BillingModule } from "../billing/billing.module";
 import { AutomationModule } from "../automation/automation.module";
@@ -53,7 +54,7 @@ import {
     OrderFulfillmentService,
     OrdersService,
   ],
-  controllers: [ProductsController, OrdersController],
+  controllers: [CatalogController, ProductsController, OrdersController],
   exports: [
     CatalogService,
     ProductsService,
