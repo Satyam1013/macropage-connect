@@ -6,6 +6,7 @@ import { WABAAccount, WABAAccountSchema } from "../schemas/waba-account.schema";
 import { User, UserSchema } from "../users/schemas/user.schema";
 import { Tenant, TenantSchema } from "../schemas/tenant.schema";
 import { TenantModule } from "../tenant/tenant.module";
+import { MetaModule } from "../meta/meta.module";
 
 @Module({
   imports: [
@@ -15,6 +16,7 @@ import { TenantModule } from "../tenant/tenant.module";
       { name: Tenant.name, schema: TenantSchema },
     ]),
     TenantModule,
+    MetaModule,
   ],
   controllers: [AdminController],
   providers: [AdminService],

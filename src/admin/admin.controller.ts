@@ -1,6 +1,7 @@
 import {
   Controller,
   Delete,
+  Post,
   Query,
   Headers,
   UnauthorizedException,
@@ -30,5 +31,14 @@ export class AdminController {
     if (!email)
       throw new BadRequestException("email or tenantId query param required");
     return this.adminService.disconnectWaba(email);
+  }
+
+  // ONE-TIME backfill for tenants that connected WhatsApp before
+  // metaBusinessId capture existed. Run once, verify the results, then
+  // delete this route entirely — it must never remain reachable.
+  @Post("backfill-business-ids")
+  backfillBusinessIds(@Headers("x-admin-secret") secret: string | undefined) {
+    this.checkSecret(secret);
+    return this.adminService.backfillBusinessIds();
   }
 }

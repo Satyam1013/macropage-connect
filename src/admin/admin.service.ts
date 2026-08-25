@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, Logger } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
 import { Model } from "mongoose";
+import axios from "axios";
 import {
   WABAAccount,
   WABAAccountDocument,
@@ -8,6 +9,8 @@ import {
 import { User, UserDocument } from "../users/schemas/user.schema";
 import { Tenant, TenantDocument } from "../schemas/tenant.schema";
 import { TenantResolverService } from "../tenant/tenant-resolver.service";
+import { EncryptionService } from "../meta/encryption.service";
+import { META_GRAPH_BASE } from "../meta/meta.constants";
 
 @Injectable()
 export class AdminService {
@@ -21,6 +24,7 @@ export class AdminService {
     @InjectModel(Tenant.name)
     private readonly tenantModel: Model<TenantDocument>,
     private readonly tenantResolver: TenantResolverService,
+    private readonly encryptionService: EncryptionService,
   ) {}
 
   async disconnectWabaByTenantId(tenantId: string) {
@@ -100,5 +104,63 @@ export class AdminService {
         deletedWabaId: waba.wabaId,
       },
     };
+  }
+
+  // ONE-TIME backfill for tenants that connected WhatsApp before
+  // metaBusinessId capture existed — run once via the admin route, verify
+  // the results, then remove the route. Never meant to stay live.
+  async backfillBusinessIds() {
+    const wabasNeedingFix = await this.wabaModel.find({
+      metaConnected: true,
+      $or: [{ metaBusinessId: null }, { metaBusinessId: { $exists: false } }],
+    });
+
+    const results: Array<{
+      tenantId: string;
+      status: "fixed" | "no_business_id_found" | "failed";
+      metaBusinessId?: string;
+      error?: string;
+    }> = [];
+
+    for (const waba of wabasNeedingFix) {
+      try {
+        const accessToken = this.encryptionService.decrypt(waba.accessToken);
+        const response = await axios.get(`${META_GRAPH_BASE}/${waba.wabaId}`, {
+          params: {
+            fields: "on_behalf_of_business_info",
+            access_token: accessToken,
+          },
+        });
+
+        const metaBusinessId = (
+          response.data as { on_behalf_of_business_info?: { id?: string } }
+        ).on_behalf_of_business_info?.id;
+
+        if (metaBusinessId) {
+          await this.wabaModel.updateOne(
+            { _id: waba._id },
+            { $set: { metaBusinessId } },
+          );
+          results.push({
+            tenantId: waba.tenantId,
+            status: "fixed",
+            metaBusinessId,
+          });
+        } else {
+          results.push({
+            tenantId: waba.tenantId,
+            status: "no_business_id_found",
+          });
+        }
+      } catch (err) {
+        results.push({
+          tenantId: waba.tenantId,
+          status: "failed",
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+
+    return { success: true, data: results };
   }
 }

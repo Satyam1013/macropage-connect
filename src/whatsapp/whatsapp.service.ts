@@ -221,31 +221,25 @@ export class WhatsappService {
       });
     }
 
-    // Step 3 — discover WABA (if not provided) and the owning Business ID.
-    // The Business ID is fetched regardless of whether wabaId was passed
-    // explicitly — it's needed later to create a product catalog, which
-    // lives under the business (owned_product_catalogs), not the WABA.
+    // Step 3 — discover WABA if not provided.
     let wabaId = dto.wabaId;
-    let metaBusinessId: string | undefined;
-    try {
-      const bizResp = await axios.get(`${BASE}/me/businesses`, {
-        params: {
-          fields: "id,name,whatsapp_business_accounts",
-          access_token: longToken,
-        },
-      });
-      const biz = (
-        bizResp.data as {
-          data?: Array<{
-            id?: string;
-            whatsapp_business_accounts?: { data?: Array<{ id: string }> };
-          }>;
-        }
-      ).data?.[0];
-      metaBusinessId = biz?.id;
-      wabaId = wabaId ?? biz?.whatsapp_business_accounts?.data?.[0]?.id;
-    } catch {
-      if (!wabaId) {
+    if (!wabaId) {
+      try {
+        const bizResp = await axios.get(`${BASE}/me/businesses`, {
+          params: {
+            fields: "id,name,whatsapp_business_accounts",
+            access_token: longToken,
+          },
+        });
+        const biz = (
+          bizResp.data as {
+            data?: Array<{
+              whatsapp_business_accounts?: { data?: Array<{ id: string }> };
+            }>;
+          }
+        ).data?.[0];
+        wabaId = biz?.whatsapp_business_accounts?.data?.[0]?.id;
+      } catch {
         throw new BadRequestException({
           success: false,
           error: {
@@ -263,6 +257,37 @@ export class WhatsappService {
           message: "No WABA found on this Facebook account",
         },
       });
+    }
+
+    // Fetch the Business ID directly from the WABA via
+    // on_behalf_of_business_info — more reliable than parsing it out of
+    // /me/businesses, which was missing/wrong often enough to require
+    // manual DB patches before catalog connection would work. A failure
+    // here must never block WhatsApp connection from completing: log and
+    // continue — catalog connection will surface a clear error later if
+    // this is genuinely missing.
+    let metaBusinessId: string | undefined;
+    try {
+      const businessInfoResp = await axios.get(`${BASE}/${wabaId}`, {
+        params: {
+          fields: "on_behalf_of_business_info",
+          access_token: longToken,
+        },
+      });
+      metaBusinessId = (
+        businessInfoResp.data as {
+          on_behalf_of_business_info?: { id?: string };
+        }
+      ).on_behalf_of_business_info?.id;
+      if (!metaBusinessId) {
+        this.logger.warn(
+          `No business ID found for WABA ${wabaId} during Embedded Signup`,
+        );
+      }
+    } catch (err) {
+      this.logger.error(
+        `Failed to fetch business info for WABA ${wabaId}: ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
 
     // Step 4 — get phone numbers
@@ -359,6 +384,7 @@ export class WhatsappService {
         displayName: phone.verified_name,
         qualityRating: phone.quality_rating ?? "GREEN",
         messagingTier: phone.messaging_limit_tier ?? "TIER_1K",
+        metaBusinessId: metaBusinessId ?? null,
         nextStep: 3,
       },
     };
