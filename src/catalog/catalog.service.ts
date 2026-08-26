@@ -1,4 +1,9 @@
-import { BadRequestException, Injectable, Logger } from "@nestjs/common";
+import {
+  BadRequestException,
+  InternalServerErrorException,
+  Injectable,
+  Logger,
+} from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
 import { Model } from "mongoose";
 import axios from "axios";
@@ -131,9 +136,23 @@ export class CatalogService {
         catalogs.find((c) => c.vertical?.toLowerCase() === "commerce") ??
         catalogs[0];
 
-      // Link the catalog to the WABA using the SYSTEM USER token
-      // (permanent, already stored/encrypted) — not the popup token above.
-      const systemToken = this.encryptionService.decrypt(waba.accessToken);
+      // Link the catalog to the WABA using the platform's own Tech
+      // Provider System User token — not the merchant's stored
+      // waba.accessToken (that's the merchant's personal long-lived user
+      // token from Embedded Signup) and not the popup token above. WABA
+      // management calls in this Tech Provider setup go through the
+      // System User, same as registerPhoneNumber()'s /register call —
+      // using the wrong token here is what was causing Meta to reject the
+      // link with a generic "Invalid parameter".
+      const systemToken = process.env.META_SYSTEM_USER_TOKEN;
+      if (!systemToken) {
+        this.logger.error("[connectCatalog] META_SYSTEM_USER_TOKEN is not set");
+        throw new InternalServerErrorException({
+          success: false,
+          code: "SERVER_CONFIG_ERROR",
+          message: "System token not configured — contact support",
+        });
+      }
 
       try {
         await axios.post(
