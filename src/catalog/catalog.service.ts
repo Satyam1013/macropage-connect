@@ -88,24 +88,36 @@ export class CatalogService {
       });
     }
 
-    // Tags which Graph API call actually failed in the logs — Meta's error
-    // messages ("Invalid parameter", etc.) are too generic on their own to
-    // tell the three calls below apart.
+    // Tags which Graph API call actually failed in the logs, and dumps
+    // everything Meta gave us about why — the top-level error.message alone
+    // ("Invalid parameter", etc.) has repeatedly not been specific enough
+    // to diagnose by reasoning alone. error_subcode / error_user_msg /
+    // fbtrace_id live deeper in the same response body.
     const logStep = (step: string, err: unknown) => {
-      const detail =
-        (axios.isAxiosError(err) &&
-          (err.response?.data as { error?: { message?: string } })?.error
-            ?.message) ||
-        (err instanceof Error ? err.message : String(err));
-      this.logger.error(
-        `Catalog connect [${step}] failed for tenant ${tenantId}: ${detail}`,
-      );
+      if (axios.isAxiosError(err)) {
+        this.logger.error(
+          `Catalog connect [${step}] tenant=${tenantId} FULL Meta error response: ${JSON.stringify(err.response?.data, null, 2)}`,
+        );
+        this.logger.error(
+          `Catalog connect [${step}] tenant=${tenantId} request: ${err.config?.method?.toUpperCase()} ${err.config?.url}`,
+        );
+        this.logger.error(
+          `Catalog connect [${step}] tenant=${tenantId} request body/params: ${JSON.stringify(err.config?.data ?? err.config?.params, null, 2)}`,
+        );
+      } else {
+        this.logger.error(
+          `Catalog connect [${step}] tenant=${tenantId} non-Axios error: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
     };
 
     try {
       // The popup returns a usable access token directly — no code
       // exchange needed. Fetch the catalog(s) now visible under this
       // business after the merchant created/selected one inside the popup.
+      this.logger.log(
+        `Catalog connect tenant=${tenantId} metaBusinessId=${waba.metaBusinessId} — fetching catalogs...`,
+      );
       let catalogsResponse: {
         data: {
           data?: Array<{ id: string; name?: string; vertical?: string }>;
@@ -122,6 +134,9 @@ export class CatalogService {
       }
 
       const catalogs = catalogsResponse.data.data ?? [];
+      this.logger.log(
+        `Catalog connect tenant=${tenantId} catalogs found: ${JSON.stringify(catalogs)}`,
+      );
       if (catalogs.length === 0) {
         throw new BadRequestException({
           success: false,
@@ -135,6 +150,9 @@ export class CatalogService {
       const catalog =
         catalogs.find((c) => c.vertical?.toLowerCase() === "commerce") ??
         catalogs[0];
+      this.logger.log(
+        `Catalog connect tenant=${tenantId} selected catalog: ${JSON.stringify(catalog)}`,
+      );
 
       // Link the catalog to the WABA using the platform's own Tech
       // Provider System User token — not the merchant's stored
@@ -154,6 +172,9 @@ export class CatalogService {
         });
       }
 
+      this.logger.log(
+        `Catalog connect tenant=${tenantId} — linking catalog to WABA: wabaId=${waba.wabaId}, catalogId=${catalog.id}`,
+      );
       try {
         await axios.post(
           `${META_GRAPH_BASE}/${waba.wabaId}/product_catalogs`,
@@ -164,7 +185,11 @@ export class CatalogService {
         logStep("link-to-waba", err);
         throw err;
       }
+      this.logger.log(`Catalog connect tenant=${tenantId} — link succeeded`);
 
+      this.logger.log(
+        `Catalog connect tenant=${tenantId} — enabling commerce settings on phoneNumberId=${waba.phoneNumberId}`,
+      );
       try {
         // Enable commerce settings on the phone number
         await axios.post(
@@ -176,6 +201,9 @@ export class CatalogService {
         logStep("commerce-settings", err);
         throw err;
       }
+      this.logger.log(
+        `Catalog connect tenant=${tenantId} — commerce settings succeeded`,
+      );
 
       const saved = await this.catalogModel.findOneAndUpdate(
         { tenantId },
