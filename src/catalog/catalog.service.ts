@@ -95,14 +95,18 @@ export class CatalogService {
     // fbtrace_id live deeper in the same response body.
     const logStep = (step: string, err: unknown) => {
       if (axios.isAxiosError(err)) {
+        // Compact (no pretty-print indentation) — a `null, 2` indented
+        // JSON.stringify embeds newlines, and Render's log pipeline splits
+        // log lines on those, fragmenting the object across multiple lines
+        // so only the first ("{") ever shows up. Single line survives that.
         this.logger.error(
-          `Catalog connect [${step}] tenant=${tenantId} FULL Meta error response: ${JSON.stringify(err.response?.data, null, 2)}`,
+          `Catalog connect [${step}] tenant=${tenantId} FULL Meta error response: ${JSON.stringify(err.response?.data)}`,
         );
         this.logger.error(
           `Catalog connect [${step}] tenant=${tenantId} request: ${err.config?.method?.toUpperCase()} ${err.config?.url}`,
         );
         this.logger.error(
-          `Catalog connect [${step}] tenant=${tenantId} request body/params: ${JSON.stringify(err.config?.data ?? err.config?.params, null, 2)}`,
+          `Catalog connect [${step}] tenant=${tenantId} request body/params: ${JSON.stringify(err.config?.data ?? err.config?.params)}`,
         );
       } else {
         this.logger.error(
