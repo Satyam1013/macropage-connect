@@ -187,17 +187,32 @@ export class CatalogService {
       // real attempt: linking without this fails with error_subcode
       // 2388100, error_user_msg "You don't have permission to this
       // catalogue... ask a business admin to grant this for you."
-      const systemUserId = process.env.META_SYSTEM_USER_ID;
       const systemToken = process.env.META_SYSTEM_USER_TOKEN;
-      if (!systemUserId || !systemToken) {
-        this.logger.error(
-          "[connectCatalog] META_SYSTEM_USER_ID or META_SYSTEM_USER_TOKEN is not set",
-        );
+      if (!systemToken) {
+        this.logger.error("[connectCatalog] META_SYSTEM_USER_TOKEN is not set");
         throw new InternalServerErrorException({
           success: false,
           code: "SERVER_CONFIG_ERROR",
           message: "System token not configured — contact support",
         });
+      }
+
+      // assigned_users rejects the System User's "global" Business Manager
+      // ID with "(#100) Param user does not accept global user IDs. Pass
+      // an app-scoped ID instead." — resolve it dynamically via /me using
+      // the System User's own token, which returns the ID in whatever
+      // form Meta considers valid for calls made through this app, rather
+      // than trusting a manually-copied ID's format.
+      let systemUserId: string;
+      try {
+        const meResponse = await axios.get<{ id: string }>(
+          `${META_GRAPH_BASE}/me`,
+          { params: { access_token: systemToken } },
+        );
+        systemUserId = meResponse.data.id;
+      } catch (err) {
+        logStep("resolve-system-user-id", err);
+        throw err;
       }
 
       // Grant access using the merchant's own popup token — they own this
