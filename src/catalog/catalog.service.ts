@@ -179,23 +179,47 @@ export class CatalogService {
         `Catalog connect tenant=${tenantId} selected catalog: ${JSON.stringify(catalog)}`,
       );
 
-      // Link the catalog to the WABA using the platform's own Tech
-      // Provider System User token — not the merchant's stored
-      // waba.accessToken (that's the merchant's personal long-lived user
-      // token from Embedded Signup) and not the popup token above. WABA
-      // management calls in this Tech Provider setup go through the
-      // System User, same as registerPhoneNumber()'s /register call —
-      // using the wrong token here is what was causing Meta to reject the
-      // link with a generic "Invalid parameter".
+      // The platform's own Tech Provider System User is used for
+      // WABA-management calls (same pattern as registerPhoneNumber()'s
+      // /register call) — but it must first be explicitly granted "Manage
+      // catalogue" access on THIS catalog, since it wasn't the one that
+      // created it (the merchant's own popup token was). Confirmed via a
+      // real attempt: linking without this fails with error_subcode
+      // 2388100, error_user_msg "You don't have permission to this
+      // catalogue... ask a business admin to grant this for you."
+      const systemUserId = process.env.META_SYSTEM_USER_ID;
       const systemToken = process.env.META_SYSTEM_USER_TOKEN;
-      if (!systemToken) {
-        this.logger.error("[connectCatalog] META_SYSTEM_USER_TOKEN is not set");
+      if (!systemUserId || !systemToken) {
+        this.logger.error(
+          "[connectCatalog] META_SYSTEM_USER_ID or META_SYSTEM_USER_TOKEN is not set",
+        );
         throw new InternalServerErrorException({
           success: false,
           code: "SERVER_CONFIG_ERROR",
           message: "System token not configured — contact support",
         });
       }
+
+      // Grant access using the merchant's own popup token — they own this
+      // catalog (or just created it), so their token is what can grant
+      // another user "Manage" access to it, not the System User's own
+      // token (which is exactly the access it doesn't have yet).
+      this.logger.log(
+        `Catalog connect tenant=${tenantId} — assigning system user ${systemUserId} to catalog ${catalog.id}`,
+      );
+      try {
+        await axios.post(
+          `${META_GRAPH_BASE}/${catalog.id}/assigned_users`,
+          { user: systemUserId, tasks: ["MANAGE"] },
+          { params: { access_token: accessToken } },
+        );
+      } catch (err) {
+        logStep("assign-system-user", err);
+        throw err;
+      }
+      this.logger.log(
+        `Catalog connect tenant=${tenantId} — system user assigned`,
+      );
 
       this.logger.log(
         `Catalog connect tenant=${tenantId} — linking catalog to WABA: wabaId=${waba.wabaId}, catalogId=${catalog.id}`,
