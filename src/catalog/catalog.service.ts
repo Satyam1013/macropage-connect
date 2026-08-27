@@ -141,19 +141,40 @@ export class CatalogService {
       this.logger.log(
         `Catalog connect tenant=${tenantId} catalogs found: ${JSON.stringify(catalogs)}`,
       );
-      if (catalogs.length === 0) {
-        throw new BadRequestException({
-          success: false,
-          code: "NO_CATALOG_FOUND",
-          message: "No catalog was found or created. Please try again.",
-        });
-      }
 
-      // Prefer a catalog with the correct commerce vertical if multiple
-      // exist; otherwise take the first one returned.
-      const catalog =
-        catalogs.find((c) => c.vertical?.toLowerCase() === "commerce") ??
-        catalogs[0];
+      // WhatsApp's product_catalogs link endpoint requires a
+      // commerce-vertical catalog — a "generic" one (what Meta auto-creates
+      // by default, which is what most merchants actually have) gets
+      // rejected outright regardless of token/permissions (confirmed via
+      // error_subcode 2388100 on a real attempt). Prefer an existing
+      // commerce catalog if the merchant already has one; otherwise create
+      // one server-side with the correct vertical rather than trying (and
+      // failing) to link an incompatible one.
+      let catalog:
+        | { id: string; name?: string; vertical?: string }
+        | undefined = catalogs.find(
+        (c) => c.vertical?.toLowerCase() === "commerce",
+      );
+
+      if (!catalog) {
+        this.logger.log(
+          `Catalog connect tenant=${tenantId} — no commerce-vertical catalog found among ${catalogs.length} existing catalog(s), creating one`,
+        );
+        try {
+          const createResponse = await axios.post<{ id: string }>(
+            `${META_GRAPH_BASE}/${waba.metaBusinessId}/owned_product_catalogs`,
+            {
+              name: `${waba.displayName ?? "Macropage"} Catalog`,
+              vertical: "commerce",
+            },
+            { params: { access_token: accessToken } },
+          );
+          catalog = { id: createResponse.data.id, vertical: "commerce" };
+        } catch (err) {
+          logStep("create-catalog", err);
+          throw err;
+        }
+      }
       this.logger.log(
         `Catalog connect tenant=${tenantId} selected catalog: ${JSON.stringify(catalog)}`,
       );
