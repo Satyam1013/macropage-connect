@@ -1,5 +1,6 @@
 import {
   Injectable,
+  Logger,
   NotFoundException,
   BadRequestException,
   ConflictException,
@@ -14,6 +15,8 @@ import { CreateTemplateDto } from "./dto/create-template.dto";
 
 @Injectable()
 export class TemplatesService {
+  private readonly logger = new Logger(TemplatesService.name);
+
   constructor(
     @InjectModel(Template.name)
     private readonly templateModel: Model<TemplateDocument>,
@@ -301,22 +304,55 @@ export class TemplatesService {
 
     let updated = 0;
     for (const t of templates) {
-      await this.templateModel.findOneAndUpdate(
-        {
-          tenantId,
-          name: t["name"] as string,
-          language: t["language"] as string,
-        },
-        {
-          $set: {
-            status: t["status"],
-            category: t["category"],
-            metaTemplateId: t["id"],
+      const components =
+        (t["components"] as Array<Record<string, unknown>> | undefined) ?? [];
+      const bodyComp = components.find((c) => c["type"] === "BODY");
+      const headerComp = components.find((c) => c["type"] === "HEADER");
+      const footerComp = components.find((c) => c["type"] === "FOOTER");
+      const buttonsComp = components.find((c) => c["type"] === "BUTTONS");
+
+      // `body` is a required schema field, but AUTHENTICATION templates
+      // have no `text` on their BODY component at all (Meta's fixed
+      // preset) — without a fallback, the upsert fails schema validation
+      // for any template that only exists on Meta (e.g. one created
+      // directly in Meta's own WhatsApp Manager, never through our own
+      // create()/update()), silently breaking sync for it.
+      const body =
+        (bodyComp?.["text"] as string | undefined) ??
+        "{{1}} is your verification code.";
+
+      const setFields: Record<string, unknown> = {
+        status: t["status"],
+        category: t["category"],
+        metaTemplateId: t["id"],
+        body,
+      };
+      if (headerComp) setFields.header = headerComp;
+      if (buttonsComp) setFields.buttons = buttonsComp;
+      const footerText = footerComp?.["text"];
+      if (typeof footerText === "string" && footerText) {
+        setFields.footer = footerText;
+      }
+
+      try {
+        await this.templateModel.findOneAndUpdate(
+          {
+            tenantId,
+            name: t["name"] as string,
+            language: t["language"] as string,
           },
-        },
-        { upsert: true },
-      );
-      updated++;
+          { $set: setFields },
+          { upsert: true },
+        );
+        updated++;
+      } catch (err) {
+        // One malformed/unexpected template from Meta shouldn't break
+        // sync for the rest.
+        const message = err instanceof Error ? err.message : String(err);
+        this.logger.error(
+          `[syncFromMeta] Failed to upsert template ${String(t["name"])} for tenant ${tenantId}: ${message}`,
+        );
+      }
     }
     return { updated };
   }
