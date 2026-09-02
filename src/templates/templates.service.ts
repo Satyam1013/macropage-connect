@@ -64,6 +64,38 @@ export class TemplatesService {
       }
     }
 
+    if (dto.category === "AUTHENTICATION") {
+      // Meta doesn't support a custom `text` property for AUTHENTICATION
+      // templates at all — the body is a fixed, non-customizable preset
+      // ("{{1}} is your verification code.") and only one variable (the
+      // code itself) is allowed. Sending dto.body as `text` here (like
+      // every other category) gets rejected with "component of type BODY
+      // has unexpected field(s) (text)".
+      components.push({ type: "BODY", add_security_recommendation: true });
+
+      // FOOTER for authentication templates is code_expiration_minutes,
+      // not free text — only add it if dto.footer is a clean integer;
+      // otherwise Meta's FOOTER is optional here, so just omit it.
+      const expirationMinutes = Number(dto.footer);
+      if (dto.footer && Number.isInteger(expirationMinutes)) {
+        components.push({
+          type: "FOOTER",
+          code_expiration_minutes: expirationMinutes,
+        });
+      }
+
+      // BUTTONS is required for authentication templates — default to the
+      // standard OTP copy-code button when the caller didn't provide one.
+      components.push(
+        dto.buttons ?? {
+          type: "BUTTONS",
+          buttons: [{ type: "OTP", otp_type: "COPY_CODE" }],
+        },
+      );
+
+      return components;
+    }
+
     const bodyComp: Record<string, unknown> = { type: "BODY", text: dto.body };
     const bodyHasVars = /\{\{\d+\}\}/.test(dto.body);
     if (bodyHasVars) {
@@ -240,6 +272,7 @@ export class TemplatesService {
       footer,
       buttons,
       sampleVariables,
+      category,
     });
 
     const client = await this.metaService.getClient(tenantId);
