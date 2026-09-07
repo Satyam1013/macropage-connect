@@ -324,7 +324,29 @@ export class BillingService {
         pendingRazorpaySubId: data.razorpay_subscription_id,
       })
       .exec();
-    if (!sub) throw new NotFoundException("Subscription not found");
+    if (!sub) {
+      // Razorpay's subscription.activated/charged webhook can beat this
+      // client-side call to the punch — it already promotes pending →
+      // real and clears pendingRazorpaySubId, so by the time this runs
+      // there's nothing left to match, even though the subscription is
+      // genuinely active. Without this, the user sees a false "couldn't
+      // confirm payment" error despite everything having worked.
+      const alreadyActivated = await this.subModel
+        .findOne({ tenantId, razorpaySubId: data.razorpay_subscription_id })
+        .exec();
+      if (alreadyActivated) {
+        return {
+          success: true,
+          data: {
+            message: "Payment verified — plan activated",
+            plan: alreadyActivated.plan,
+            billingCycle: alreadyActivated.billingCycle,
+            currentPeriodEnd: alreadyActivated.currentPeriodEnd,
+          },
+        };
+      }
+      throw new NotFoundException("Subscription not found");
+    }
 
     const rzpSub = await this.razorpayService.fetchSubscription(
       data.razorpay_subscription_id,
