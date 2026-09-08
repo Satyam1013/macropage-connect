@@ -16,11 +16,13 @@ import {
 import { TeamService } from "./team.service";
 import { ActivityService } from "../users/activity.service";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
-import type { AuthReq } from "../auth/dto/auth-request.interface";
+import type { ProjectAuthReq } from "../auth/dto/auth-request.interface";
+import { ProjectAccessGuard } from "../common/guards/project-access.guard";
 import { UserRole } from "../auth/auth.constants";
 
-@Controller("team")
-export class TeamController {
+@Controller("projects/:projectId/team")
+@UseGuards(JwtAuthGuard, ProjectAccessGuard)
+export class TeamProjectController {
   constructor(
     private readonly teamService: TeamService,
     private readonly activityService: ActivityService,
@@ -28,26 +30,22 @@ export class TeamController {
 
   // ── Static GET routes (must come before /:id) ─────────────────────────────
 
-  @UseGuards(JwtAuthGuard)
   @Get()
-  findAll(@Request() req: AuthReq, @Query("search") search?: string) {
-    const tenantId = req.user.tenantId ?? req.user.id;
-    return this.teamService.findAll(tenantId, search);
+  findAll(@Request() req: ProjectAuthReq, @Query("search") search?: string) {
+    return this.teamService.findAll(req.projectId, search);
   }
 
-  @UseGuards(JwtAuthGuard)
   @Get("activity")
   getMemberActivity(
-    @Request() req: AuthReq,
+    @Request() req: ProjectAuthReq,
     @Query("memberId") memberId?: string,
     @Query("page") page?: string,
     @Query("limit") limit?: string,
     @Query("type") type?: string,
   ) {
     if (!memberId) throw new BadRequestException("memberId is required");
-    const tenantId = req.user.tenantId ?? req.user.id;
     return this.activityService.getUserActivity(
-      tenantId,
+      req.projectId,
       memberId,
       page ? Number(page) : 1,
       limit ? Number(limit) : 20,
@@ -55,19 +53,87 @@ export class TeamController {
     );
   }
 
-  @UseGuards(JwtAuthGuard)
   @Get("assignable")
-  getAssignableMembers(@Request() req: AuthReq) {
-    const tenantId = req.user.tenantId ?? req.user.id;
-    return this.teamService.getAssignableMembers(tenantId);
+  getAssignableMembers(@Request() req: ProjectAuthReq) {
+    return this.teamService.getAssignableMembers(req.projectId);
   }
 
-  @UseGuards(JwtAuthGuard)
   @Get("invites")
-  getInvites(@Request() req: AuthReq) {
-    const tenantId = req.user.tenantId ?? req.user.id;
-    return this.teamService.getInvites(tenantId);
+  getInvites(@Request() req: ProjectAuthReq) {
+    return this.teamService.getInvites(req.projectId);
   }
+
+  // ── Dynamic /:id route (must come after all static routes) ────────────────
+
+  @Get(":id")
+  findOne(@Request() req: ProjectAuthReq, @Param("id") id: string) {
+    return this.teamService.findOne(req.projectId, id);
+  }
+
+  // ── Invite actions ────────────────────────────────────────────────────────
+
+  @Post("invite")
+  @HttpCode(HttpStatus.CREATED)
+  invite(
+    @Request() req: ProjectAuthReq,
+    @Body()
+    body: {
+      emails: string[];
+      role: UserRole;
+      message?: string;
+      expiresIn?: string;
+    },
+  ) {
+    return this.teamService.invite(
+      req.projectId,
+      req.user.id,
+      req.user.name,
+      body.emails,
+      body.role,
+      body.message,
+      body.expiresIn,
+    );
+  }
+
+  @Post("invite/:id/resend")
+  @HttpCode(HttpStatus.OK)
+  resendInvite(@Request() req: ProjectAuthReq, @Param("id") id: string) {
+    return this.teamService.resendInvite(req.projectId, id, req.user.name);
+  }
+
+  @Delete("invite/:id")
+  @HttpCode(HttpStatus.OK)
+  cancelInviteById(@Request() req: ProjectAuthReq, @Param("id") id: string) {
+    return this.teamService.cancelInvite(req.projectId, id);
+  }
+
+  @Delete("invites/:id")
+  @HttpCode(HttpStatus.NO_CONTENT)
+  cancelInvite(@Request() req: ProjectAuthReq, @Param("id") id: string) {
+    return this.teamService.cancelInvite(req.projectId, id);
+  }
+
+  // ── Member actions ────────────────────────────────────────────────────────
+
+  @Patch(":id/role")
+  changeRole(
+    @Request() req: ProjectAuthReq,
+    @Param("id") id: string,
+    @Body("role") role: UserRole,
+  ) {
+    return this.teamService.changeRole(req.projectId, id, role, req.user.id);
+  }
+
+  @Delete(":id")
+  @HttpCode(HttpStatus.NO_CONTENT)
+  deactivate(@Request() req: ProjectAuthReq, @Param("id") id: string) {
+    return this.teamService.deactivate(req.projectId, id, req.user.id);
+  }
+}
+
+@Controller("team")
+export class TeamController {
+  constructor(private readonly teamService: TeamService) {}
 
   // PUBLIC — no auth (invitee has no account yet)
   @Get("invite/verify/:token")
@@ -82,86 +148,5 @@ export class TeamController {
     @Body() body: { token: string; name: string; password: string },
   ) {
     return this.teamService.acceptInvite(body);
-  }
-
-  // ── Dynamic /:id route (must come after all static routes) ────────────────
-
-  @UseGuards(JwtAuthGuard)
-  @Get(":id")
-  findOne(@Request() req: AuthReq, @Param("id") id: string) {
-    const tenantId = req.user.tenantId ?? req.user.id;
-    return this.teamService.findOne(tenantId, id);
-  }
-
-  // ── Invite actions ────────────────────────────────────────────────────────
-
-  @UseGuards(JwtAuthGuard)
-  @Post("invite")
-  @HttpCode(HttpStatus.CREATED)
-  invite(
-    @Request() req: AuthReq,
-    @Body()
-    body: {
-      emails: string[];
-      role: UserRole;
-      message?: string;
-      expiresIn?: string;
-    },
-  ) {
-    const tenantId = req.user.tenantId ?? req.user.id;
-    return this.teamService.invite(
-      tenantId,
-      req.user.id,
-      req.user.name,
-      body.emails,
-      body.role,
-      body.message,
-      body.expiresIn,
-    );
-  }
-
-  @UseGuards(JwtAuthGuard)
-  @Post("invite/:id/resend")
-  @HttpCode(HttpStatus.OK)
-  resendInvite(@Request() req: AuthReq, @Param("id") id: string) {
-    const tenantId = req.user.tenantId ?? req.user.id;
-    return this.teamService.resendInvite(tenantId, id, req.user.name);
-  }
-
-  @UseGuards(JwtAuthGuard)
-  @Delete("invite/:id")
-  @HttpCode(HttpStatus.OK)
-  cancelInviteById(@Request() req: AuthReq, @Param("id") id: string) {
-    const tenantId = req.user.tenantId ?? req.user.id;
-    return this.teamService.cancelInvite(tenantId, id);
-  }
-
-  @UseGuards(JwtAuthGuard)
-  @Delete("invites/:id")
-  @HttpCode(HttpStatus.NO_CONTENT)
-  cancelInvite(@Request() req: AuthReq, @Param("id") id: string) {
-    const tenantId = req.user.tenantId ?? req.user.id;
-    return this.teamService.cancelInvite(tenantId, id);
-  }
-
-  // ── Member actions ────────────────────────────────────────────────────────
-
-  @UseGuards(JwtAuthGuard)
-  @Patch(":id/role")
-  changeRole(
-    @Request() req: AuthReq,
-    @Param("id") id: string,
-    @Body("role") role: UserRole,
-  ) {
-    const tenantId = req.user.tenantId ?? req.user.id;
-    return this.teamService.changeRole(tenantId, id, role, req.user.id);
-  }
-
-  @UseGuards(JwtAuthGuard)
-  @Delete(":id")
-  @HttpCode(HttpStatus.NO_CONTENT)
-  deactivate(@Request() req: AuthReq, @Param("id") id: string) {
-    const tenantId = req.user.tenantId ?? req.user.id;
-    return this.teamService.deactivate(tenantId, id, req.user.id);
   }
 }

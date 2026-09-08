@@ -12,7 +12,11 @@ import { AutomationService } from "../automation/automation.service";
 import { FlowEngineService } from "../automation/flow-engine.service";
 import { MediaDownloadService } from "../whatsapp/media-download.service";
 import { NotificationsService } from "../notifications/notifications.service";
-import { User, UserDocument } from "../users/schemas/user.schema";
+import {
+  OrderFulfillmentService,
+  RawOrderItem,
+} from "../catalog/order-fulfillment.service";
+import { TenantResolverService } from "../tenant/tenant-resolver.service";
 
 interface InboundMediaField {
   id?: string;
@@ -28,14 +32,14 @@ export class WebhookService {
   constructor(
     @InjectModel(WABAAccount.name)
     private readonly wabaModel: Model<WABAAccountDocument>,
-    @InjectModel(User.name)
-    private readonly userModel: Model<UserDocument>,
     private readonly contactsService: ContactsService,
     private readonly conversationsService: ConversationsService,
     private readonly automationService: AutomationService,
     private readonly flowEngineService: FlowEngineService,
     private readonly mediaDownloadService: MediaDownloadService,
     private readonly notificationsService: NotificationsService,
+    private readonly orderFulfillmentService: OrderFulfillmentService,
+    private readonly tenantResolver: TenantResolverService,
   ) {}
 
   verifyWebhook(query: Record<string, string>): string {
@@ -108,15 +112,8 @@ export class WebhookService {
     }
   }
 
-  // tenantId is always the owner's own _id — invited team members are the
-  // only users that ever get a distinct `tenantId` field stored on them.
-  private async findOwnerId(tenantId: string): Promise<string | undefined> {
-    const owner = await this.userModel
-      .findById(tenantId)
-      .select("_id")
-      .lean()
-      .exec();
-    return owner ? String(owner._id) : undefined;
+  private findOwnerId(tenantId: string): Promise<string | undefined> {
+    return this.tenantResolver.resolveOwnerId(tenantId);
   }
 
   private async handleInboundMessage(
@@ -148,6 +145,7 @@ export class WebhookService {
       let mimeType: string | undefined;
       let fileName: string | undefined;
       let buttonReplyId: string | undefined;
+      let orderItems: RawOrderItem[] | undefined;
 
       switch (type) {
         case "text":
@@ -202,6 +200,19 @@ export class WebhookService {
         case "reaction":
           content = (msg.reaction as { emoji?: string })?.emoji ?? "";
           break;
+        case "order": {
+          const order = msg.order as
+            | {
+                catalog_id?: string;
+                text?: string;
+                product_items?: RawOrderItem[];
+              }
+            | undefined;
+          orderItems = order?.product_items ?? [];
+          content =
+            order?.text?.trim() || `Order — ${orderItems.length} item(s)`;
+          break;
+        }
         default:
           content = (msg.caption as string) ?? "";
       }
@@ -253,6 +264,38 @@ export class WebhookService {
               err,
             ),
           );
+      }
+
+      if (type === "order" && orderItems && orderItems.length > 0) {
+        try {
+          const order =
+            await this.orderFulfillmentService.createFromWebhookOrder(
+              tenantId,
+              contact.id,
+              conversation.id,
+              orderItems,
+            );
+
+          const orderNotifyUserId =
+            conversation.assignedTo ?? (await this.findOwnerId(tenantId));
+          if (orderNotifyUserId) {
+            await this.notificationsService.create(
+              tenantId,
+              orderNotifyUserId,
+              "new_order",
+              "New order received",
+              `${contact.name ?? contact.phone} placed an order worth ₹${(
+                order.totalAmount / 100
+              ).toFixed(2)}`,
+              { conversationId: conversation.id, orderId: order.id },
+            );
+          }
+        } catch (err) {
+          this.logger.error(
+            `Failed to process inbound order for tenant ${tenantId}`,
+            err,
+          );
+        }
       }
 
       // A conversation mid-flow owns the next inbound reply — automation

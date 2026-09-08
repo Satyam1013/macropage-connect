@@ -26,44 +26,66 @@ import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { PlatformRolesGuard } from "../common/guards/platform-roles.guard";
 import { PlatformRoles } from "../common/decorators/platform-roles.decorator";
 import { PlatformRole } from "../auth/auth.constants";
-import type { AuthReq } from "../auth/dto/auth-request.interface";
+import type { ProjectAuthReq } from "../auth/dto/auth-request.interface";
+import { ProjectAccessGuard } from "../common/guards/project-access.guard";
 
-@Controller("help")
-export class HelpController {
+@Controller("projects/:projectId/help")
+@UseGuards(JwtAuthGuard, ProjectAccessGuard)
+export class HelpProjectController {
   constructor(private readonly helpService: HelpService) {}
 
   @Post("tickets")
   @HttpCode(HttpStatus.CREATED)
-  @UseGuards(JwtAuthGuard)
-  createTicket(@Request() req: AuthReq, @Body() dto: CreateTicketDto) {
-    const tenantId = req.user.tenantId ?? req.user.id;
+  createTicket(@Request() req: ProjectAuthReq, @Body() dto: CreateTicketDto) {
     return this.helpService.createTicket(
-      tenantId,
+      req.projectId,
       { id: req.user.id, name: req.user.name, email: req.user.email },
       dto,
     );
   }
 
   @Get("tickets")
-  @UseGuards(JwtAuthGuard)
   async getTickets(
-    @Request() req: AuthReq,
+    @Request() req: ProjectAuthReq,
     @Query("page") page?: string,
     @Query("limit") limit?: string,
   ) {
-    const tenantId = req.user.tenantId ?? req.user.id;
     const {
       data,
       total,
       page: p,
       limit: l,
     } = await this.helpService.listTickets(
-      tenantId,
+      req.projectId,
       page ? Number(page) : 1,
       limit ? Number(limit) : 20,
     );
     return { success: true, data, total, page: p, limit: l };
   }
+
+  @Get("tickets/:id")
+  async getTicket(@Request() req: ProjectAuthReq, @Param("id") id: string) {
+    const data = await this.helpService.getTicketById(req.projectId, id);
+    return { success: true, data };
+  }
+
+  @Get("status")
+  getStatus(
+    @Request() req: ProjectAuthReq,
+    @Query("page") page?: string,
+    @Query("limit") limit?: string,
+  ) {
+    return this.helpService.getSystemStatus(
+      req.projectId,
+      page ? Number(page) : 1,
+      limit ? Number(limit) : 20,
+    );
+  }
+}
+
+@Controller("help")
+export class HelpController {
+  constructor(private readonly helpService: HelpService) {}
 
   @Get("tickets/platform")
   @UseGuards(JwtAuthGuard, PlatformRolesGuard)
@@ -87,14 +109,6 @@ export class HelpController {
   @PlatformRoles(PlatformRole.SUPER_ADMIN, PlatformRole.SUPPORT_AGENT)
   updateTicketStatus(@Param("id") id: string, @Body() dto: UpdateTicketDto) {
     return this.helpService.updateTicketStatus(id, dto);
-  }
-
-  @Get("tickets/:id")
-  @UseGuards(JwtAuthGuard)
-  async getTicket(@Request() req: AuthReq, @Param("id") id: string) {
-    const tenantId = req.user.tenantId ?? req.user.id;
-    const data = await this.helpService.getTicketById(tenantId, id);
-    return { success: true, data };
   }
 
   @Get("docs")
@@ -181,21 +195,6 @@ export class HelpController {
   @Get("search")
   search(@Query("q") q: string) {
     return this.helpService.search(q);
-  }
-
-  @Get("status")
-  @UseGuards(JwtAuthGuard)
-  getStatus(
-    @Request() req: AuthReq,
-    @Query("page") page?: string,
-    @Query("limit") limit?: string,
-  ) {
-    const tenantId = req.user.tenantId ?? req.user.id;
-    return this.helpService.getSystemStatus(
-      tenantId,
-      page ? Number(page) : 1,
-      limit ? Number(limit) : 20,
-    );
   }
 
   // Remove this endpoint after running once

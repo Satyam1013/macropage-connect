@@ -13,8 +13,17 @@ import { Campaign, CampaignSchema } from "../schemas/campaign.schema";
 import { ContactsService } from "./contacts.service";
 import { ContactsController } from "./contacts.controller";
 
+import { ProjectAccessModule } from "../common/guards/project-access.module";
+import {
+  UserAccountMembership,
+  UserAccountMembershipSchema,
+} from "../auth/schemas/user-account-membership.schema";
 @Module({
   imports: [
+    ProjectAccessModule,
+    MongooseModule.forFeature([
+      { name: UserAccountMembership.name, schema: UserAccountMembershipSchema },
+    ]),
     MongooseModule.forFeature([
       { name: Contact.name, schema: ContactSchema },
       { name: ContactSegment.name, schema: ContactSegmentSchema },

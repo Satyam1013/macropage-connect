@@ -17,10 +17,12 @@ import {
 import { FileInterceptor } from "@nestjs/platform-express";
 import { IsOptional, IsString } from "class-validator";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
+import { ProjectAccessGuard } from "../common/guards/project-access.guard";
 import { UsersService } from "./users.service";
 import { UploadService } from "../upload/upload.service";
 import { BillingService } from "../billing/billing.service";
-import type { AuthReq } from "../auth/dto/auth-request.interface";
+import { TenantResolverService } from "../tenant/tenant-resolver.service";
+import type { ProjectAuthReq } from "../auth/dto/auth-request.interface";
 
 // Every field needs a validator, or the global ValidationPipe's
 // whitelist:true strips it from the request before it ever reaches the
@@ -42,25 +44,33 @@ class UpdateProfileDto {
 
 // Bare /api/v1/me alias for /api/v1/users/me — some frontend calls hit this
 // path directly instead of the users-prefixed one.
-@UseGuards(JwtAuthGuard)
-@Controller("me")
+@UseGuards(JwtAuthGuard, ProjectAccessGuard)
+@Controller("projects/:projectId/me")
 export class MeController {
   constructor(
     private readonly usersService: UsersService,
     private readonly uploadService: UploadService,
     private readonly billingService: BillingService,
+    private readonly tenantResolver: TenantResolverService,
   ) {}
 
   @Get()
   @Header("Cache-Control", "no-cache, no-store, must-revalidate")
-  async getMe(@Request() req: AuthReq) {
+  async getMe(@Request() req: ProjectAuthReq) {
     const user = await this.usersService.findById(req.user.id);
     if (!user) return { success: true, data: { user: null } };
 
-    const tenantId = user.tenantId ?? user.id;
+    const tenantId = req.projectId;
+    // Plan/subscription is a property of the person's own MAIN account
+    // only — see TenantResolverService.resolveBillingTenantId. Company
+    // name/logo (tenantFields below) reflect the project in the URL.
+    const billingTenantId = await this.tenantResolver.resolveBillingTenantId(
+      user.id,
+      tenantId,
+    );
     const [sub, tenantFields] = await Promise.all([
-      this.billingService.getSubscription(tenantId),
-      this.usersService.resolveTenantFields(user),
+      this.billingService.getSubscription(billingTenantId),
+      this.usersService.resolveTenantFields(user, tenantId),
     ]);
 
     return {
@@ -79,7 +89,10 @@ export class MeController {
   @Put()
   @Patch()
   @HttpCode(HttpStatus.OK)
-  async updateMe(@Request() req: AuthReq, @Body() dto: UpdateProfileDto) {
+  async updateMe(
+    @Request() req: ProjectAuthReq,
+    @Body() dto: UpdateProfileDto,
+  ) {
     const updated = await this.usersService.updateProfile(req.user.id, dto);
     return {
       success: true,
@@ -96,11 +109,11 @@ export class MeController {
   @HttpCode(HttpStatus.OK)
   @UseInterceptors(FileInterceptor("file"))
   async uploadAvatar(
-    @Request() req: AuthReq,
+    @Request() req: ProjectAuthReq,
     @UploadedFile() file: Express.Multer.File,
   ) {
     if (!file) throw new BadRequestException("No file uploaded");
-    const tenantId = req.user.tenantId ?? req.user.id;
+    const tenantId = req.projectId;
     const { url } = await this.uploadService.uploadImage(tenantId, file);
     await this.usersService.updateProfile(req.user.id, { avatarUrl: url });
     return { success: true, data: { avatarUrl: url } };

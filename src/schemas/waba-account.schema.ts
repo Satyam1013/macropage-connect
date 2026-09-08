@@ -26,6 +26,12 @@ export class WABAAccount {
   @Prop()
   businessName?: string;
 
+  // Meta Business Portfolio ID — the WABA's owning business, distinct from
+  // wabaId. Needed to create a product catalog (owned_product_catalogs
+  // lives under the business, not the WABA).
+  @Prop()
+  metaBusinessId?: string;
+
   @Prop({ required: true })
   accessToken!: string;
 

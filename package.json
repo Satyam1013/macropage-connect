@@ -20,7 +20,8 @@
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "seed:waba": "ts-node -r tsconfig-paths/register scripts/seed-test-waba.ts",
     "migrate:admin-users": "ts-node -r tsconfig-paths/register scripts/migrate-admin-users.ts",
-    "seed:plans": "ts-node -r tsconfig-paths/register scripts/seed-plans.ts"
+    "seed:plans": "ts-node -r tsconfig-paths/register scripts/seed-plans.ts",
+    "migrate:user-memberships": "ts-node -r tsconfig-paths/register scripts/migrate-user-memberships.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1061.0",

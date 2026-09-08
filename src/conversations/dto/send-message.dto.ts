@@ -1,4 +1,12 @@
-import { IsString, IsNotEmpty, IsOptional, IsEnum } from "class-validator";
+import {
+  IsString,
+  IsNotEmpty,
+  IsOptional,
+  IsEnum,
+  IsArray,
+  ArrayMinSize,
+  ArrayMaxSize,
+} from "class-validator";
 
 export class SendMessageDto {
   @IsEnum(["TEXT", "IMAGE", "VIDEO", "DOCUMENT", "AUDIO", "TEMPLATE"])
@@ -42,6 +50,15 @@ export class SendMessageDto {
 
   @IsOptional()
   buttons?: unknown[];
+}
+
+export class SendCatalogMessageDto {
+  // 1 = single product, 2-30 = multi-product (Meta's product_list limit)
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(30)
+  @IsString({ each: true })
+  productIds!: string[];
 }
 
 export class AddNoteDto {

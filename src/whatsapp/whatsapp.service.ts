@@ -14,6 +14,7 @@ import {
   WABAAccountDocument,
 } from "../schemas/waba-account.schema";
 import { User, UserDocument } from "../users/schemas/user.schema";
+import { Tenant, TenantDocument } from "../schemas/tenant.schema";
 import { Message, MessageDocument } from "../schemas/message.schema";
 import { Template, TemplateDocument } from "../schemas/template.schema";
 import { EncryptionService } from "../meta/encryption.service";
@@ -36,6 +37,8 @@ export class WhatsappService {
     private readonly wabaModel: Model<WABAAccountDocument>,
     @InjectModel(User.name)
     private readonly userModel: Model<UserDocument>,
+    @InjectModel(Tenant.name)
+    private readonly tenantModel: Model<TenantDocument>,
     @InjectModel(Message.name)
     private readonly messageModel: Model<MessageDocument>,
     @InjectModel(Template.name)
@@ -45,14 +48,17 @@ export class WhatsappService {
   ) {}
 
   async getStatus(tenantId: string) {
-    const [user, waba, approvedTemplates, totalTemplates] = await Promise.all([
-      this.userModel.findById(tenantId).exec(),
-      this.wabaModel.findOne({ tenantId }).exec(),
-      this.templateModel.countDocuments({ tenantId, status: "APPROVED" }),
-      this.templateModel.countDocuments({ tenantId }),
-    ]);
+    const [tenant, user, waba, approvedTemplates, totalTemplates] =
+      await Promise.all([
+        this.tenantModel.findById(tenantId).exec(),
+        this.userModel.findById(tenantId).exec(),
+        this.wabaModel.findOne({ tenantId }).exec(),
+        this.templateModel.countDocuments({ tenantId, status: "APPROVED" }),
+        this.templateModel.countDocuments({ tenantId }),
+      ]);
 
-    const businessInfoSaved = user?.businessInfoSaved ?? false;
+    const businessInfoSaved =
+      tenant?.businessInfoSaved ?? user?.businessInfoSaved ?? false;
     const metaConnected = waba?.metaConnected ?? false;
     const phoneVerified = waba?.phoneVerified ?? false;
     const testMessageSent = waba?.testMessageSent ?? false;
@@ -100,6 +106,37 @@ export class WhatsappService {
     };
   }
 
+  async getBusinessInfo(tenantId: string) {
+    const tenant = await this.tenantModel.findById(tenantId).exec();
+    if (tenant) {
+      return {
+        success: true,
+        data: {
+          businessName: tenant.name,
+          category: tenant.industry ?? null,
+          description: tenant.description ?? null,
+          website: tenant.website ?? null,
+          address: tenant.address ?? null,
+          businessInfoSaved: tenant.businessInfoSaved,
+        },
+      };
+    }
+
+    const user = await this.userModel.findById(tenantId).exec();
+    if (!user) throw new NotFoundException("Account not found");
+    return {
+      success: true,
+      data: {
+        businessName: user.company ?? null,
+        category: user.industry ?? null,
+        description: user.description ?? null,
+        website: user.website ?? null,
+        address: user.address ?? null,
+        businessInfoSaved: user.businessInfoSaved,
+      },
+    };
+  }
+
   async saveBusinessInfo(tenantId: string, dto: BusinessInfoDto) {
     if (!dto.businessName || !dto.category || !dto.description) {
       throw new BadRequestException({
@@ -111,14 +148,25 @@ export class WhatsappService {
       });
     }
 
-    await this.userModel.findByIdAndUpdate(tenantId, {
-      company: dto.businessName,
+    const isTenant = await this.tenantModel.exists({ _id: tenantId });
+    const update = {
       industry: dto.category,
       description: dto.description,
       ...(dto.website && { website: dto.website }),
       ...(dto.address && { address: dto.address }),
       businessInfoSaved: true,
-    });
+    };
+    if (isTenant) {
+      await this.tenantModel.findByIdAndUpdate(tenantId, {
+        name: dto.businessName,
+        ...update,
+      });
+    } else {
+      await this.userModel.findByIdAndUpdate(tenantId, {
+        company: dto.businessName,
+        ...update,
+      });
+    }
 
     return {
       success: true,
@@ -173,7 +221,7 @@ export class WhatsappService {
       });
     }
 
-    // Step 3 — discover WABA if not provided
+    // Step 3 — discover WABA if not provided.
     let wabaId = dto.wabaId;
     if (!wabaId) {
       try {
@@ -209,6 +257,37 @@ export class WhatsappService {
           message: "No WABA found on this Facebook account",
         },
       });
+    }
+
+    // Fetch the Business ID directly from the WABA via
+    // on_behalf_of_business_info — more reliable than parsing it out of
+    // /me/businesses, which was missing/wrong often enough to require
+    // manual DB patches before catalog connection would work. A failure
+    // here must never block WhatsApp connection from completing: log and
+    // continue — catalog connection will surface a clear error later if
+    // this is genuinely missing.
+    let metaBusinessId: string | undefined;
+    try {
+      const businessInfoResp = await axios.get(`${BASE}/${wabaId}`, {
+        params: {
+          fields: "on_behalf_of_business_info",
+          access_token: longToken,
+        },
+      });
+      metaBusinessId = (
+        businessInfoResp.data as {
+          on_behalf_of_business_info?: { id?: string };
+        }
+      ).on_behalf_of_business_info?.id;
+      if (!metaBusinessId) {
+        this.logger.warn(
+          `No business ID found for WABA ${wabaId} during Embedded Signup`,
+        );
+      }
+    } catch (err) {
+      this.logger.error(
+        `Failed to fetch business info for WABA ${wabaId}: ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
 
     // Step 4 — get phone numbers
@@ -283,6 +362,7 @@ export class WhatsappService {
           phoneNumberId,
           phoneNumber: phone.display_phone_number,
           displayName: phone.verified_name,
+          ...(metaBusinessId && { metaBusinessId }),
           accessToken: encrypted,
           tokenExpiresAt: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000),
           metaConnected: true,
@@ -304,6 +384,7 @@ export class WhatsappService {
         displayName: phone.verified_name,
         qualityRating: phone.quality_rating ?? "GREEN",
         messagingTier: phone.messaging_limit_tier ?? "TIER_1K",
+        metaBusinessId: metaBusinessId ?? null,
         nextStep: 3,
       },
     };
@@ -579,8 +660,15 @@ export class WhatsappService {
       });
     }
 
+    const isTenant = await this.tenantModel.exists({ _id: tenantId });
     await Promise.all([
-      this.userModel.findByIdAndUpdate(tenantId, { whatsappSetupDone: true }),
+      isTenant
+        ? this.tenantModel.findByIdAndUpdate(tenantId, {
+            whatsappSetupDone: true,
+          })
+        : this.userModel.findByIdAndUpdate(tenantId, {
+            whatsappSetupDone: true,
+          }),
       this.wabaModel.updateOne(
         { tenantId },
         { phoneVerified: true, testMessageSent: true },

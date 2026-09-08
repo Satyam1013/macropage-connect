@@ -18,23 +18,28 @@ import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { PlatformRolesGuard } from "../common/guards/platform-roles.guard";
 import { PlatformRoles } from "../common/decorators/platform-roles.decorator";
 import { PlatformRole } from "../auth/auth.constants";
-import type { AuthReq } from "../auth/dto/auth-request.interface";
+import type { ProjectAuthReq } from "../auth/dto/auth-request.interface";
+import { ProjectAccessGuard } from "../common/guards/project-access.guard";
 
-@Controller("demo-requests")
-export class DemoRequestsController {
+@Controller("projects/:projectId/demo-requests")
+@UseGuards(JwtAuthGuard, ProjectAccessGuard)
+export class DemoRequestsProjectController {
   constructor(private readonly demoRequestsService: DemoRequestsService) {}
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  @UseGuards(JwtAuthGuard)
-  create(@Request() req: AuthReq, @Body() dto: CreateDemoRequestDto) {
-    const tenantId = req.user.tenantId ?? req.user.id;
+  create(@Request() req: ProjectAuthReq, @Body() dto: CreateDemoRequestDto) {
     return this.demoRequestsService.create(
-      tenantId,
+      req.projectId,
       { id: req.user.id, name: req.user.name, email: req.user.email },
       dto,
     );
   }
+}
+
+@Controller("demo-requests")
+export class DemoRequestsController {
+  constructor(private readonly demoRequestsService: DemoRequestsService) {}
 
   @Get("platform")
   @UseGuards(JwtAuthGuard, PlatformRolesGuard)

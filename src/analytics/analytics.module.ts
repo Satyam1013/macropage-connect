@@ -16,6 +16,7 @@ import {
   AutomationRuleSchema,
 } from "../schemas/automation-rule.schema";
 import { BillingModule } from "../billing/billing.module";
+import { TenantModule } from "../tenant/tenant.module";
 import { AnalyticsService } from "./analytics.service";
 import { AnalyticsController } from "./analytics.controller";
 import { DashboardController } from "./dashboard.controller";
@@ -23,8 +24,17 @@ import { ANALYTICS_REDIS } from "./analytics.constants";
 import { MessageUsage, MessageUsageSchema } from "./message-usage.schema";
 import { MessageUsageService } from "./message-usage.service";
 
+import { ProjectAccessModule } from "../common/guards/project-access.module";
+import {
+  UserAccountMembership,
+  UserAccountMembershipSchema,
+} from "../auth/schemas/user-account-membership.schema";
 @Module({
   imports: [
+    ProjectAccessModule,
+    MongooseModule.forFeature([
+      { name: UserAccountMembership.name, schema: UserAccountMembershipSchema },
+    ]),
     ConfigModule,
     MongooseModule.forFeature([
       { name: Conversation.name, schema: ConversationSchema },
@@ -37,6 +47,7 @@ import { MessageUsageService } from "./message-usage.service";
       { name: AutomationRule.name, schema: AutomationRuleSchema },
     ]),
     BillingModule,
+    TenantModule,
   ],
   providers: [
     {

@@ -18,37 +18,35 @@ import { CreateSegmentDto } from "./dto/create-segment.dto";
 import { AssignSegmentContactsDto } from "./dto/assign-segment-contacts.dto";
 import { ImportContactsDto } from "./dto/import-contacts.dto";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
-import { UserPayload } from "../auth/dto/auth-response.interface";
+import { ProjectAccessGuard } from "../common/guards/project-access.guard";
+import type { ProjectAuthReq } from "../auth/dto/auth-request.interface";
 
-@UseGuards(JwtAuthGuard)
-@Controller("contacts")
+@UseGuards(JwtAuthGuard, ProjectAccessGuard)
+@Controller("projects/:projectId/contacts")
 export class ContactsController {
   constructor(private readonly contactsService: ContactsService) {}
 
   @Get("segments")
-  getSegments(@Request() req: { user: UserPayload & { tenantId?: string } }) {
-    const tenantId = req.user.tenantId ?? req.user.id;
+  getSegments(@Request() req: ProjectAuthReq) {
+    const tenantId = req.projectId;
     return this.contactsService.getSegments(tenantId);
   }
 
   @Post("segments")
   @HttpCode(HttpStatus.CREATED)
-  createSegment(
-    @Request() req: { user: UserPayload & { tenantId?: string } },
-    @Body() dto: CreateSegmentDto,
-  ) {
-    const tenantId = req.user.tenantId ?? req.user.id;
+  createSegment(@Request() req: ProjectAuthReq, @Body() dto: CreateSegmentDto) {
+    const tenantId = req.projectId;
     return this.contactsService.createSegment(tenantId, dto);
   }
 
   @Patch("segments/:id")
   @HttpCode(HttpStatus.OK)
   assignSegmentContacts(
-    @Request() req: { user: UserPayload & { tenantId?: string } },
+    @Request() req: ProjectAuthReq,
     @Param("id") id: string,
     @Body() dto: AssignSegmentContactsDto,
   ) {
-    const tenantId = req.user.tenantId ?? req.user.id;
+    const tenantId = req.projectId;
     return this.contactsService.assignContactsToSegment(
       tenantId,
       id,
@@ -58,12 +56,12 @@ export class ContactsController {
 
   @Get("segments/:id/contacts")
   getSegmentContacts(
-    @Request() req: { user: UserPayload & { tenantId?: string } },
+    @Request() req: ProjectAuthReq,
     @Param("id") id: string,
     @Query("page") page?: string,
     @Query("limit") limit?: string,
   ) {
-    const tenantId = req.user.tenantId ?? req.user.id;
+    const tenantId = req.projectId;
     return this.contactsService.getSegmentContacts(tenantId, id, {
       page: page ? Number(page) : 1,
       limit: limit ? Number(limit) : 20,
@@ -73,10 +71,10 @@ export class ContactsController {
   @Post("import")
   @HttpCode(HttpStatus.OK)
   importContacts(
-    @Request() req: { user: UserPayload & { tenantId?: string } },
+    @Request() req: ProjectAuthReq,
     @Body() dto: ImportContactsDto,
   ) {
-    const tenantId = req.user.tenantId ?? req.user.id;
+    const tenantId = req.projectId;
     return this.contactsService.importContacts(
       tenantId,
       dto.fileUrl,
@@ -86,20 +84,20 @@ export class ContactsController {
   }
 
   @Get("tags")
-  getTags(@Request() req: { user: UserPayload & { tenantId?: string } }) {
-    const tenantId = req.user.tenantId ?? req.user.id;
+  getTags(@Request() req: ProjectAuthReq) {
+    const tenantId = req.projectId;
     return this.contactsService.getTags(tenantId);
   }
 
   @Get()
   findAll(
-    @Request() req: { user: UserPayload & { tenantId?: string } },
+    @Request() req: ProjectAuthReq,
     @Query("search") search?: string,
     @Query("tags") tags?: string,
     @Query("page") page?: string,
     @Query("limit") limit?: string,
   ) {
-    const tenantId = req.user.tenantId ?? req.user.id;
+    const tenantId = req.projectId;
     return this.contactsService.findAll(tenantId, {
       search,
       tags: tags ? tags.split(",") : undefined,
@@ -109,61 +107,49 @@ export class ContactsController {
   }
 
   @Get(":id")
-  findOne(
-    @Request() req: { user: UserPayload & { tenantId?: string } },
-    @Param("id") id: string,
-  ) {
-    const tenantId = req.user.tenantId ?? req.user.id;
+  findOne(@Request() req: ProjectAuthReq, @Param("id") id: string) {
+    const tenantId = req.projectId;
     return this.contactsService.getDetails(tenantId, id);
   }
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  create(
-    @Request() req: { user: UserPayload & { tenantId?: string } },
-    @Body() dto: CreateContactDto,
-  ) {
-    const tenantId = req.user.tenantId ?? req.user.id;
+  create(@Request() req: ProjectAuthReq, @Body() dto: CreateContactDto) {
+    const tenantId = req.projectId;
     return this.contactsService.create(tenantId, dto);
   }
 
   @Patch(":id")
   update(
-    @Request() req: { user: UserPayload & { tenantId?: string } },
+    @Request() req: ProjectAuthReq,
     @Param("id") id: string,
     @Body() dto: Partial<CreateContactDto>,
   ) {
-    const tenantId = req.user.tenantId ?? req.user.id;
+    const tenantId = req.projectId;
     return this.contactsService.update(tenantId, id, dto);
   }
 
   @Delete(":id")
   @HttpCode(HttpStatus.NO_CONTENT)
-  remove(
-    @Request() req: { user: UserPayload & { tenantId?: string } },
-    @Param("id") id: string,
-  ) {
-    const tenantId = req.user.tenantId ?? req.user.id;
+  remove(@Request() req: ProjectAuthReq, @Param("id") id: string) {
+    const tenantId = req.projectId;
     return this.contactsService.remove(tenantId, id);
   }
 
   @Post("bulk-delete")
   @HttpCode(HttpStatus.OK)
-  bulkDelete(
-    @Request() req: { user: UserPayload & { tenantId?: string } },
-    @Body() body: { ids: string[] },
-  ) {
-    const tenantId = req.user.tenantId ?? req.user.id;
+  bulkDelete(@Request() req: ProjectAuthReq, @Body() body: { ids: string[] }) {
+    const tenantId = req.projectId;
     return this.contactsService.bulkDelete(tenantId, body.ids);
   }
 
   @Post("bulk-tag")
   @HttpCode(HttpStatus.OK)
   bulkTag(
-    @Request() req: { user: UserPayload & { tenantId?: string } },
+    @Request() req: ProjectAuthReq,
     @Body() body: { ids: string[]; tags: string[]; action: "add" | "remove" },
   ) {
-    const tenantId = req.user.tenantId ?? req.user.id;
+    const tenantId = req.projectId;
     return this.contactsService.bulkTag(
       tenantId,
       body.ids,

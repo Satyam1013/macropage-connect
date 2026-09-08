@@ -1,7 +1,6 @@
 import { Module } from "@nestjs/common";
 import { MongooseModule } from "@nestjs/mongoose";
 import { WABAAccount, WABAAccountSchema } from "../schemas/waba-account.schema";
-import { User, UserSchema } from "../users/schemas/user.schema";
 import { WebhookService } from "./webhook.service";
 import { WebhookController } from "./webhook.controller";
 import { ContactsModule } from "../contacts/contacts.module";
@@ -13,12 +12,13 @@ import { MetaModule } from "../meta/meta.module";
 import { UploadModule } from "../upload/upload.module";
 import { MediaDownloadService } from "../whatsapp/media-download.service";
 import { NotificationsModule } from "../notifications/notifications.module";
+import { CatalogModule } from "../catalog/catalog.module";
+import { TenantModule } from "../tenant/tenant.module";
 
 @Module({
   imports: [
     MongooseModule.forFeature([
       { name: WABAAccount.name, schema: WABAAccountSchema },
-      { name: User.name, schema: UserSchema },
     ]),
     ContactsModule,
     ConversationsModule,
@@ -28,6 +28,8 @@ import { NotificationsModule } from "../notifications/notifications.module";
     MetaModule,
     UploadModule,
     NotificationsModule,
+    CatalogModule,
+    TenantModule,
   ],
   providers: [WebhookService, MediaDownloadService],
   controllers: [WebhookController],

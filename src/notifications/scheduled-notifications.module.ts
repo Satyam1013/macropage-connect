@@ -6,6 +6,7 @@ import { Message, MessageSchema } from "../schemas/message.schema";
 import { Campaign, CampaignSchema } from "../schemas/campaign.schema";
 import { NotificationsModule } from "./notifications.module";
 import { ScheduledNotificationsService } from "./scheduled-notifications.service";
+import { TenantModule } from "../tenant/tenant.module";
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { ScheduledNotificationsService } from "./scheduled-notifications.service
       { name: Campaign.name, schema: CampaignSchema },
     ]),
     NotificationsModule,
+    TenantModule,
   ],
   providers: [ScheduledNotificationsService],
 })

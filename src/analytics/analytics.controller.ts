@@ -2,9 +2,10 @@ import { Controller, Get, Query, UseGuards, Request } from "@nestjs/common";
 import { AnalyticsService } from "./analytics.service";
 import { MessageUsageService } from "./message-usage.service";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
+import { ProjectAccessGuard } from "../common/guards/project-access.guard";
 import { PlanGuard } from "../billing/guards/plan.guard";
 import { RequirePlan } from "../common/decorators/require-plan.decorator";
-import type { AuthReq } from "../auth/dto/auth-request.interface";
+import type { ProjectAuthReq } from "../auth/dto/auth-request.interface";
 
 // Meta rates shown to frontend for display — keep in sync with META_RATES
 // in message-usage.service.ts (paise there, rupees here for the UI)
@@ -17,8 +18,8 @@ const META_RATES_DISPLAY = {
   lastUpdated: "January 1, 2026",
 };
 
-@UseGuards(JwtAuthGuard)
-@Controller("analytics")
+@UseGuards(JwtAuthGuard, ProjectAccessGuard)
+@Controller("projects/:projectId/analytics")
 export class AnalyticsController {
   constructor(
     private readonly analyticsService: AnalyticsService,
@@ -26,8 +27,11 @@ export class AnalyticsController {
   ) {}
 
   @Get("usage")
-  async getUsage(@Request() req: AuthReq, @Query("months") months?: string) {
-    const tenantId = req.user.tenantId ?? req.user.id;
+  async getUsage(
+    @Request() req: ProjectAuthReq,
+    @Query("months") months?: string,
+  ) {
+    const tenantId = req.projectId;
     const monthCount = parseInt(months ?? "6", 10);
     const [current, history, contactStats] = await Promise.all([
       this.messageUsageService.getCurrentMonthUsage(tenantId),
@@ -63,8 +67,8 @@ export class AnalyticsController {
   }
 
   @Get("usage/all-time")
-  async getAllTimeUsage(@Request() req: AuthReq) {
-    const tenantId = req.user.tenantId ?? req.user.id;
+  async getAllTimeUsage(@Request() req: ProjectAuthReq) {
+    const tenantId = req.projectId;
     const [stats, messageUsage] = await Promise.all([
       this.analyticsService.getAllTimeStats(tenantId),
       this.messageUsageService.getAllTimeUsage(tenantId),
@@ -104,11 +108,11 @@ export class AnalyticsController {
 
   @Get("dashboard")
   getDashboard(
-    @Request() req: AuthReq,
+    @Request() req: ProjectAuthReq,
     @Query("from") from?: string,
     @Query("to") to?: string,
   ) {
-    const tenantId = req.user.tenantId ?? req.user.id;
+    const tenantId = req.projectId;
     const dateFrom = from
       ? new Date(from)
       : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
@@ -118,11 +122,11 @@ export class AnalyticsController {
 
   @Get("trends")
   getTrends(
-    @Request() req: AuthReq,
+    @Request() req: ProjectAuthReq,
     @Query("from") from?: string,
     @Query("to") to?: string,
   ) {
-    const tenantId = req.user.tenantId ?? req.user.id;
+    const tenantId = req.projectId;
     const dateFrom = from
       ? new Date(from)
       : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
@@ -136,11 +140,11 @@ export class AnalyticsController {
 
   @Get("campaigns")
   getCampaignPerformance(
-    @Request() req: AuthReq,
+    @Request() req: ProjectAuthReq,
     @Query("from") from?: string,
     @Query("to") to?: string,
   ) {
-    const tenantId = req.user.tenantId ?? req.user.id;
+    const tenantId = req.projectId;
     if (from || to) {
       return this.analyticsService.getCampaignAnalytics(tenantId, from, to);
     }
@@ -151,11 +155,11 @@ export class AnalyticsController {
   @UseGuards(PlanGuard)
   @RequirePlan("advancedAnalytics")
   getAgents(
-    @Request() req: AuthReq,
+    @Request() req: ProjectAuthReq,
     @Query("from") from?: string,
     @Query("to") to?: string,
   ) {
-    const tenantId = req.user.tenantId ?? req.user.id;
+    const tenantId = req.projectId;
     return this.analyticsService.getAgentAnalytics(tenantId, from, to);
   }
 
@@ -163,11 +167,11 @@ export class AnalyticsController {
   @UseGuards(PlanGuard)
   @RequirePlan("advancedAnalytics")
   getContacts(
-    @Request() req: AuthReq,
+    @Request() req: ProjectAuthReq,
     @Query("from") from?: string,
     @Query("to") to?: string,
   ) {
-    const tenantId = req.user.tenantId ?? req.user.id;
+    const tenantId = req.projectId;
     return this.analyticsService.getContactAnalytics(tenantId, from, to);
   }
 
@@ -175,11 +179,11 @@ export class AnalyticsController {
   @UseGuards(PlanGuard)
   @RequirePlan("advancedAnalytics")
   getMessages(
-    @Request() req: AuthReq,
+    @Request() req: ProjectAuthReq,
     @Query("from") from?: string,
     @Query("to") to?: string,
   ) {
-    const tenantId = req.user.tenantId ?? req.user.id;
+    const tenantId = req.projectId;
     return this.analyticsService.getMessageAnalytics(tenantId, from, to);
   }
 }

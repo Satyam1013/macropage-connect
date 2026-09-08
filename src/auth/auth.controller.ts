@@ -18,6 +18,8 @@ import { SignupDto } from "./dto/signup.dto";
 import { OAuthDto } from "./dto/oauth.dto";
 import { ForgotPasswordDto } from "./dto/forgot-password.dto";
 import { ResetPasswordDto } from "./dto/reset-password.dto";
+import { SelectProjectDto } from "./dto/select-project.dto";
+import { CreateProjectDto } from "./dto/create-project.dto";
 import { JwtAuthGuard } from "./guards/jwt-auth.guard";
 import { UserPayload } from "./dto/auth-response.interface";
 
@@ -80,6 +82,13 @@ export class AuthController {
   }
 
   @UseGuards(JwtAuthGuard)
+  @Post("logout")
+  @HttpCode(HttpStatus.OK)
+  logout(@Request() req: { user: UserPayload }) {
+    return this.authService.logout(req.user.id);
+  }
+
+  @UseGuards(JwtAuthGuard)
   @Get("sessions")
   getSessions(@Request() req: { user: UserPayload }) {
     return this.authService.getSessions(req.user.id);
@@ -106,5 +115,31 @@ export class AuthController {
     const user = await this.authService.getMe(req.user.id);
     if (!user) throw new NotFoundException("User not found");
     return { success: true, data: { user } };
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get("my-projects")
+  getMyProjects(@Request() req: { user: UserPayload }) {
+    return this.authService.getMyProjects(req.user.id);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post("select-project")
+  @HttpCode(HttpStatus.OK)
+  selectProject(
+    @Request() req: { user: UserPayload },
+    @Body() dto: SelectProjectDto,
+  ) {
+    return this.authService.selectProject(req.user.id, dto.projectId);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post("create-project")
+  @HttpCode(HttpStatus.CREATED)
+  createProject(
+    @Request() req: { user: UserPayload },
+    @Body() dto: CreateProjectDto,
+  ) {
+    return this.authService.createProject(req.user.id, dto.projectName);
   }
 }

@@ -15,13 +15,23 @@ import { AutomationService } from "./automation.service";
 import { AutomationController } from "./automation.controller";
 import { FlowEngineService } from "./flow-engine.service";
 import { BillingModule } from "../billing/billing.module";
+import { TenantModule } from "../tenant/tenant.module";
 import { ConversationsModule } from "../conversations/conversations.module";
 import { MetaModule } from "../meta/meta.module";
 import { GatewayModule } from "../gateway/gateway.module";
 import { RolesGuard } from "../common/guards/roles.guard";
 
+import { ProjectAccessModule } from "../common/guards/project-access.module";
+import {
+  UserAccountMembership,
+  UserAccountMembershipSchema,
+} from "../auth/schemas/user-account-membership.schema";
 @Module({
   imports: [
+    ProjectAccessModule,
+    MongooseModule.forFeature([
+      { name: UserAccountMembership.name, schema: UserAccountMembershipSchema },
+    ]),
     MongooseModule.forFeature([
       { name: AutomationRule.name, schema: AutomationRuleSchema },
       { name: Flow.name, schema: FlowSchema },
@@ -30,6 +40,7 @@ import { RolesGuard } from "../common/guards/roles.guard";
       { name: Contact.name, schema: ContactSchema },
     ]),
     BillingModule,
+    TenantModule,
     ConversationsModule,
     MetaModule,
     GatewayModule,

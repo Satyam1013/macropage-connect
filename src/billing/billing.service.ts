@@ -15,7 +15,14 @@ import { Invoice, InvoiceDocument } from "../schemas/invoice.schema";
 import { Payment, PaymentDocument } from "../schemas/payment.schema";
 import { User, UserDocument } from "../users/schemas/user.schema";
 import { Plan, PlanDocument } from "./schemas/plan.schema";
+import { Order, OrderDocument } from "../catalog/schemas/order.schema";
+import { Contact, ContactDocument } from "../schemas/contact.schema";
+import {
+  Conversation,
+  ConversationDocument,
+} from "../schemas/conversation.schema";
 import { NotificationsService } from "../notifications/notifications.service";
+import { TenantResolverService } from "../tenant/tenant-resolver.service";
 import { RazorpayService } from "./razorpay.service";
 import type { BillingCycle, Plan as PlanValue, PlanKey } from "./billing.types";
 import { getPlanPricing } from "./plans.config";
@@ -61,8 +68,15 @@ export class BillingService {
     private readonly userModel: Model<UserDocument>,
     @InjectModel(Plan.name)
     private readonly planModel: Model<PlanDocument>,
+    @InjectModel(Order.name)
+    private readonly orderModel: Model<OrderDocument>,
+    @InjectModel(Contact.name)
+    private readonly contactModel: Model<ContactDocument>,
+    @InjectModel(Conversation.name)
+    private readonly convModel: Model<ConversationDocument>,
     private readonly razorpayService: RazorpayService,
     private readonly notificationsService: NotificationsService,
+    private readonly tenantResolver: TenantResolverService,
   ) {}
 
   // ── Public plans list ─────────────────────────────────────────────────────
@@ -310,7 +324,29 @@ export class BillingService {
         pendingRazorpaySubId: data.razorpay_subscription_id,
       })
       .exec();
-    if (!sub) throw new NotFoundException("Subscription not found");
+    if (!sub) {
+      // Razorpay's subscription.activated/charged webhook can beat this
+      // client-side call to the punch — it already promotes pending →
+      // real and clears pendingRazorpaySubId, so by the time this runs
+      // there's nothing left to match, even though the subscription is
+      // genuinely active. Without this, the user sees a false "couldn't
+      // confirm payment" error despite everything having worked.
+      const alreadyActivated = await this.subModel
+        .findOne({ tenantId, razorpaySubId: data.razorpay_subscription_id })
+        .exec();
+      if (alreadyActivated) {
+        return {
+          success: true,
+          data: {
+            message: "Payment verified — plan activated",
+            plan: alreadyActivated.plan,
+            billingCycle: alreadyActivated.billingCycle,
+            currentPeriodEnd: alreadyActivated.currentPeriodEnd,
+          },
+        };
+      }
+      throw new NotFoundException("Subscription not found");
+    }
 
     const rzpSub = await this.razorpayService.fetchSubscription(
       data.razorpay_subscription_id,
@@ -589,17 +625,13 @@ export class BillingService {
         if (dbSub) {
           await this.syncUserPlan(dbSub.tenantId, dbSub.plan);
 
-          // tenantId is always the owner's own _id — invited team members are
-          // the only users that ever get a distinct `tenantId` field stored.
-          const owner = await this.userModel
-            .findById(dbSub.tenantId)
-            .select("_id")
-            .lean()
-            .exec();
-          if (owner) {
+          const ownerId = await this.tenantResolver.resolveOwnerId(
+            dbSub.tenantId,
+          );
+          if (ownerId) {
             void this.notificationsService.create(
               dbSub.tenantId,
-              String(owner._id),
+              ownerId,
               "payment_success",
               "Payment received ✅",
               `Your ${dbSub.billingCycle} ${dbSub.plan} plan has been renewed.`,
@@ -621,15 +653,13 @@ export class BillingService {
           .lean()
           .exec();
         if (dbSub) {
-          const owner = await this.userModel
-            .findById(dbSub.tenantId)
-            .select("_id")
-            .lean()
-            .exec();
-          if (owner) {
+          const ownerId = await this.tenantResolver.resolveOwnerId(
+            dbSub.tenantId,
+          );
+          if (ownerId) {
             void this.notificationsService.create(
               dbSub.tenantId,
-              String(owner._id),
+              ownerId,
               "payment_failed",
               "Payment failed ⚠️",
               "Your subscription payment failed. Please update your payment method.",
@@ -645,6 +675,56 @@ export class BillingService {
           { razorpaySubId: sub.id as string },
           { $set: { status: "CANCELLED", cancelledAt: new Date() } },
         );
+        break;
+      }
+
+      case "payment_link.paid": {
+        const paymentLink = p?.payment_link?.entity as
+          | Record<string, unknown>
+          | undefined;
+        const linkId = paymentLink?.id as string | undefined;
+        if (!linkId) break;
+
+        const order = await this.orderModel.findOneAndUpdate(
+          { razorpayPaymentLinkId: linkId },
+          { $set: { status: "paid", paidAt: new Date() } },
+          { new: true },
+        );
+        if (!order) break;
+
+        const contact = await this.contactModel
+          .findOne({ _id: order.contactId, tenantId: order.tenantId })
+          .select("name phone")
+          .lean()
+          .exec();
+
+        let notifyUserId: string | undefined;
+        if (order.conversationId) {
+          const conv = await this.convModel
+            .findOne({ _id: order.conversationId })
+            .select("assignedTo")
+            .lean()
+            .exec();
+          notifyUserId = conv?.assignedTo ?? undefined;
+        }
+        if (!notifyUserId) {
+          notifyUserId = await this.tenantResolver.resolveOwnerId(
+            order.tenantId,
+          );
+        }
+
+        if (notifyUserId) {
+          await this.notificationsService.create(
+            order.tenantId,
+            notifyUserId,
+            "order_paid",
+            "Order paid",
+            `${contact?.name ?? contact?.phone ?? "A customer"} paid ₹${(
+              order.totalAmount / 100
+            ).toFixed(2)} for their order.`,
+            { orderId: order.id, conversationId: order.conversationId },
+          );
+        }
         break;
       }
 
@@ -666,11 +746,12 @@ export class BillingService {
           ? "pro"
           : "free";
 
-    // tenantId identifies a tenant as "owner's own _id" everywhere in this
-    // app (req.user.tenantId ?? req.user.id), but the owner's own user doc
-    // never has a tenantId field set on itself — only team members do. A
-    // bare { tenantId } filter therefore updates every team member but
-    // skips the owner entirely, which is who actually pays.
+    // A bare { tenantId } filter updates every team member but skips the
+    // owner entirely — who actually pays. For the legacy convention the
+    // owner's own _id IS the tenantId; for a standalone Tenant doc the
+    // owner is whoever resolveOwnerId() resolves via Tenant.ownerId
+    // (their own User.tenantId only gets set once they've selected this
+    // account at least once, so { tenantId } alone isn't reliable either).
     const update: Record<string, unknown> = {
       plan: isPaid ? "PRO" : "FREE",
       billingPlan: subPlan,
@@ -681,8 +762,15 @@ export class BillingService {
     // trial-countdown banner keeps showing after upgrading.
     if (isPaid) update.trialEndsAt = null;
 
+    const ownerId = await this.tenantResolver.resolveOwnerId(tenantId);
     await this.userModel.updateMany(
-      { $or: [{ tenantId }, { _id: tenantId }] },
+      {
+        $or: [
+          { tenantId },
+          { _id: tenantId },
+          ...(ownerId ? [{ _id: ownerId }] : []),
+        ],
+      },
       { $set: update },
     );
     this.logger.log(

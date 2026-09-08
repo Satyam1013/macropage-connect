@@ -11,7 +11,12 @@ import {
   SupportTicketSchema,
 } from "../schemas/support-ticket.schema";
 import { HelpService } from "./help.service";
-import { HelpController } from "./help.controller";
+import { HelpController, HelpProjectController } from "./help.controller";
+import { ProjectAccessModule } from "../common/guards/project-access.module";
+import {
+  UserAccountMembership,
+  UserAccountMembershipSchema,
+} from "../auth/schemas/user-account-membership.schema";
 
 @Module({
   imports: [
@@ -21,9 +26,13 @@ import { HelpController } from "./help.controller";
       { name: VideoTutorial.name, schema: VideoTutorialSchema },
       { name: SupportTicket.name, schema: SupportTicketSchema },
     ]),
+    ProjectAccessModule,
+    MongooseModule.forFeature([
+      { name: UserAccountMembership.name, schema: UserAccountMembershipSchema },
+    ]),
   ],
   providers: [HelpService],
-  controllers: [HelpController],
+  controllers: [HelpController, HelpProjectController],
   exports: [HelpService],
 })
 export class HelpModule {}

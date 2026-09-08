@@ -18,6 +18,8 @@ import type { MessageType } from "../messages/messages.types";
 import { Contact, ContactDocument } from "../schemas/contact.schema";
 import { User, UserDocument } from "../users/schemas/user.schema";
 import { Template, TemplateDocument } from "../schemas/template.schema";
+import { Catalog, CatalogDocument } from "../catalog/schemas/catalog.schema";
+import { Product, ProductDocument } from "../catalog/schemas/product.schema";
 import { MetaService } from "../meta/meta.service";
 import { SocketService } from "../gateway/socket.service";
 import { CampaignsService } from "../campaigns/campaigns.service";
@@ -50,6 +52,10 @@ export class ConversationsService {
     private readonly userModel: Model<UserDocument>,
     @InjectModel(Template.name)
     private readonly templateModel: Model<TemplateDocument>,
+    @InjectModel(Catalog.name)
+    private readonly catalogModel: Model<CatalogDocument>,
+    @InjectModel(Product.name)
+    private readonly productModel: Model<ProductDocument>,
     private readonly metaService: MetaService,
     private readonly socketService: SocketService,
     private readonly notificationsService: NotificationsService,
@@ -491,6 +497,179 @@ export class ConversationsService {
 
       return enriched as unknown as MessageDocument;
     } catch (err: unknown) {
+      await this.msgModel.updateOne({ _id: message._id }, { status: "FAILED" });
+      const enriched = buildEnriched("FAILED");
+      this.socketService.newMessage(tenantId, { ...enriched, _update: true });
+      throw err;
+    }
+  }
+
+  // Sends a WhatsApp catalog message — a single product card, or a
+  // multi-product list (2-30 items) when more than one ID is given.
+  async sendCatalogMessage(
+    tenantId: string,
+    conversationId: string,
+    productIds: string[],
+    agentId: string,
+  ): Promise<MessageDocument> {
+    const conv = await this.convModel
+      .findOne({ _id: conversationId, tenantId })
+      .exec();
+    if (!conv) throw new NotFoundException("Conversation not found");
+
+    const contact = await this.contactModel
+      .findOne({ _id: conv.contactId, tenantId })
+      .exec();
+    if (!contact) throw new NotFoundException("Contact not found");
+
+    const catalog = await this.catalogModel.findOne({ tenantId }).exec();
+    if (!catalog?.isConnected) {
+      throw new BadRequestException("Catalog not connected");
+    }
+
+    const products = await this.productModel
+      .find({ _id: { $in: productIds }, tenantId })
+      .exec();
+    if (!products.length) {
+      throw new NotFoundException("No matching products found");
+    }
+
+    const client = await this.metaService.getClient(tenantId);
+    const contactPhone = normalizePhone(contact.phone);
+
+    const payload: Record<string, unknown> =
+      products.length === 1
+        ? {
+            messaging_product: "whatsapp",
+            to: contactPhone,
+            type: "interactive",
+            interactive: {
+              type: "product",
+              body: { text: "Check out this product" },
+              action: {
+                catalog_id: catalog.metaCatalogId,
+                product_retailer_id: products[0].id,
+              },
+            },
+          }
+        : {
+            messaging_product: "whatsapp",
+            to: contactPhone,
+            type: "interactive",
+            interactive: {
+              type: "product_list",
+              header: { type: "text", text: "Our Products" },
+              body: { text: "Browse and add to cart" },
+              action: {
+                catalog_id: catalog.metaCatalogId,
+                sections: [
+                  {
+                    title: "Products",
+                    product_items: products.map((p) => ({
+                      product_retailer_id: p.id,
+                    })),
+                  },
+                ],
+              },
+            },
+          };
+
+    // Save first so message always appears in portal regardless of Meta outcome
+    const message = await this.msgModel.create({
+      tenantId,
+      conversationId,
+      direction: "OUTBOUND",
+      type: "INTERACTIVE",
+      content: `Sent ${products.length} product(s)`,
+      status: "PENDING",
+      agentId,
+      sentAt: new Date(),
+    });
+
+    const updatedConv = await this.convModel
+      .findOneAndUpdate(
+        { _id: conversationId },
+        { lastMessageAt: new Date() },
+        { returnDocument: "after" },
+      )
+      .lean()
+      .exec();
+    await this.contactModel.updateOne(
+      { _id: contact._id },
+      { lastMessageAt: new Date() },
+    );
+
+    const agent = await this.userModel
+      .findById(agentId)
+      .select("_id name avatarUrl")
+      .lean()
+      .exec();
+    const agentObj = agent
+      ? {
+          _id: String(agent._id),
+          name: agent.name,
+          avatarUrl: agent.avatarUrl ?? null,
+        }
+      : null;
+
+    const buildEnriched = (status: string, metaMessageId?: string | null) => ({
+      _id: String(message._id),
+      conversationId: String(message.conversationId),
+      tenantId,
+      direction: message.direction,
+      type: message.type,
+      content: message.content,
+      metaMessageId: metaMessageId ?? null,
+      status,
+      isNote: false,
+      agentId,
+      agent: agentObj,
+      sentAt: message.sentAt,
+      createdAt: message.createdAt,
+    });
+
+    this.socketService.newMessage(tenantId, buildEnriched("PENDING"));
+    if (updatedConv) {
+      this.socketService.conversationUpdated(tenantId, {
+        ...updatedConv,
+        lastMessage: {
+          content: message.content,
+          direction: "OUTBOUND",
+          type: "INTERACTIVE",
+        },
+      });
+    }
+
+    try {
+      const resp = await client.sendMessage(payload);
+      const metaMessageId =
+        (resp.data as { messages?: Array<{ id: string }> })?.messages?.[0]
+          ?.id ?? null;
+
+      await this.msgModel.updateOne(
+        { _id: message._id },
+        { status: "SENT", metaMessageId },
+      );
+
+      const enriched = buildEnriched("SENT", metaMessageId);
+      this.socketService.newMessage(tenantId, { ...enriched, _update: true });
+
+      void this.messageUsageService.trackOutbound(
+        tenantId,
+        "service",
+        1,
+        "inbox",
+      );
+      void this.activityService.log({
+        tenantId,
+        userId: agentId,
+        type: "MESSAGE_SENT",
+        description: `Sent a product catalog to ${contact.name ?? contact.phone}`,
+        meta: { conversationId, messageType: "CATALOG" },
+      });
+
+      return enriched as unknown as MessageDocument;
+    } catch (err) {
       await this.msgModel.updateOne({ _id: message._id }, { status: "FAILED" });
       const enriched = buildEnriched("FAILED");
       this.socketService.newMessage(tenantId, { ...enriched, _update: true });

@@ -17,8 +17,17 @@ import { GatewayModule } from "../gateway/gateway.module";
 import { User, UserSchema } from "../users/schemas/user.schema";
 import { QueueModule } from "../queue/queue.module";
 
+import { ProjectAccessModule } from "../common/guards/project-access.module";
+import {
+  UserAccountMembership,
+  UserAccountMembershipSchema,
+} from "../auth/schemas/user-account-membership.schema";
 @Module({
   imports: [
+    ProjectAccessModule,
+    MongooseModule.forFeature([
+      { name: UserAccountMembership.name, schema: UserAccountMembershipSchema },
+    ]),
     ConfigModule,
     MongooseModule.forFeature([
       { name: Notification.name, schema: NotificationSchema },
