@@ -20,6 +20,12 @@ const PROJECT_SELECTION_EXEMPT_PREFIXES = [
   "/api/v1/auth/create-project",
   "/api/v1/auth/me",
   "/api/v1/auth/sessions",
+  // Platform staff (SUPER_ADMIN/SUPPORT_AGENT) aren't tenant members — they
+  // have no project to select at all, but buildAuthResponse() sets
+  // pendingAccountSelection=true on every login regardless of role, so
+  // without this every /platform/* route 403s for them until a
+  // select-project call they'll never make.
+  "/api/v1/platform",
 ];
 
 @Injectable()
@@ -37,6 +43,7 @@ export class JwtAuthGuard extends AuthGuard("jwt") {
     }
 
     throw new ForbiddenException({
+      success: false,
       code: "PROJECT_SELECTION_REQUIRED",
       message: "Select a project before continuing.",
     });
