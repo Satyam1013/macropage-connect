@@ -853,6 +853,27 @@ export class ConversationsService {
                     .sort((a, b) => Number(a) - Number(b))
                     .map((k) => ({ type: "text", text: resolvedVars[k] })),
                 },
+                // Meta requires authentication (OTP) templates to repeat the
+                // code as the copy-code button's parameter.
+                ...(template.category === "AUTHENTICATION"
+                  ? [
+                      {
+                        type: "button",
+                        sub_type: "url",
+                        index: "0",
+                        parameters: [
+                          {
+                            type: "text",
+                            text: resolvedVars[
+                              Object.keys(resolvedVars).sort(
+                                (a, b) => Number(a) - Number(b),
+                              )[0]
+                            ],
+                          },
+                        ],
+                      },
+                    ]
+                  : []),
               ],
             }),
         },
