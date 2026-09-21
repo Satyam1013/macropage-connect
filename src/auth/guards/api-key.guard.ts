@@ -9,6 +9,7 @@ import { Reflector } from "@nestjs/core";
 import type { Request } from "express";
 import { SettingsService } from "../../settings/settings.service";
 import { API_PERMISSION_KEY } from "../../common/decorators/require-permission.decorator";
+import { hasApiPermission } from "../../common/api-key-permissions";
 
 export interface ApiKeyContext {
   tenantId: string;
@@ -57,7 +58,7 @@ export class ApiKeyGuard implements CanActivate {
 
     if (
       requiredPermission &&
-      !record.permissions.includes(requiredPermission)
+      !hasApiPermission(record.permissions, requiredPermission)
     ) {
       throw new ForbiddenException({
         success: false,
