@@ -820,9 +820,25 @@ export class ConversationsService {
     const conv = await this.findOrCreate(tenantId, contactId);
     const client = await this.metaService.getClient(tenantId);
 
-    // Auto-fill templateVars from contact name if caller didn't supply them
+    // Auto-fill templateVars from contact name if caller didn't supply them.
+    // Never for AUTHENTICATION templates — their only variable is the OTP
+    // code itself, which can't be derived from contact info. Falling back
+    // to contact.name/phone there silently sent things like a 16-character
+    // business name as the "verification code," which Meta's strict
+    // authentication parameter validation rejects with an opaque
+    // "(#131008) Required parameter is missing".
     let resolvedVars = templateVars;
     if (!resolvedVars || Object.keys(resolvedVars).length === 0) {
+      if (template.category === "AUTHENTICATION") {
+        throw new BadRequestException({
+          success: false,
+          error: {
+            code: "OTP_CODE_REQUIRED",
+            message:
+              "This is an authentication template — the verification code must be provided explicitly, it can't be auto-filled.",
+          },
+        });
+      }
       const sampleKeys = Object.keys(
         (template.sampleVariables as Record<string, string> | undefined) ?? {},
       );
