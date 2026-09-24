@@ -1,9 +1,9 @@
 import { Processor, WorkerHost } from "@nestjs/bullmq";
 import { Logger } from "@nestjs/common";
 import { Job } from "bullmq";
-import { Resend } from "resend";
 import { ConfigService } from "@nestjs/config";
 
+import { sendViaBrevo } from "../brevo.client";
 import { EmailJobData } from "../queue.types";
 
 @Processor("emails", {
@@ -20,35 +20,29 @@ export class EmailProcessor extends WorkerHost {
 
   async process(job: Job<EmailJobData>): Promise<void> {
     const { to, subject, html, text } = job.data;
-    const apiKey = this.config.get<string>("RESEND_API_KEY");
+    const apiKey = this.config.get<string>("BREVO_API_KEY");
 
     if (!apiKey) {
       this.logger.warn(
-        `Email skipped (RESEND_API_KEY not set) → ${to}: ${subject}`,
+        `Email skipped (BREVO_API_KEY not set) → ${to}: ${subject}`,
       );
       return;
     }
 
     this.logger.log(`Processing email job [${job.id}] → ${to}: ${subject}`);
 
-    const resend = new Resend(apiKey);
     const from =
       this.config.get<string>("EMAIL_FROM") ??
       "Macropage <noreply@macropage.in>";
 
-    const { data, error } = await resend.emails.send({
-      from,
-      to,
-      subject,
-      html,
-      text,
-    });
-
-    if (error) {
-      this.logger.error(`Failed to send email to ${to}`, error);
-      throw new Error(error.message);
+    let messageId: string | undefined;
+    try {
+      messageId = await sendViaBrevo(apiKey, { from, to, subject, html, text });
+    } catch (err) {
+      this.logger.error(`Failed to send email to ${to}`, err);
+      throw err;
     }
 
-    this.logger.log(`Email sent to ${to} | id: ${data?.id}`);
+    this.logger.log(`Email sent to ${to} | id: ${messageId}`);
   }
 }
