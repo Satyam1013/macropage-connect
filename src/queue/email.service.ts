@@ -1,6 +1,6 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { Resend } from "resend";
+import { sendViaBrevo } from "./brevo.client";
 
 @Injectable()
 export class EmailService {
@@ -19,21 +19,21 @@ export class EmailService {
   constructor(private readonly config: ConfigService) {}
 
   async sendRaw(to: string, subject: string, html: string): Promise<void> {
-    const apiKey = this.config.get<string>("RESEND_API_KEY");
+    const apiKey = this.config.get<string>("BREVO_API_KEY");
     if (!apiKey) {
       this.logger.warn(
-        `Email skipped (RESEND_API_KEY not set) → ${to}: ${subject}`,
+        `Email skipped (BREVO_API_KEY not set) → ${to}: ${subject}`,
       );
       return;
     }
-    const resend = new Resend(apiKey);
     const from =
       this.config.get<string>("EMAIL_FROM") ??
       "Macropage <noreply@macropage.in>";
-    const { error } = await resend.emails.send({ from, to, subject, html });
-    if (error) {
-      this.logger.error(`Failed to send email to ${to}`, error);
-      throw new Error(error.message);
+    try {
+      await sendViaBrevo(apiKey, { from, to, subject, html });
+    } catch (err) {
+      this.logger.error(`Failed to send email to ${to}`, err);
+      throw err;
     }
     this.logger.log(`Email sent → ${to}: ${subject}`);
   }
