@@ -4,7 +4,16 @@ import { Job } from "bullmq";
 import { CampaignsService } from "./campaigns.service";
 import { CampaignJobData } from "../queue/queue.types";
 
-@Processor("campaigns")
+// Only fires scheduled (delayed) campaigns, so it sits idle almost always.
+// BullMQ's defaults (drainDelay 5s, stalledInterval 30s) poll Redis nonstop
+// even then — enough to blow through Upstash's 500k commands/month cap.
+// New/delayed jobs still wake the worker immediately, drainDelay only sets
+// how often an idle worker re-checks.
+@Processor("campaigns", {
+  drainDelay: 300,
+  stalledInterval: 300000,
+  maxStalledCount: 1,
+})
 export class CampaignProcessor extends WorkerHost {
   private readonly logger = new Logger(CampaignProcessor.name);
 
