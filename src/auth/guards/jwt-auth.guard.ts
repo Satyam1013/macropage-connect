@@ -28,6 +28,13 @@ const PROJECT_SELECTION_EXEMPT_PREFIXES = [
   "/api/v1/platform",
 ];
 
+// Staff routes aren't all under /api/v1/platform — most modules mount them
+// as /<module>/platform/... (e.g. /help/tickets/platform, /upload/platform/image,
+// /billing/platform/plans/:id). For platform staff, any path with a
+// "platform" segment is exempt too; PlatformRolesGuard still gates which
+// staff role may call each one.
+const PLATFORM_SEGMENT = /\/platform(\/|$)/;
+
 @Injectable()
 export class JwtAuthGuard extends AuthGuard("jwt") {
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -39,6 +46,9 @@ export class JwtAuthGuard extends AuthGuard("jwt") {
     if (!user?.pendingAccountSelection) return true;
 
     if (PROJECT_SELECTION_EXEMPT_PREFIXES.some((p) => req.path.startsWith(p))) {
+      return true;
+    }
+    if (user.platformRole && PLATFORM_SEGMENT.test(req.path)) {
       return true;
     }
 

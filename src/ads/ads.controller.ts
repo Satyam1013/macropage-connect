@@ -43,6 +43,14 @@ export class AdsController {
     return this.adsService.findAllForPlatform(category);
   }
 
+  // Declared before platform/:id so "active" isn't captured as an id.
+  @Get("platform/active")
+  @UseGuards(JwtAuthGuard, PlatformRolesGuard)
+  @PlatformRoles(PlatformRole.SUPER_ADMIN)
+  findAllActiveForPlatform() {
+    return this.adsService.findAllActiveForPlatform();
+  }
+
   @Get("platform/:id")
   @UseGuards(JwtAuthGuard, PlatformRolesGuard)
   @PlatformRoles(PlatformRole.SUPER_ADMIN)

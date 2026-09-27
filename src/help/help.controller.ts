@@ -121,6 +121,13 @@ export class HelpController {
     return this.helpService.getFaqs(category);
   }
 
+  @Get("platform/docs")
+  @UseGuards(JwtAuthGuard, PlatformRolesGuard)
+  @PlatformRoles(PlatformRole.SUPER_ADMIN)
+  getDocsForPlatform(@Query("category") category?: string) {
+    return this.helpService.getDocs(category);
+  }
+
   @Post("platform/docs")
   @UseGuards(JwtAuthGuard, PlatformRolesGuard)
   @PlatformRoles(PlatformRole.SUPER_ADMIN)
@@ -140,6 +147,13 @@ export class HelpController {
   @PlatformRoles(PlatformRole.SUPER_ADMIN)
   deleteDoc(@Param("id") id: string) {
     return this.helpService.deleteDoc(id);
+  }
+
+  @Get("platform/faq")
+  @UseGuards(JwtAuthGuard, PlatformRolesGuard)
+  @PlatformRoles(PlatformRole.SUPER_ADMIN)
+  getFaqsForPlatform(@Query("category") category?: string) {
+    return this.helpService.getFaqs(category);
   }
 
   @Post("platform/faq")
@@ -165,6 +179,13 @@ export class HelpController {
 
   @Get("videos")
   getVideoTutorials() {
+    return this.helpService.getVideoTutorials();
+  }
+
+  @Get("platform/video-tutorials")
+  @UseGuards(JwtAuthGuard, PlatformRolesGuard)
+  @PlatformRoles(PlatformRole.SUPER_ADMIN)
+  getVideoTutorialsForPlatform() {
     return this.helpService.getVideoTutorials();
   }
 
