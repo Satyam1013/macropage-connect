@@ -50,9 +50,14 @@ export class AdsService {
     return ad;
   }
 
-  async findActive(tenantId: string): Promise<AdDocument[]> {
+  /** Every ad currently live (active flag + inside its date window), regardless of targeting. */
+  findAllActiveForPlatform() {
+    return this.adModel.find(this.liveFilter()).sort({ priority: -1 }).exec();
+  }
+
+  private liveFilter() {
     const now = new Date();
-    const baseFilter = {
+    return {
       isActive: true,
       $and: [
         {
@@ -64,6 +69,10 @@ export class AdsService {
         { $or: [{ endDate: { $exists: false } }, { endDate: { $gte: now } }] },
       ],
     };
+  }
+
+  async findActive(tenantId: string): Promise<AdDocument[]> {
+    const baseFilter = this.liveFilter();
 
     const tags = await this.tagModel.find({ customerIds: tenantId }).exec();
     const tagIds = tags.map((t) => t._id);

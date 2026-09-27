@@ -3,6 +3,9 @@ import { InjectModel } from "@nestjs/mongoose";
 import { Model, Types } from "mongoose";
 import { Message, MessageDocument } from "../../schemas/message.schema";
 import { User, UserDocument } from "../../users/schemas/user.schema";
+import { Tenant, TenantDocument } from "../../schemas/tenant.schema";
+import { UserRole } from "../../auth/auth.constants";
+import { BillingService } from "../../billing/billing.service";
 import { QueryMessageLogsDto } from "./dto/query-message-logs.dto";
 import {
   QueryMessageStatsDto,
@@ -16,6 +19,9 @@ export class MessagesStatsService {
     private readonly messageModel: Model<MessageDocument>,
     @InjectModel(User.name)
     private readonly userModel: Model<UserDocument>,
+    @InjectModel(Tenant.name)
+    private readonly tenantModel: Model<TenantDocument>,
+    private readonly billingService: BillingService,
   ) {}
 
   /** "customerId" here is the tenant's own user id (== tenantId). */
@@ -32,17 +38,111 @@ export class MessagesStatsService {
       filter.createdAt = createdAt;
     }
 
-    const [data, total] = await Promise.all([
+    const [messages, total] = await Promise.all([
       this.messageModel
         .find(filter)
         .sort({ createdAt: -1 })
         .skip((page - 1) * limit)
         .limit(limit)
+        .lean()
         .exec(),
       this.messageModel.countDocuments(filter),
     ]);
 
-    return { data, total, page, limit };
+    const ownersByTenant = await this.resolveTenantOwners([
+      ...new Set([
+        ...messages.map((m) => m.tenantId),
+        ...(customerId ? [customerId] : []),
+      ]),
+    ]);
+
+    const data = messages.map((m) => ({
+      ...m,
+      customerName: ownersByTenant.get(m.tenantId)?.name ?? null,
+    }));
+
+    if (!customerId) {
+      return { data, total, page, limit };
+    }
+
+    // Scoped to one customer: also return their plan + purchase history so
+    // the admin panel doesn't need a second round-trip to /billing.
+    const owner = ownersByTenant.get(customerId);
+    const [currentPlan, purchaseLogs] = await Promise.all([
+      this.billingService.getSubscription(customerId),
+      this.billingService.getPlanHistoryForPlatform(customerId),
+    ]);
+
+    return {
+      data,
+      total,
+      page,
+      limit,
+      customer: {
+        _id: customerId,
+        name: owner?.name ?? null,
+        email: owner?.email ?? null,
+        company: owner?.company ?? null,
+        billingPlan: owner?.billingPlan ?? null,
+      },
+      currentPlan,
+      purchaseLogs,
+    };
+  }
+
+  /**
+   * tenantId -> owning user. Covers both conventions: legacy tenants whose
+   * id is the owner's own User _id (or a member's `tenantId`), and
+   * standalone Tenant docs created via /auth/create-project (owner via
+   * Tenant.ownerId).
+   */
+  private async resolveTenantOwners(tenantIds: string[]) {
+    const owners = new Map<
+      string,
+      Pick<User, "name" | "email" | "company" | "billingPlan">
+    >();
+    if (tenantIds.length === 0) return owners;
+
+    const objectIds = tenantIds
+      .filter((id) => Types.ObjectId.isValid(id))
+      .map((id) => new Types.ObjectId(id));
+
+    const tenants = await this.tenantModel
+      .find({ _id: { $in: objectIds } })
+      .select("ownerId")
+      .lean()
+      .exec();
+    const ownerIdByTenant = new Map(
+      tenants.map((t) => [String(t._id), t.ownerId]),
+    );
+    const ownerObjectIds = [...ownerIdByTenant.values()]
+      .filter((id) => Types.ObjectId.isValid(id))
+      .map((id) => new Types.ObjectId(id));
+
+    const users = await this.userModel
+      .find({
+        $or: [
+          { _id: { $in: [...objectIds, ...ownerObjectIds] } },
+          { tenantId: { $in: tenantIds }, role: UserRole.OWNER },
+        ],
+      })
+      .select("name email company billingPlan tenantId")
+      .lean()
+      .exec();
+    const userById = new Map(users.map((u) => [String(u._id), u]));
+    const ownerByLegacyTenantId = new Map(
+      users.filter((u) => u.tenantId).map((u) => [String(u.tenantId), u]),
+    );
+
+    for (const tenantId of tenantIds) {
+      const ownerId = ownerIdByTenant.get(tenantId);
+      const user =
+        (ownerId && userById.get(ownerId)) ||
+        userById.get(tenantId) ||
+        ownerByLegacyTenantId.get(tenantId);
+      if (user) owners.set(tenantId, user);
+    }
+    return owners;
   }
 
   async getStats(query: QueryMessageStatsDto) {

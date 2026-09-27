@@ -34,6 +34,7 @@ import { CatalogModule } from "./catalog/catalog.module";
 import { MessagesStatsModule } from "./platform-admin/messages-stats/messages-stats.module";
 import { PlatformCustomersModule } from "./platform-admin/customers/customers.module";
 import { PlatformNotificationsModule } from "./platform-admin/notifications/notifications.module";
+import { PlatformLeadsModule } from "./platform-admin/leads/leads.module";
 
 // Infrastructure
 import { MetaModule } from "./meta/meta.module";
@@ -89,6 +90,7 @@ import { ScheduledNotificationsModule } from "./notifications/scheduled-notifica
     MessagesStatsModule,
     PlatformCustomersModule,
     PlatformNotificationsModule,
+    PlatformLeadsModule,
   ],
 })
 export class AppModule {}
