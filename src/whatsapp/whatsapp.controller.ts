@@ -131,6 +131,12 @@ export class WhatsappController {
     return this.whatsappService.shareWABADetails(tenantId, user, body.email);
   }
 
+  @Post("sync")
+  @HttpCode(HttpStatus.OK)
+  syncFromMeta(@Request() req: ProjectAuthReq) {
+    return this.whatsappService.syncFromMeta(req.projectId);
+  }
+
   @Post("register-phone")
   @HttpCode(HttpStatus.OK)
   registerPhone(@Request() req: ProjectAuthReq, @Body() dto: RegisterPhoneDto) {
