@@ -920,6 +920,109 @@ export class WhatsappService {
 </html>`;
   }
 
+  /**
+   * Re-read the connected phone number from Meta and refresh our copy.
+   * displayName etc. are only captured at connect time, so a display-name
+   * change approved later in WhatsApp Manager never reached our DB.
+   */
+  async syncFromMeta(tenantId: string) {
+    const waba = await this.wabaModel.findOne({ tenantId }).exec();
+    if (!waba?.metaConnected || !waba.phoneNumberId) {
+      throw new BadRequestException({
+        success: false,
+        error: {
+          code: "META_NOT_CONNECTED",
+          message: "WhatsApp not connected",
+        },
+      });
+    }
+
+    // The tenant's own token can read its phone number; fall back to the
+    // system token once that one has expired.
+    const token = waba.tokenExpired
+      ? process.env.META_SYSTEM_USER_TOKEN
+      : this.encryption.decrypt(waba.accessToken);
+    if (!token) {
+      throw new BadRequestException({
+        success: false,
+        error: {
+          code: "TOKEN_EXPIRED",
+          message: "WhatsApp token expired — reconnect your account",
+        },
+      });
+    }
+
+    type PhoneDetails = {
+      display_phone_number: string;
+      verified_name: string;
+      name_status?: string;
+      new_name_status?: string;
+      quality_rating?: string;
+      messaging_limit_tier?: string;
+      status?: string;
+    };
+
+    let phone: PhoneDetails;
+    try {
+      const { data } = await axios.get<PhoneDetails>(
+        `${BASE}/${waba.phoneNumberId}`,
+        {
+          params: {
+            fields:
+              "display_phone_number,verified_name,name_status,new_name_status,quality_rating,messaging_limit_tier,status",
+          },
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      );
+      phone = data;
+    } catch (err) {
+      const metaMessage = axios.isAxiosError(err)
+        ? (err.response?.data as { error?: { message?: string } } | undefined)
+            ?.error?.message
+        : undefined;
+      this.logger.error(
+        `[syncFromMeta] tenant=${tenantId} phoneNumberId=${waba.phoneNumberId}: ${metaMessage ?? String(err)}`,
+      );
+      throw new BadRequestException({
+        success: false,
+        error: {
+          code: "META_SYNC_FAIL",
+          message: metaMessage ?? "Could not fetch phone details from Meta",
+        },
+      });
+    }
+
+    const updated = await this.wabaModel
+      .findOneAndUpdate(
+        { tenantId },
+        {
+          phoneNumber: phone.display_phone_number,
+          displayName: phone.verified_name,
+          ...(phone.quality_rating && { qualityRating: phone.quality_rating }),
+          ...(phone.messaging_limit_tier && {
+            messagingTier: phone.messaging_limit_tier,
+          }),
+        },
+        { returnDocument: "after" },
+      )
+      .exec();
+
+    return {
+      success: true,
+      data: {
+        phoneNumberId: waba.phoneNumberId,
+        phoneNumber: updated?.phoneNumber,
+        displayName: updated?.displayName,
+        previousDisplayName: waba.displayName ?? null,
+        nameStatus: phone.name_status ?? null,
+        newNameStatus: phone.new_name_status ?? null,
+        phoneStatus: phone.status ?? null,
+        qualityRating: updated?.qualityRating,
+        messagingTier: updated?.messagingTier,
+      },
+    };
+  }
+
   async registerPhoneNumber(tenantId: string, dto: RegisterPhoneDto) {
     const waba = await this.wabaModel.findOne({ tenantId }).exec();
     if (!waba?.metaConnected) {
