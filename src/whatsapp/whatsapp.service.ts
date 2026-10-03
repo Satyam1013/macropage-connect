@@ -1046,24 +1046,44 @@ export class WhatsappService {
       });
     }
 
-    const systemToken = process.env.META_SYSTEM_USER_TOKEN;
-    if (!systemToken) {
-      this.logger.error("[registerPhone] META_SYSTEM_USER_TOKEN is not set");
+    // Prefer the client's own token from Embedded Signup — it's scoped to
+    // their WABA by construction. The system user token only works for
+    // WABAs manually assigned to it in Business Settings, so it's kept as
+    // the fallback.
+    const tokens: { label: string; value: string }[] = [];
+    if (!waba.tokenExpired && waba.accessToken) {
+      try {
+        tokens.push({
+          label: "client",
+          value: this.encryption.decrypt(waba.accessToken),
+        });
+      } catch (err) {
+        this.logger.warn(
+          `[registerPhone] tenant=${tenantId}: could not decrypt client token: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
+    if (process.env.META_SYSTEM_USER_TOKEN) {
+      tokens.push({
+        label: "system",
+        value: process.env.META_SYSTEM_USER_TOKEN,
+      });
+    }
+    if (tokens.length === 0) {
+      this.logger.error(
+        `[registerPhone] tenant=${tenantId}: no usable token (client token expired, META_SYSTEM_USER_TOKEN not set)`,
+      );
       throw new InternalServerErrorException({
         success: false,
         error: {
           code: "SERVER_CONFIG_ERROR",
-          message: "System token not configured — contact support",
+          message: "No valid WhatsApp token — reconnect your account",
         },
       });
     }
 
     try {
-      await axios.post(
-        `https://graph.facebook.com/v25.0/${waba.phoneNumberId}/register`,
-        { messaging_product: "whatsapp", pin: dto.pin },
-        { headers: { Authorization: `Bearer ${systemToken}` } },
-      );
+      await this.postRegister(waba.phoneNumberId, dto.pin, tokens, tenantId);
     } catch (err) {
       if (axios.isAxiosError(err)) {
         const metaErr = (
@@ -1125,6 +1145,51 @@ export class WhatsappService {
         phoneRegistered: true,
       },
     };
+  }
+
+  /**
+   * POST /{phoneNumberId}/register, trying each token in order. Moves on to
+   * the next token only for auth/permission errors — never for a wrong PIN
+   * or "already registered", since retrying a PIN can lock the number.
+   */
+  private async postRegister(
+    phoneNumberId: string,
+    pin: string,
+    tokens: { label: string; value: string }[],
+    tenantId: string,
+  ) {
+    for (const [i, token] of tokens.entries()) {
+      try {
+        await axios.post(
+          `https://graph.facebook.com/v25.0/${phoneNumberId}/register`,
+          { messaging_product: "whatsapp", pin },
+          { headers: { Authorization: `Bearer ${token.value}` } },
+        );
+        this.logger.log(
+          `[registerPhone] tenant=${tenantId} registered via ${token.label} token`,
+        );
+        return;
+      } catch (err) {
+        const metaErr = axios.isAxiosError(err)
+          ? (
+              err.response?.data as
+                | { error?: { code?: number; error_subcode?: number } }
+                | undefined
+            )?.error
+          : undefined;
+        // 190 = invalid/expired token, 10/200 = permission denied,
+        // 100 + subcode 33 = object not visible to this token.
+        const isAccessError =
+          metaErr?.code === 190 ||
+          metaErr?.code === 10 ||
+          metaErr?.code === 200 ||
+          (metaErr?.code === 100 && metaErr.error_subcode === 33);
+        if (!isAccessError || i === tokens.length - 1) throw err;
+        this.logger.warn(
+          `[registerPhone] tenant=${tenantId}: ${token.label} token lacks access (code ${metaErr?.code}), trying ${tokens[i + 1].label} token`,
+        );
+      }
+    }
   }
 
   async getRegistrationStatus(tenantId: string) {
