@@ -14,6 +14,7 @@ import { MediaDownloadService } from "../whatsapp/media-download.service";
 import { NotificationsModule } from "../notifications/notifications.module";
 import { CatalogModule } from "../catalog/catalog.module";
 import { TenantModule } from "../tenant/tenant.module";
+import { WhatsappModule } from "../whatsapp/whatsapp.module";
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { TenantModule } from "../tenant/tenant.module";
     NotificationsModule,
     CatalogModule,
     TenantModule,
+    WhatsappModule,
   ],
   providers: [WebhookService, MediaDownloadService],
   controllers: [WebhookController],

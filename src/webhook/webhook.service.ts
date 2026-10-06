@@ -17,6 +17,7 @@ import {
   RawOrderItem,
 } from "../catalog/order-fulfillment.service";
 import { TenantResolverService } from "../tenant/tenant-resolver.service";
+import { WhatsappService } from "../whatsapp/whatsapp.service";
 
 interface InboundMediaField {
   id?: string;
@@ -40,6 +41,7 @@ export class WebhookService {
     private readonly notificationsService: NotificationsService,
     private readonly orderFulfillmentService: OrderFulfillmentService,
     private readonly tenantResolver: TenantResolverService,
+    private readonly whatsappService: WhatsappService,
   ) {}
 
   verifyWebhook(query: Record<string, string>): string {
@@ -58,13 +60,24 @@ export class WebhookService {
 
     const entries =
       (body.entry as Array<{
+        id?: string;
         changes?: Array<{ field: string; value: Record<string, unknown> }>;
       }>) ?? [];
 
     for (const entry of entries) {
+      // For account-level fields entry.id is the WABA id.
+      const wabaId = entry.id;
       for (const change of entry.changes ?? []) {
         if (change.field === "phone_number_quality_update") {
-          await this.handleQualityUpdate(change.value);
+          await this.handleQualityUpdate(wabaId, change.value);
+          continue;
+        }
+        if (change.field === "phone_number_name_update") {
+          await this.handleNameUpdate(wabaId, change.value);
+          continue;
+        }
+        if (change.field === "account_update") {
+          await this.handleAccountUpdate(wabaId, change.value);
           continue;
         }
 
@@ -337,27 +350,146 @@ export class WebhookService {
   }
 
   // Meta sends this on quality-rating changes for a connected number. The
-  // payload carries the rating under `event` (e.g. GREEN/YELLOW/RED), not
-  // under a dedicated `quality_rating` key.
-  private async handleQualityUpdate(
+  /**
+   * Account-level webhooks identify the number only by display_phone_number,
+   * which Meta sends as bare digits ("919238672846") while we store the
+   * formatted form ("+91 92386 72846") — so compare digits only, within the
+   * WABA the entry belongs to.
+   */
+  private async findWabaByDisplayNumber(
+    wabaId: string | undefined,
+    displayPhoneNumber: string | undefined,
+  ): Promise<WABAAccountDocument | null> {
+    const candidates = await this.wabaModel
+      .find(wabaId ? { wabaId } : {})
+      .exec();
+    const digits = displayPhoneNumber?.replace(/\D/g, "");
+    if (digits) {
+      const match = candidates.find(
+        (w) => w.phoneNumber?.replace(/\D/g, "") === digits,
+      );
+      if (match) return match;
+    }
+    // One number per WABA is the norm — fall back to it when the payload's
+    // number doesn't match our stored formatting.
+    return wabaId && candidates.length === 1 ? candidates[0] : null;
+  }
+
+  // value: { display_phone_number, decision: APPROVED | DECLINED | DEFERRED,
+  //          requested_verified_name, rejection_reason }
+  private async handleNameUpdate(
+    wabaId: string | undefined,
     value: Record<string, unknown>,
   ): Promise<void> {
     try {
-      const displayPhoneNumber = value.display_phone_number as
-        | string
-        | undefined;
-      const newRating = value.event as string | undefined;
-      if (!displayPhoneNumber || !newRating) return;
+      const decision = value.decision as string | undefined;
+      if (!decision) return;
+      const requestedName = value.requested_verified_name as string | undefined;
+      const rejectionReason =
+        typeof value.rejection_reason === "string"
+          ? value.rejection_reason
+          : undefined;
 
-      const waba = await this.wabaModel
-        .findOne({ phoneNumber: displayPhoneNumber })
-        .exec();
+      const waba = await this.findWabaByDisplayNumber(
+        wabaId,
+        value.display_phone_number as string | undefined,
+      );
+      if (!waba) {
+        this.logger.warn(
+          `[nameUpdate] no WABA for wabaId=${wabaId ?? "?"} number=${String(value.display_phone_number)}`,
+        );
+        return;
+      }
+
+      const approved = decision === "APPROVED";
+      await this.wabaModel.updateOne(
+        { _id: waba._id },
+        {
+          nameStatus: decision,
+          nameDecisionAt: new Date(),
+          ...(requestedName && { requestedDisplayName: requestedName }),
+          ...(approved && { needsReregister: true }),
+          // A fresh approval deserves a fresh automatic attempt.
+          ...(approved && { $unset: { reregisterError: 1 } }),
+        },
+      );
+      this.logger.log(
+        `[nameUpdate] tenant=${waba.tenantId} "${requestedName ?? "?"}" -> ${decision}`,
+      );
+
+      const ownerId = await this.findOwnerId(waba.tenantId);
+      const name = requestedName ? `"${requestedName}"` : "Your display name";
+
+      if (approved) {
+        const result = await this.whatsappService.reregisterFromStoredPin(
+          waba.tenantId,
+        );
+        if (!ownerId) return;
+        await this.notificationsService.create(
+          waba.tenantId,
+          ownerId,
+          "display_name_update",
+          result.success
+            ? "Display name approved ✅"
+            : "Display name approved — action needed",
+          result.success
+            ? `${name} is now live on your WhatsApp number.`
+            : `${name} was approved. Re-register your number in Settings → WhatsApp to start using it.`,
+          {
+            decision,
+            requestedName,
+            reregistered: result.success,
+            reason: result.reason,
+            link: "/settings/whatsapp",
+          },
+        );
+        return;
+      }
+
+      if (!ownerId) return;
+      await this.notificationsService.create(
+        waba.tenantId,
+        ownerId,
+        "display_name_update",
+        `Display name ${decision.toLowerCase()}`,
+        `Meta's decision on ${name}: ${decision}${rejectionReason ? ` — ${rejectionReason}` : ""}.`,
+        {
+          decision,
+          requestedName,
+          rejectionReason,
+          link: "/settings/whatsapp",
+        },
+      );
+    } catch (err) {
+      this.logger.error("Failed to handle display name update", err);
+    }
+  }
+
+  // value: { display_phone_number, event: FLAGGED | UNFLAGGED | UPGRADE |
+  //          DOWNGRADE, current_limit: TIER_1K | ..., old_limit }
+  // `event` is a quality/limit transition, not a GREEN/YELLOW/RED rating —
+  // the rating itself comes from the phone node (see WhatsappService sync).
+  private async handleQualityUpdate(
+    wabaId: string | undefined,
+    value: Record<string, unknown>,
+  ): Promise<void> {
+    try {
+      const event = value.event as string | undefined;
+      const currentLimit = value.current_limit as string | undefined;
+      if (!event) return;
+
+      const waba = await this.findWabaByDisplayNumber(
+        wabaId,
+        value.display_phone_number as string | undefined,
+      );
       if (!waba) return;
-      if (waba.qualityRating === newRating) return;
 
       await this.wabaModel.updateOne(
         { _id: waba._id },
-        { qualityRating: newRating },
+        {
+          lastQualityEvent: event,
+          ...(currentLimit && { messagingTier: currentLimit }),
+        },
       );
 
       const ownerId = await this.findOwnerId(waba.tenantId);
@@ -367,11 +499,60 @@ export class WebhookService {
         waba.tenantId,
         ownerId,
         "quality_rating_changed",
-        "WhatsApp quality rating changed",
-        `Your WhatsApp number's quality rating changed to ${newRating}.`,
+        "WhatsApp number quality update",
+        `Meta reported "${event}" for your WhatsApp number${currentLimit ? ` (messaging limit: ${currentLimit})` : ""}.`,
+        { event, currentLimit, link: "/settings/whatsapp" },
       );
     } catch (err) {
       this.logger.error("Failed to handle quality rating update", err);
+    }
+  }
+
+  // value: { event: ACCOUNT_RESTRICTION | ACCOUNT_VIOLATION | DISABLED_UPDATE
+  //          | ..., restriction_info?, violation_info?, ban_info? }
+  private async handleAccountUpdate(
+    wabaId: string | undefined,
+    value: Record<string, unknown>,
+  ): Promise<void> {
+    try {
+      const event = value.event as string | undefined;
+      if (!wabaId || !event) return;
+
+      const restricted =
+        [
+          "ACCOUNT_RESTRICTION",
+          "ACCOUNT_VIOLATION",
+          "DISABLED_UPDATE",
+        ].includes(event) || Boolean(value.ban_info);
+
+      const wabas = await this.wabaModel.find({ wabaId }).exec();
+      if (wabas.length === 0) return;
+
+      await this.wabaModel.updateMany(
+        { wabaId },
+        {
+          accountStatusEvent: event,
+          accountStatusDetail: value,
+          ...(restricted && { accountRestricted: true }),
+        },
+      );
+      this.logger.log(`[accountUpdate] wabaId=${wabaId} event=${event}`);
+
+      if (!restricted) return;
+      for (const waba of wabas) {
+        const ownerId = await this.findOwnerId(waba.tenantId);
+        if (!ownerId) continue;
+        await this.notificationsService.create(
+          waba.tenantId,
+          ownerId,
+          "account_restricted",
+          "WhatsApp account restricted",
+          `Meta reported "${event}" on your WhatsApp Business Account. Check WhatsApp Manager for details.`,
+          { event, link: "/settings/whatsapp" },
+        );
+      }
+    } catch (err) {
+      this.logger.error("Failed to handle account update", err);
     }
   }
 

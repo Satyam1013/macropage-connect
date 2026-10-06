@@ -38,6 +38,8 @@ export class NotificationPreferences {
       team_member_left: { email: false, inApp: true },
       waba_token_expired: { email: true, inApp: true },
       quality_rating_changed: { email: true, inApp: true },
+      display_name_update: { email: true, inApp: true },
+      account_restricted: { email: true, inApp: true },
       daily_limit_reached: { email: true, inApp: true },
       trial_ending: { email: true, inApp: true },
       payment_failed: { email: true, inApp: true },

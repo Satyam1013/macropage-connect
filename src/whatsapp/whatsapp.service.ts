@@ -95,6 +95,12 @@ export class WhatsappService {
                 displayName: waba.displayName,
                 qualityRating: waba.qualityRating,
                 messagingTier: waba.messagingTier,
+                nameStatus: waba.nameStatus ?? null,
+                phoneStatus: waba.phoneStatus ?? null,
+                needsReregister: waba.needsReregister ?? false,
+                requestedDisplayName: waba.requestedDisplayName ?? null,
+                accountRestricted: waba.accountRestricted ?? false,
+                lastSyncedAt: waba.lastSyncedAt ?? null,
               }
             : null,
         approvedTemplates,
@@ -819,6 +825,14 @@ export class WhatsappService {
         tokenExpiresAt: waba.tokenExpiresAt ?? null,
         webhookUrl: `${process.env.APP_URL}/api/v1/webhook/meta`,
         webhookVerified: waba.webhookVerified ?? false,
+        nameStatus: waba.nameStatus ?? null,
+        phoneStatus: waba.phoneStatus ?? null,
+        needsReregister: waba.needsReregister ?? false,
+        requestedDisplayName: waba.requestedDisplayName ?? null,
+        reregisterError: waba.reregisterError ?? null,
+        accountRestricted: waba.accountRestricted ?? false,
+        accountStatusEvent: waba.accountStatusEvent ?? null,
+        lastSyncedAt: waba.lastSyncedAt ?? null,
         connectedAt: (waba as { createdAt?: Date }).createdAt,
         updatedAt: (waba as { updatedAt?: Date }).updatedAt,
       },
@@ -922,8 +936,10 @@ export class WhatsappService {
 
   /**
    * Re-read the connected phone number from Meta and refresh our copy.
-   * displayName etc. are only captured at connect time, so a display-name
-   * change approved later in WhatsApp Manager never reached our DB.
+   * displayName etc. are only captured at connect time, and webhooks can be
+   * missed (e.g. while the server sleeps), so this is the safety net behind
+   * the "Sync from Meta" button. If an approved display name is still
+   * waiting on re-registration, this also attempts it with the stored PIN.
    */
   async syncFromMeta(tenantId: string) {
     const waba = await this.wabaModel.findOne({ tenantId }).exec();
@@ -937,12 +953,8 @@ export class WhatsappService {
       });
     }
 
-    // The tenant's own token can read its phone number; fall back to the
-    // system token once that one has expired.
-    const token = waba.tokenExpired
-      ? process.env.META_SYSTEM_USER_TOKEN
-      : this.encryption.decrypt(waba.accessToken);
-    if (!token) {
+    const tokens = this.registerTokens(waba, tenantId);
+    if (tokens.length === 0) {
       throw new BadRequestException({
         success: false,
         error: {
@@ -962,51 +974,77 @@ export class WhatsappService {
       status?: string;
     };
 
-    let phone: PhoneDetails;
-    try {
-      const { data } = await axios.get<PhoneDetails>(
-        `${BASE}/${waba.phoneNumberId}`,
-        {
-          params: {
-            fields:
-              "display_phone_number,verified_name,name_status,new_name_status,quality_rating,messaging_limit_tier,status",
+    let phone: PhoneDetails | undefined;
+    let lastError: string | undefined;
+    for (const token of tokens) {
+      try {
+        const { data } = await axios.get<PhoneDetails>(
+          `${BASE}/${waba.phoneNumberId}`,
+          {
+            params: {
+              fields:
+                "display_phone_number,verified_name,name_status,new_name_status,quality_rating,messaging_limit_tier,status",
+            },
+            headers: { Authorization: `Bearer ${token.value}` },
           },
-          headers: { Authorization: `Bearer ${token}` },
-        },
-      );
-      phone = data;
-    } catch (err) {
-      const metaMessage = axios.isAxiosError(err)
-        ? (err.response?.data as { error?: { message?: string } } | undefined)
-            ?.error?.message
-        : undefined;
+        );
+        phone = data;
+        break;
+      } catch (err) {
+        lastError = axios.isAxiosError(err)
+          ? (err.response?.data as { error?: { message?: string } } | undefined)
+              ?.error?.message
+          : String(err);
+      }
+    }
+    if (!phone) {
       this.logger.error(
-        `[syncFromMeta] tenant=${tenantId} phoneNumberId=${waba.phoneNumberId}: ${metaMessage ?? String(err)}`,
+        `[syncFromMeta] tenant=${tenantId} phoneNumberId=${waba.phoneNumberId}: ${lastError ?? "unknown error"}`,
       );
       throw new BadRequestException({
         success: false,
         error: {
           code: "META_SYNC_FAIL",
-          message: metaMessage ?? "Could not fetch phone details from Meta",
+          message: lastError ?? "Could not fetch phone details from Meta",
         },
       });
     }
 
-    const updated = await this.wabaModel
-      .findOneAndUpdate(
-        { tenantId },
-        {
-          phoneNumber: phone.display_phone_number,
-          displayName: phone.verified_name,
-          ...(phone.quality_rating && { qualityRating: phone.quality_rating }),
-          ...(phone.messaging_limit_tier && {
-            messagingTier: phone.messaging_limit_tier,
-          }),
-        },
-        { returnDocument: "after" },
-      )
-      .exec();
+    // The approved name is live once Meta reports it as verified_name.
+    const newNameLive =
+      Boolean(waba.requestedDisplayName) &&
+      phone.verified_name === waba.requestedDisplayName;
+    // new_name_status=APPROVED means a new name is approved but not yet
+    // applied — catches the case where the name-update webhook was missed.
+    const pendingApprovedName =
+      !newNameLive &&
+      (waba.needsReregister || phone.new_name_status === "APPROVED");
 
+    await this.wabaModel.updateOne(
+      { tenantId },
+      {
+        phoneNumber: phone.display_phone_number,
+        displayName: phone.verified_name,
+        nameStatus: phone.new_name_status ?? phone.name_status,
+        phoneStatus: phone.status,
+        lastSyncedAt: new Date(),
+        needsReregister: pendingApprovedName,
+        ...(newNameLive && { $unset: { reregisterError: 1 } }),
+        ...(phone.quality_rating && { qualityRating: phone.quality_rating }),
+        ...(phone.messaging_limit_tier && {
+          messagingTier: phone.messaging_limit_tier,
+        }),
+      },
+    );
+
+    // Auto-retry only if the last automatic attempt didn't already fail —
+    // a wrong stored PIN must not be replayed on every sync.
+    let reregister: { success: boolean; reason?: string } | null = null;
+    if (pendingApprovedName && !waba.reregisterError) {
+      reregister = await this.reregisterFromStoredPin(tenantId);
+    }
+
+    const updated = await this.wabaModel.findOne({ tenantId }).lean().exec();
     return {
       success: true,
       data: {
@@ -1014,13 +1052,120 @@ export class WhatsappService {
         phoneNumber: updated?.phoneNumber,
         displayName: updated?.displayName,
         previousDisplayName: waba.displayName ?? null,
-        nameStatus: phone.name_status ?? null,
-        newNameStatus: phone.new_name_status ?? null,
-        phoneStatus: phone.status ?? null,
+        nameStatus: updated?.nameStatus ?? null,
+        phoneStatus: updated?.phoneStatus ?? null,
         qualityRating: updated?.qualityRating,
         messagingTier: updated?.messagingTier,
+        needsReregister: updated?.needsReregister ?? false,
+        reregisterError: updated?.reregisterError ?? null,
+        lastSyncedAt: updated?.lastSyncedAt ?? null,
+        reregister,
       },
     };
+  }
+
+  /**
+   * Re-register the number with the PIN saved by the last successful
+   * register-phone call — used when Meta approves a new display name, which
+   * only goes live after POST /register. Leaves needsReregister=true (and
+   * records why) whenever it can't finish, so the customer sees the banner.
+   */
+  async reregisterFromStoredPin(
+    tenantId: string,
+  ): Promise<{ success: boolean; reason?: string }> {
+    const waba = await this.wabaModel
+      .findOne({ tenantId })
+      .select("+registrationPinEnc")
+      .exec();
+    if (!waba?.phoneNumberId) {
+      return { success: false, reason: "NOT_CONNECTED" };
+    }
+
+    const fail = async (reason: string) => {
+      await this.wabaModel.updateOne(
+        { tenantId },
+        { needsReregister: true, reregisterError: reason },
+      );
+      return { success: false, reason };
+    };
+
+    if (!waba.registrationPinEnc) return fail("NO_STORED_PIN");
+
+    let pin: string;
+    try {
+      pin = this.encryption.decrypt(waba.registrationPinEnc);
+    } catch {
+      this.logger.error(
+        `[reregister] tenant=${tenantId}: stored PIN could not be decrypted`,
+      );
+      return fail("NO_STORED_PIN");
+    }
+
+    const tokens = this.registerTokens(waba, tenantId);
+    if (tokens.length === 0) return fail("REGISTER_FAILED");
+
+    try {
+      await this.postRegister(waba.phoneNumberId, pin, tokens, tenantId);
+    } catch (err) {
+      const metaErr = axios.isAxiosError(err)
+        ? (
+            err.response?.data as
+              | { error?: { message?: string; error_subcode?: number } }
+              | undefined
+          )?.error
+        : undefined;
+      // Meta reports the number as already registered — we can't tell from
+      // that whether the new name applied; a later sync will clear the flag
+      // once verified_name matches.
+      if (metaErr?.error_subcode === 2388056) return fail("ALREADY_REGISTERED");
+      this.logger.error(
+        `[reregister] tenant=${tenantId}: ${metaErr?.message ?? String(err)}`,
+      );
+      return fail("REGISTER_FAILED");
+    }
+
+    await this.wabaModel.updateOne(
+      { tenantId },
+      {
+        needsReregister: false,
+        phoneRegisteredAt: new Date(),
+        $unset: { reregisterError: 1 },
+      },
+    );
+    this.logger.log(`[reregister] tenant=${tenantId}: re-registered`);
+    return { success: true };
+  }
+
+  /**
+   * Tokens to call /register (and read the phone node) with, in order: the
+   * client's own Embedded Signup token — scoped to their WABA by
+   * construction — then the system user token, which only sees WABAs
+   * manually assigned to it in Business Settings.
+   */
+  private registerTokens(
+    waba: WABAAccountDocument,
+    tenantId: string,
+  ): { label: string; value: string }[] {
+    const tokens: { label: string; value: string }[] = [];
+    if (!waba.tokenExpired && waba.accessToken) {
+      try {
+        tokens.push({
+          label: "client",
+          value: this.encryption.decrypt(waba.accessToken),
+        });
+      } catch (err) {
+        this.logger.warn(
+          `[registerTokens] tenant=${tenantId}: could not decrypt client token: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
+    if (process.env.META_SYSTEM_USER_TOKEN) {
+      tokens.push({
+        label: "system",
+        value: process.env.META_SYSTEM_USER_TOKEN,
+      });
+    }
+    return tokens;
   }
 
   async registerPhoneNumber(tenantId: string, dto: RegisterPhoneDto) {
@@ -1046,29 +1191,7 @@ export class WhatsappService {
       });
     }
 
-    // Prefer the client's own token from Embedded Signup — it's scoped to
-    // their WABA by construction. The system user token only works for
-    // WABAs manually assigned to it in Business Settings, so it's kept as
-    // the fallback.
-    const tokens: { label: string; value: string }[] = [];
-    if (!waba.tokenExpired && waba.accessToken) {
-      try {
-        tokens.push({
-          label: "client",
-          value: this.encryption.decrypt(waba.accessToken),
-        });
-      } catch (err) {
-        this.logger.warn(
-          `[registerPhone] tenant=${tenantId}: could not decrypt client token: ${err instanceof Error ? err.message : String(err)}`,
-        );
-      }
-    }
-    if (process.env.META_SYSTEM_USER_TOKEN) {
-      tokens.push({
-        label: "system",
-        value: process.env.META_SYSTEM_USER_TOKEN,
-      });
-    }
+    const tokens = this.registerTokens(waba, tenantId);
     if (tokens.length === 0) {
       this.logger.error(
         `[registerPhone] tenant=${tenantId}: no usable token (client token expired, META_SYSTEM_USER_TOKEN not set)`,
@@ -1129,12 +1252,17 @@ export class WhatsappService {
       });
     }
 
+    // Meta accepted this PIN, so keep it (encrypted) for automatic
+    // re-registration after a display-name approval. Never log or return it.
     await this.wabaModel.updateOne(
       { tenantId },
       {
         phoneRegistered: true,
         phoneRegisteredAt: new Date(),
         setupComplete: true,
+        registrationPinEnc: this.encryption.encrypt(dto.pin),
+        needsReregister: false,
+        $unset: { reregisterError: 1 },
       },
     );
 
