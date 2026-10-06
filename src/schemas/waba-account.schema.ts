@@ -75,6 +75,58 @@ export class WABAAccount {
 
   @Prop()
   connectedAt?: Date;
+
+  // 2FA PIN from the last successful register-phone call, encrypted with
+  // EncryptionService. Lets us re-register automatically when Meta approves
+  // a new display name. Never log it and never return it from any API.
+  @Prop({ select: false })
+  registrationPinEnc?: string;
+
+  // Display-name review state: name_status from Meta's phone-number node,
+  // or the decision from the phone_number_name_update webhook
+  // (APPROVED / PENDING_REVIEW / DECLINED / ...).
+  @Prop()
+  nameStatus?: string;
+
+  // Name Meta approved but that isn't live until the number re-registers.
+  @Prop()
+  requestedDisplayName?: string;
+
+  @Prop()
+  nameDecisionAt?: Date;
+
+  // An approved display name is waiting on POST /register. Cleared once a
+  // register succeeds or a sync shows the new name live.
+  @Prop({ default: false, index: true })
+  needsReregister!: boolean;
+
+  // Why the last automatic re-register failed (NO_STORED_PIN /
+  // REGISTER_FAILED / ALREADY_REGISTERED). While set, sync won't retry
+  // automatically, so a wrong stored PIN can't lock the number.
+  @Prop()
+  reregisterError?: string;
+
+  // `status` from Meta's phone-number node (CONNECTED / FLAGGED / ...).
+  @Prop()
+  phoneStatus?: string;
+
+  // Last `event` from phone_number_quality_update (FLAGGED / UNFLAGGED /
+  // UPGRADE / DOWNGRADE).
+  @Prop()
+  lastQualityEvent?: string;
+
+  // Set from account_update restriction/violation/ban events.
+  @Prop({ default: false })
+  accountRestricted!: boolean;
+
+  @Prop()
+  accountStatusEvent?: string;
+
+  @Prop({ type: Object })
+  accountStatusDetail?: Record<string, unknown>;
+
+  @Prop()
+  lastSyncedAt?: Date;
 }
 
 export const WABAAccountSchema = SchemaFactory.createForClass(WABAAccount);

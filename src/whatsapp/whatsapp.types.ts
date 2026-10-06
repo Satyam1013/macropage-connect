@@ -14,6 +14,14 @@ export interface WABADetailsData {
   tokenExpiresAt: Date | null;
   webhookUrl: string;
   webhookVerified: boolean;
+  nameStatus: string | null;
+  phoneStatus: string | null;
+  needsReregister: boolean;
+  requestedDisplayName: string | null;
+  reregisterError: string | null;
+  accountRestricted: boolean;
+  accountStatusEvent: string | null;
+  lastSyncedAt: Date | null;
   connectedAt: Date | undefined;
   updatedAt: Date | undefined;
 }

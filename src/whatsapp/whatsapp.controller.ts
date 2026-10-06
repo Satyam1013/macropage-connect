@@ -13,6 +13,9 @@ import {
 import { WhatsappService } from "./whatsapp.service";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { ProjectAccessGuard } from "../common/guards/project-access.guard";
+import { RolesGuard } from "../common/guards/roles.guard";
+import { Roles } from "../common/decorators/roles.decorator";
+import { UserRole } from "../auth/auth.constants";
 import type { ProjectAuthReq } from "../auth/dto/auth-request.interface";
 import {
   BusinessInfoDto,
@@ -131,8 +134,12 @@ export class WhatsappController {
     return this.whatsappService.shareWABADetails(tenantId, user, body.email);
   }
 
-  @Post("sync")
+  // "sync-status" is the name the frontend uses; "sync" is kept for
+  // existing callers.
+  @Post(["sync", "sync-status"])
   @HttpCode(HttpStatus.OK)
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.OWNER, UserRole.ADMIN)
   syncFromMeta(@Request() req: ProjectAuthReq) {
     return this.whatsappService.syncFromMeta(req.projectId);
   }
