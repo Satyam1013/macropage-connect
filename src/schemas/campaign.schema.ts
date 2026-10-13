@@ -48,6 +48,16 @@ export class Campaign {
   @Prop()
   csvUploadId?: string;
 
+  // audienceType "csv": the uploaded file (DO Spaces URL, same as contact
+  // import's fileUrl) and its column mapping ({ phone: "<csv column>", ... }).
+  // The audience is resolved from this file at launch — never from all
+  // contacts.
+  @Prop()
+  csvFileUrl?: string;
+
+  @Prop({ type: Object })
+  csvColumnMapping?: Record<string, string>;
+
   @Prop({ default: 0 })
   totalContacts!: number;
 
