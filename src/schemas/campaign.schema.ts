@@ -15,6 +15,11 @@ export class Campaign {
   @Prop({ required: true })
   name!: string;
 
+  // Set when an account suspension paused this campaign, so unsuspending
+  // resumes only these — never one the customer paused themselves.
+  @Prop()
+  statusBeforeSuspension?: string;
+
   @Prop({
     type: String,
     enum: [

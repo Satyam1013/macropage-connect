@@ -6,6 +6,10 @@ import {
 } from "../schemas/subscription.schema";
 import { Invoice, InvoiceSchema } from "../schemas/invoice.schema";
 import { Payment, PaymentSchema } from "../schemas/payment.schema";
+import {
+  SubscriptionHistory,
+  SubscriptionHistorySchema,
+} from "../schemas/subscription-history.schema";
 import { User, UserSchema } from "../users/schemas/user.schema";
 import { Plan, PlanSchema } from "./schemas/plan.schema";
 import { Order, OrderSchema } from "../catalog/schemas/order.schema";
@@ -35,6 +39,7 @@ import {
       { name: Subscription.name, schema: SubscriptionSchema },
       { name: Invoice.name, schema: InvoiceSchema },
       { name: Payment.name, schema: PaymentSchema },
+      { name: SubscriptionHistory.name, schema: SubscriptionHistorySchema },
       { name: User.name, schema: UserSchema },
       { name: Plan.name, schema: PlanSchema },
       // Registered here (not imported from CatalogModule) so the

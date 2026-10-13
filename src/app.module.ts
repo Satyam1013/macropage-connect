@@ -35,6 +35,8 @@ import { MessagesStatsModule } from "./platform-admin/messages-stats/messages-st
 import { PlatformCustomersModule } from "./platform-admin/customers/customers.module";
 import { PlatformNotificationsModule } from "./platform-admin/notifications/notifications.module";
 import { PlatformLeadsModule } from "./platform-admin/leads/leads.module";
+import { AccountStatusModule } from "./account-status/account-status.module";
+import { AccountManagementModule } from "./platform-admin/account-management/account-management.module";
 
 // Infrastructure
 import { MetaModule } from "./meta/meta.module";
@@ -52,6 +54,7 @@ import { ScheduledNotificationsModule } from "./notifications/scheduled-notifica
       }),
     }),
     ScheduleModule.forRoot(),
+    AccountStatusModule,
 
     // Infrastructure
     MetaModule,
@@ -91,6 +94,7 @@ import { ScheduledNotificationsModule } from "./notifications/scheduled-notifica
     PlatformCustomersModule,
     PlatformNotificationsModule,
     PlatformLeadsModule,
+    AccountManagementModule,
   ],
 })
 export class AppModule {}

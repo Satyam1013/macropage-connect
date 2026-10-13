@@ -21,7 +21,7 @@ export class Subscription {
 
   @Prop({
     type: String,
-    enum: ["TRIALING", "ACTIVE", "PAST_DUE", "CANCELLED", "PAUSED"],
+    enum: ["TRIALING", "ACTIVE", "PAST_DUE", "CANCELLED", "PAUSED", "EXPIRED"],
     default: "TRIALING",
   })
   status!: SubStatus;
@@ -66,6 +66,13 @@ export class Subscription {
 
   @Prop()
   paymentFailedAt?: Date;
+
+  // Who manages the current period: "RAZORPAY" (auto-pay renews it via
+  // webhooks) or "ADMIN" (set by platform staff — nothing renews it, so
+  // BillingService.expireAdminSubscriptions() marks it EXPIRED once
+  // currentPeriodEnd passes).
+  @Prop({ type: String, enum: ["RAZORPAY", "ADMIN"] })
+  source?: "RAZORPAY" | "ADMIN";
 }
 
 export const SubscriptionSchema = SchemaFactory.createForClass(Subscription);

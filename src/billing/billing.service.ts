@@ -5,7 +5,8 @@ import {
   Logger,
 } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
-import { Model } from "mongoose";
+import { ClientSession, Model } from "mongoose";
+import { Cron, CronExpression } from "@nestjs/schedule";
 import { PLAN_LIMITS, PLAN_PRICING } from "./billing.constants";
 import {
   Subscription,
@@ -13,6 +14,10 @@ import {
 } from "../schemas/subscription.schema";
 import { Invoice, InvoiceDocument } from "../schemas/invoice.schema";
 import { Payment, PaymentDocument } from "../schemas/payment.schema";
+import {
+  SubscriptionHistory,
+  SubscriptionHistoryDocument,
+} from "../schemas/subscription-history.schema";
 import { User, UserDocument } from "../users/schemas/user.schema";
 import { Plan, PlanDocument } from "./schemas/plan.schema";
 import { Order, OrderDocument } from "../catalog/schemas/order.schema";
@@ -64,6 +69,8 @@ export class BillingService {
     private readonly invoiceModel: Model<InvoiceDocument>,
     @InjectModel(Payment.name)
     private readonly paymentModel: Model<PaymentDocument>,
+    @InjectModel(SubscriptionHistory.name)
+    private readonly historyModel: Model<SubscriptionHistoryDocument>,
     @InjectModel(User.name)
     private readonly userModel: Model<UserDocument>,
     @InjectModel(Plan.name)
@@ -127,8 +134,14 @@ export class BillingService {
    * one) so the free plan and its period still show up.
    */
   async getPlanHistoryForPlatform(tenantId: string) {
-    const [payments, subscription] = await Promise.all([
+    const [payments, adminEntries, subscription] = await Promise.all([
       this.paymentModel
+        .find({ tenantId })
+        .sort({ createdAt: -1 })
+        .lean()
+        .exec(),
+      // Admin-created/extended/replaced subscriptions (no Razorpay payment).
+      this.historyModel
         .find({ tenantId })
         .sort({ createdAt: -1 })
         .lean()
@@ -136,8 +149,17 @@ export class BillingService {
       this.subModel.findOne({ tenantId }).lean().exec(),
     ]);
 
+    const entries: Array<{ createdAt?: Date }> = [
+      ...payments,
+      ...adminEntries,
+    ].sort(
+      (a, b) =>
+        new Date(b.createdAt ?? 0).getTime() -
+        new Date(a.createdAt ?? 0).getTime(),
+    );
+
     if (!subscription) {
-      return payments;
+      return entries;
     }
 
     const trialEntry = {
@@ -152,7 +174,36 @@ export class BillingService {
       isFreePlan: true,
     };
 
-    return [...payments, trialEntry];
+    return [...entries, trialEntry];
+  }
+
+  /**
+   * Platform-staff view of a tenant's subscription: the raw document plus
+   * the normalized fields the admin portal reads — planId, billingCycle,
+   * expiresAt and a lowercase status ("active" | "expired" | "trialing" |
+   * "cancelled" | "past_due"). A period that has run out reads as
+   * "expired" even before the hourly expiry job flips the stored status.
+   */
+  toPlatformSubscriptionView(
+    sub: (Subscription & { createdAt?: Date; updatedAt?: Date }) | null,
+  ) {
+    if (!sub) return null;
+    const expiresAt =
+      sub.plan === "TRIAL"
+        ? (sub.trialEndsAt ?? sub.currentPeriodEnd ?? null)
+        : (sub.currentPeriodEnd ?? null);
+    const lapsed =
+      sub.status === "ACTIVE" &&
+      sub.plan !== "TRIAL" &&
+      expiresAt !== null &&
+      new Date(expiresAt).getTime() < Date.now();
+    return {
+      ...sub,
+      planId: sub.plan,
+      billingCycle: sub.billingCycle ?? null,
+      expiresAt,
+      status: lapsed ? "expired" : String(sub.status).toLowerCase(),
+    };
   }
 
   // ── Subscription read ─────────────────────────────────────────────────────
@@ -372,6 +423,7 @@ export class BillingService {
       {
         $set: {
           status: "ACTIVE",
+          source: "RAZORPAY",
           plan,
           billingCycle,
           razorpaySubId: data.razorpay_subscription_id,
@@ -535,6 +587,7 @@ export class BillingService {
           {
             $set: {
               status: "ACTIVE",
+              source: "RAZORPAY",
               razorpaySubId: subId,
               razorpayPlanId:
                 target.pendingRazorpayPlanId ?? target.razorpayPlanId,
@@ -602,6 +655,7 @@ export class BillingService {
             {
               $set: {
                 status: "ACTIVE",
+                source: "RAZORPAY",
                 razorpaySubId: chargedSubId,
                 razorpayPlanId:
                   chargedTarget.pendingRazorpayPlanId ??
@@ -735,7 +789,11 @@ export class BillingService {
 
   // ── Sync plan fields back to User documents ──────────────────────────────
 
-  private async syncUserPlan(tenantId: string, subPlan: string): Promise<void> {
+  async syncUserPlan(
+    tenantId: string,
+    subPlan: string,
+    session?: ClientSession,
+  ): Promise<void> {
     const isPaid = ["STARTER", "GROWTH", "BUSINESS", "ENTERPRISE"].includes(
       subPlan,
     );
@@ -772,6 +830,7 @@ export class BillingService {
         ],
       },
       { $set: update },
+      { session },
     );
     this.logger.log(
       `[Billing] Synced users for tenant ${tenantId} → plan=${subPlan}`,
@@ -851,6 +910,28 @@ export class BillingService {
       status: "paid",
       paidAt: new Date(),
     });
+  }
+
+  /**
+   * Admin-granted periods have no auto-pay behind them, so nothing else
+   * would ever end them. Razorpay-managed ones are left to its webhooks.
+   */
+  @Cron(CronExpression.EVERY_HOUR)
+  async expireAdminSubscriptions(): Promise<number> {
+    const result = await this.subModel.updateMany(
+      {
+        source: "ADMIN",
+        status: "ACTIVE",
+        currentPeriodEnd: { $lt: new Date() },
+      },
+      { $set: { status: "EXPIRED" } },
+    );
+    if (result.modifiedCount) {
+      this.logger.log(
+        `[Billing] Expired ${result.modifiedCount} admin-granted subscription(s)`,
+      );
+    }
+    return result.modifiedCount;
   }
 
   getPlanLimits(plan: string) {
