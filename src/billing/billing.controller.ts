@@ -164,8 +164,11 @@ export class BillingController {
   @Get("platform/plans/customer/:tenantId/current")
   @UseGuards(JwtAuthGuard, PlatformRolesGuard)
   @PlatformRoles(PlatformRole.SUPER_ADMIN, PlatformRole.SUPPORT_AGENT)
-  getCurrentSubscriptionForCustomer(@Param("tenantId") tenantId: string) {
-    return this.billingService.getSubscription(tenantId);
+  async getCurrentSubscriptionForCustomer(@Param("tenantId") tenantId: string) {
+    const sub = await this.billingService.getSubscription(tenantId);
+    return this.billingService.toPlatformSubscriptionView(
+      sub?.toObject() ?? null,
+    );
   }
 
   // ── Webhook (PUBLIC — Razorpay calls this directly) ────────────────────────

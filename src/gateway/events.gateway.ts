@@ -31,6 +31,7 @@ type AppSocket = BaseSocket<
   SocketData
 >;
 import { User, UserDocument } from "../users/schemas/user.schema";
+import { AccountStatusService } from "../account-status/account-status.service";
 
 const allowedOrigins = (
   process.env.ALLOWED_ORIGINS ??
@@ -78,6 +79,7 @@ export class EventsGateway
     @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
     @InjectModel(SupportTicket.name)
     private readonly ticketModel: Model<SupportTicketDocument>,
+    private readonly accountStatus: AccountStatusService,
   ) {}
 
   // ── INIT ──────────────────────────────────────────────────────────────────
@@ -120,7 +122,7 @@ export class EventsGateway
       const user = await this.userModel
         .findById(userId)
         .select(
-          "_id name email avatarUrl role tenantId onlineStatus platformRole",
+          "_id name email avatarUrl role tenantId onlineStatus platformRole accountStatus",
         )
         .lean()
         .exec();
@@ -135,6 +137,19 @@ export class EventsGateway
       }
 
       const tenantId = user.tenantId ?? payload.tenantId ?? userId;
+
+      const blocked =
+        (user.accountStatus ?? "active") !== "active" ||
+        (!user.platformRole &&
+          (await this.accountStatus.isTenantBlocked(String(tenantId))));
+      if (blocked) {
+        client.emit("error", {
+          code: "ACCOUNT_SUSPENDED",
+          message: "This account is not active.",
+        });
+        client.disconnect();
+        return;
+      }
 
       // Attach to socket
       client.data.userId = userId;
@@ -263,7 +278,9 @@ export class EventsGateway
       senderId: client.data.userId,
       message: data.message,
     });
-    this.server.to(`ticket:${data.ticketId}`).emit("ticket:message", savedMessage);
+    this.server
+      .to(`ticket:${data.ticketId}`)
+      .emit("ticket:message", savedMessage);
   }
 
   // ── CONVERSATION ROOM ─────────────────────────────────────────────────────

@@ -161,6 +161,44 @@ export class User {
   // Mongo on every request by jwt.strategy.ts).
   @Prop({ default: false })
   pendingAccountSelection!: boolean;
+
+  // Set by platform staff (POST /platform/customers/:id/suspend|delete).
+  // Checked on every authenticated request by JwtStrategy, and for a
+  // customer's projects by AccountStatusService — see account-status/.
+  @Prop({
+    type: String,
+    enum: ["active", "suspended", "deleted"],
+    default: "active",
+    index: true,
+  })
+  accountStatus!: "active" | "suspended" | "deleted";
+
+  @Prop()
+  suspendedAt?: Date;
+
+  @Prop()
+  suspendedBy?: string;
+
+  @Prop()
+  suspensionReason?: string;
+
+  @Prop()
+  deletedAt?: Date;
+
+  @Prop()
+  deletedBy?: string;
+
+  @Prop()
+  deleteReason?: string;
+
+  // A soft-deleted account's real email/phone, moved here so the unique
+  // email index (and phone lookups) are free for a new registration.
+  // `email` itself becomes "deleted:<id>:<email>".
+  @Prop()
+  deletedEmail?: string;
+
+  @Prop()
+  deletedPhone?: string;
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);

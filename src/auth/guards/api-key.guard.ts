@@ -9,6 +9,7 @@ import { Reflector } from "@nestjs/core";
 import type { Request } from "express";
 import { SettingsService } from "../../settings/settings.service";
 import { API_PERMISSION_KEY } from "../../common/decorators/require-permission.decorator";
+import { AccountStatusService } from "../../account-status/account-status.service";
 
 export interface ApiKeyContext {
   tenantId: string;
@@ -24,6 +25,7 @@ export class ApiKeyGuard implements CanActivate {
   constructor(
     private readonly reflector: Reflector,
     private readonly settingsService: SettingsService,
+    private readonly accountStatus: AccountStatusService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -50,6 +52,8 @@ export class ApiKeyGuard implements CanActivate {
         },
       });
     }
+
+    await this.accountStatus.assertTenantActive(record.tenantId);
 
     const requiredPermission = this.reflector.getAllAndOverride<
       string | undefined

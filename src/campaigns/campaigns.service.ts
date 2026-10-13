@@ -561,6 +561,75 @@ export class CampaignsService {
     return this.findOne(tenantId, id);
   }
 
+  /**
+   * Account suspension/deletion: pause every running or scheduled campaign
+   * of these tenants, remembering the status it had so
+   * resumeAfterSuspension() can restore exactly these (and not campaigns
+   * the customer paused themselves). A running send loop stops at its next
+   * recipient, since it re-checks status before each one.
+   */
+  async pauseForSuspension(tenantIds: string[]): Promise<number> {
+    const campaigns = await this.campaignModel
+      .find({
+        tenantId: { $in: tenantIds },
+        status: { $in: ["RUNNING", "SCHEDULED"] },
+      })
+      .select("_id status")
+      .lean()
+      .exec();
+
+    let paused = 0;
+    for (const c of campaigns) {
+      if (c.status === "SCHEDULED")
+        await this.removeScheduledJob(String(c._id));
+      const res = await this.campaignModel.updateOne(
+        { _id: c._id, status: c.status },
+        {
+          status: "PAUSED",
+          pausedAt: new Date(),
+          statusBeforeSuspension: c.status,
+        },
+      );
+      paused += res.modifiedCount;
+    }
+    return paused;
+  }
+
+  /** Undo pauseForSuspension(): re-queue scheduled, restart running. */
+  async resumeAfterSuspension(tenantIds: string[]): Promise<number> {
+    const campaigns = await this.campaignModel
+      .find({
+        tenantId: { $in: tenantIds },
+        status: "PAUSED",
+        statusBeforeSuspension: { $in: ["RUNNING", "SCHEDULED"] },
+      })
+      .exec();
+
+    for (const c of campaigns) {
+      const id = String(c._id);
+      const previous = c.statusBeforeSuspension;
+      await this.campaignModel.updateOne(
+        { _id: c._id, status: "PAUSED" },
+        { status: previous, $unset: { statusBeforeSuspension: 1 } },
+      );
+
+      if (previous === "SCHEDULED") {
+        // A time that passed during the suspension fires right away.
+        const at = c.scheduledAt ? new Date(c.scheduledAt).getTime() : 0;
+        await this.campaignsQueue.add(
+          "launch",
+          { campaignId: id },
+          { jobId: id, delay: Math.max(0, at - Date.now()) },
+        );
+      } else {
+        void this.processCampaign(id, c.tenantId).catch((err: unknown) =>
+          this.logger.error(`Campaign ${id} resume failed`, err),
+        );
+      }
+    }
+    return campaigns.length;
+  }
+
   async cancel(tenantId: string, id: string): Promise<CampaignDocument> {
     const campaign = await this.findOne(tenantId, id);
     if (!["SCHEDULED", "PAUSED", "DRAFT"].includes(campaign.status)) {

@@ -25,6 +25,11 @@ export class WebhookEndpoint {
   @Prop({ default: true })
   isEnabled!: boolean;
 
+  // Disabled by an account suspension (vs. by the customer) — unsuspend
+  // re-enables only these.
+  @Prop({ default: false })
+  disabledBySuspension!: boolean;
+
   @Prop({ default: 0 })
   totalDeliveries!: number;
 

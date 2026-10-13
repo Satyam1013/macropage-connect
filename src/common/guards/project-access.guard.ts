@@ -7,6 +7,7 @@ import {
 import { InjectModel } from "@nestjs/mongoose";
 import { Model } from "mongoose";
 import type { Request } from "express";
+import { AccountStatusService } from "../../account-status/account-status.service";
 import {
   UserAccountMembership,
   UserAccountMembershipDocument,
@@ -32,6 +33,7 @@ export class ProjectAccessGuard implements CanActivate {
   constructor(
     @InjectModel(UserAccountMembership.name)
     private readonly membershipModel: Model<UserAccountMembershipDocument>,
+    private readonly accountStatus: AccountStatusService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -54,6 +56,10 @@ export class ProjectAccessGuard implements CanActivate {
         message: "You do not have access to this project.",
       });
     }
+
+    // A suspended/deleted customer's projects are closed to everyone,
+    // including team members whose own account is fine.
+    await this.accountStatus.assertTenantActive(projectId);
 
     req.projectId = projectId;
     req.projectRole = membership.role;

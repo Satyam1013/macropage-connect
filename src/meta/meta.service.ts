@@ -10,6 +10,7 @@ import {
 import { EncryptionService } from "./encryption.service";
 import { NotificationsService } from "../notifications/notifications.service";
 import { TenantResolverService } from "../tenant/tenant-resolver.service";
+import { AccountStatusService } from "../account-status/account-status.service";
 
 @Injectable()
 export class MetaService {
@@ -19,9 +20,14 @@ export class MetaService {
     private readonly encryption: EncryptionService,
     private readonly notificationsService: NotificationsService,
     private readonly tenantResolver: TenantResolverService,
+    private readonly accountStatus: AccountStatusService,
   ) {}
 
   async getClient(tenantId: string) {
+    // Every outbound send (inbox, automations, flows, campaigns, templates)
+    // goes through here — a suspended/deleted customer sends nothing.
+    await this.accountStatus.assertTenantActive(tenantId);
+
     const waba = await this.wabaModel.findOne({ tenantId }).exec();
     if (!waba) throw new BadRequestException("WhatsApp account not connected");
     if (waba.tokenExpired)

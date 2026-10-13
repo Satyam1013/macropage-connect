@@ -38,6 +38,7 @@ import { Tenant, TenantDocument } from "../schemas/tenant.schema";
 import { EmailService } from "../queue/email.service";
 import { BillingService } from "../billing/billing.service";
 import { UserRole } from "./auth.constants";
+import { AccountStatusService } from "../account-status/account-status.service";
 
 // How many projects a person can OWN, gated by their primary project's
 // plan (the project where tenantId === their own _id — the one from their
@@ -72,6 +73,7 @@ export class AuthService {
     private readonly tenantModel: Model<TenantDocument>,
     private readonly activityService: ActivityService,
     private readonly billingService: BillingService,
+    private readonly accountStatus: AccountStatusService,
   ) {}
 
   // ─── Signup ───────────────────────────────────────────────────────────────
@@ -141,6 +143,10 @@ export class AuthService {
         code: "INVALID_CREDENTIALS",
       });
     }
+
+    // Only after the password check, so a wrong password never reveals
+    // that an account is suspended.
+    this.accountStatus.assertUserActive(user);
 
     if (!user.emailVerified) {
       throw new ForbiddenException({
@@ -236,6 +242,7 @@ export class AuthService {
       name: payload.name ?? payload.email.split("@")[0],
       avatarUrl: payload.picture,
     });
+    this.accountStatus.assertUserActive(user);
 
     if (isNew) {
       await this.membershipModel.create({
@@ -333,6 +340,7 @@ export class AuthService {
         code: "USER_NOT_FOUND",
       });
     }
+    this.accountStatus.assertUserActive(user);
 
     return {
       accessToken: this.signAccessToken(user.id, user.email),

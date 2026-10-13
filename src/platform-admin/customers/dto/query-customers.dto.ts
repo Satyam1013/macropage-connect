@@ -1,11 +1,12 @@
 import {
+  IsBoolean,
   IsEnum,
   IsMongoId,
   IsNumber,
   IsOptional,
   IsString,
 } from "class-validator";
-import { Type } from "class-transformer";
+import { Transform, Type } from "class-transformer";
 
 export class QueryCustomersDto {
   @IsOptional()
@@ -29,4 +30,14 @@ export class QueryCustomersDto {
   @IsOptional()
   @IsMongoId()
   tagId?: string;
+
+  // Deleted accounts are hidden unless asked for, via either param.
+  @IsOptional()
+  @IsEnum(["active", "suspended", "deleted"])
+  accountStatus?: "active" | "suspended" | "deleted";
+
+  @IsOptional()
+  @Transform(({ value }) => value === true || value === "true")
+  @IsBoolean()
+  includeDeleted?: boolean;
 }

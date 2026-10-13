@@ -30,9 +30,26 @@ export class PlatformCustomersService {
   ) {}
 
   async findAll(query: QueryCustomersDto) {
-    const { page = 1, limit = 20, search, billingPlan, tagId } = query;
+    const {
+      page = 1,
+      limit = 20,
+      search,
+      billingPlan,
+      tagId,
+      accountStatus,
+      includeDeleted,
+    } = query;
 
     const filter: Record<string, unknown> = { role: "OWNER" };
+    // Accounts created before accountStatus existed have no such field —
+    // they're "active".
+    if (accountStatus === "active") {
+      filter.accountStatus = { $nin: ["suspended", "deleted"] };
+    } else if (accountStatus) {
+      filter.accountStatus = accountStatus;
+    } else if (!includeDeleted) {
+      filter.accountStatus = { $ne: "deleted" };
+    }
     if (search) {
       filter.$or = [
         { name: { $regex: search, $options: "i" } },
@@ -43,9 +60,7 @@ export class PlatformCustomersService {
     }
     if (billingPlan) filter.billingPlan = billingPlan;
     if (tagId) {
-      const customerIds = await this.tagsService.getCustomerIdsForTags([
-        tagId,
-      ]);
+      const customerIds = await this.tagsService.getCustomerIdsForTags([tagId]);
       filter._id = { $in: customerIds };
     }
 
@@ -91,6 +106,7 @@ export class PlatformCustomersService {
         const tenantId = String(customer.tenantId ?? customer._id);
         return {
           ...customer.toObject(),
+          accountStatus: customer.accountStatus ?? "active",
           totalMessages: messageCountsByTenant.get(tenantId) ?? 0,
           totalContacts: contactCountsByTenant.get(tenantId) ?? 0,
         };
@@ -108,16 +124,22 @@ export class PlatformCustomersService {
     if (!customer) {
       throw new NotFoundException("Customer not found");
     }
+    // Accounts created before accountStatus existed lack the field.
+    if (!customer.accountStatus) customer.accountStatus = "active";
     return customer;
   }
 
   async getProfile(id: string) {
     const customer = await this.findOne(id);
     const tenantId = customer.tenantId ?? customer.id;
+    // Billing always lives on the customer's own main account (see
+    // TenantResolverService.resolveBillingTenantId) — the same tenant the
+    // admin subscription endpoints write to.
+    const billingTenantId = customer.id;
 
     const [currentPlan, planHistory, messageStats, tags] = await Promise.all([
-      this.billingService.getSubscription(tenantId),
-      this.billingService.getPlanHistoryForPlatform(tenantId),
+      this.billingService.getSubscription(billingTenantId),
+      this.billingService.getPlanHistoryForPlatform(billingTenantId),
       this.messagesStatsService.getStatsForCustomer(tenantId),
       this.tagsService.findTagsForCustomer(id),
     ]);
@@ -135,7 +157,10 @@ export class PlatformCustomersService {
   async getDashboardStats() {
     const [totalCustomers, totalEnrolledCustomers, globalStats] =
       await Promise.all([
-        this.userModel.countDocuments({ role: UserRole.OWNER }),
+        this.userModel.countDocuments({
+          role: UserRole.OWNER,
+          accountStatus: { $ne: "deleted" },
+        }),
         this.billingService.countActiveSubscriptions(),
         this.messagesStatsService.getTodayGlobalStats(),
       ]);
