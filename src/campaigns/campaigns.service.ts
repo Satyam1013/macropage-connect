@@ -197,8 +197,27 @@ export class CampaignsService {
         );
       }
       this.contactsService.assertImportFileUrl(fileUrl);
+
+      // Resolve now, while the presigned upload URL is still valid.
+      const { contacts, stats } = await this.contactsService.prepareCsvAudience(
+        tenantId,
+        fileUrl,
+        dto.csvColumnMapping,
+      );
+      if (contacts.length === 0) {
+        throw new BadRequestException(
+          "The CSV has no valid, opted-in phone numbers to send to.",
+        );
+      }
       dto.audienceType = "csv";
       dto.csvFileUrl = fileUrl;
+      dto.csvContactIds = contacts.map((c) => c.id);
+      dto.csvStats = stats;
+      dto.totalContacts = contacts.length;
+      dto.validContacts = contacts.length;
+    } else {
+      // Only ever set from a parsed file above.
+      delete dto.csvContactIds;
     }
 
     const campaign = await this.campaignModel.create({
@@ -298,18 +317,28 @@ export class CampaignsService {
 
     let contacts: { id: string; phone: string }[];
     if (isCsvAudience(campaign.audienceType)) {
-      // Only the numbers in the uploaded file — never all contacts.
-      const fileUrl = csvFileUrlOf(campaign);
-      if (!fileUrl) {
+      // Only the contacts resolved from the uploaded file at creation —
+      // never all contacts. Opt-outs since then are excluded again here.
+      const stored = await this.campaignModel
+        .findById(id)
+        .select("+csvContactIds")
+        .lean()
+        .exec();
+      const ids = (stored?.csvContactIds ?? []).filter((cid) =>
+        Types.ObjectId.isValid(cid),
+      );
+      if (ids.length === 0) {
         throw new BadRequestException(
-          "This CSV campaign has no file attached — recreate it with the CSV.",
+          "This CSV campaign has no audience attached — recreate it with the CSV.",
         );
       }
-      ({ contacts } = await this.contactsService.prepareCsvAudience(
-        tenantId,
-        fileUrl,
-        campaign.csvColumnMapping,
-      ));
+      contacts = (
+        await this.contactModel
+          .find({ _id: { $in: ids }, tenantId, isOptedOut: { $ne: true } })
+          .select("_id phone")
+          .lean()
+          .exec()
+      ).map((c) => ({ id: String(c._id), phone: c.phone }));
       if (contacts.length === 0) {
         throw new BadRequestException(
           "The CSV has no valid, opted-in phone numbers to send to.",

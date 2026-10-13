@@ -116,12 +116,23 @@ describe("CampaignsService with a CSV audience", () => {
     };
     const campaignModel = {
       findOne: jest.fn(() => query(doc)),
-      findById: jest.fn(() => query(null)),
+      // launch() reads the stored audience via findById(...).select("+csvContactIds")
+      findById: jest.fn(() => query(doc)),
       create: jest.fn((d: unknown) => Promise.resolve(d)),
       updateOne: jest.fn().mockResolvedValue({ modifiedCount: 1 }),
     };
     const recipientModel = { insertMany: jest.fn().mockResolvedValue([]) };
-    const contactModel = { updateMany: jest.fn().mockResolvedValue({}) };
+    const optedOutIds = (campaign.optedOutIds as string[] | undefined) ?? [];
+    const contactModel = {
+      updateMany: jest.fn().mockResolvedValue({}),
+      find: jest.fn((filter: { _id: { $in: string[] } }) =>
+        query(
+          filter._id.$in
+            .filter((cid) => !optedOutIds.includes(cid))
+            .map((cid) => ({ _id: cid, phone: `phone-of-${cid}` })),
+        ),
+      ),
+    };
     const contactsService = {
       findAll: jest.fn().mockResolvedValue({ data: [] }),
       prepareCsvAudience: jest.fn().mockResolvedValue({
@@ -129,7 +140,7 @@ describe("CampaignsService with a CSV audience", () => {
           { id: "c1", phone: "+916005487734" },
           { id: "c2", phone: "+919826342943" },
         ],
-        stats: {},
+        stats: { totalRows: 3, invalid: 1 },
       }),
       assertImportFileUrl: jest.fn(),
     };
@@ -147,32 +158,63 @@ describe("CampaignsService with a CSV audience", () => {
       {} as never,
       queue as never,
     );
-    return { service, campaignId, recipientModel, contactsService };
+    return {
+      service,
+      campaignId,
+      recipientModel,
+      contactsService,
+      campaignModel,
+    };
   }
 
-  it("launches to the CSV's numbers only, never all contacts", async () => {
-    const t = setup({
-      audienceType: "csv",
+  const ID_A = new Types.ObjectId().toString();
+  const ID_B = new Types.ObjectId().toString();
+  const ID_C = new Types.ObjectId().toString();
+
+  it("resolves the CSV at create time (the upload URL expires) and stores the audience", async () => {
+    const t = setup({});
+    const created = (await t.service.create(TENANT, "user-1", {
+      name: "csv",
+      audienceType: "CSV",
       csvFileUrl: FILE_URL,
       csvColumnMapping: { phone: "phone" },
-    });
+      csvContactIds: ["injected-by-client"],
+    })) as unknown as Record<string, unknown>;
 
-    await t.service.launch(TENANT, t.campaignId);
-
-    expect(t.contactsService.findAll).not.toHaveBeenCalled();
     expect(t.contactsService.prepareCsvAudience).toHaveBeenCalledWith(
       TENANT,
       FILE_URL,
       { phone: "phone" },
     );
+    expect(created).toMatchObject({
+      audienceType: "csv",
+      csvContactIds: ["c1", "c2"],
+      totalContacts: 2,
+      validContacts: 2,
+      csvStats: { totalRows: 3, invalid: 1 },
+    });
+  });
+
+  it("launches to the stored CSV audience only — never all contacts, never re-reads the file", async () => {
+    const t = setup({
+      audienceType: "csv",
+      csvFileUrl: FILE_URL,
+      csvContactIds: [ID_A, ID_B, ID_C],
+      optedOutIds: [ID_C], // opted out after the campaign was created
+    });
+
+    await t.service.launch(TENANT, t.campaignId);
+
+    expect(t.contactsService.findAll).not.toHaveBeenCalled();
+    expect(t.contactsService.prepareCsvAudience).not.toHaveBeenCalled();
     const phones = t.recipientModel.insertMany.mock.calls[0][0].map(
       (r: { phone: string }) => r.phone,
     );
-    expect(phones).toEqual(["+916005487734", "+919826342943"]);
+    expect(phones).toEqual([`phone-of-${ID_A}`, `phone-of-${ID_B}`]);
   });
 
-  it("refuses to launch a CSV campaign that has no file", async () => {
-    const t = setup({ audienceType: "csv" });
+  it("refuses to launch a CSV campaign with no stored audience", async () => {
+    const t = setup({ audienceType: "csv", csvFileUrl: FILE_URL });
     await expect(t.service.launch(TENANT, t.campaignId)).rejects.toBeInstanceOf(
       BadRequestException,
     );
@@ -184,6 +226,20 @@ describe("CampaignsService with a CSV audience", () => {
     const t = setup({});
     await expect(
       t.service.create(TENANT, "user-1", { audienceType: "CSV" }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it("refuses to create a CSV campaign whose file has no sendable numbers", async () => {
+    const t = setup({});
+    t.contactsService.prepareCsvAudience.mockResolvedValue({
+      contacts: [],
+      stats: {},
+    });
+    await expect(
+      t.service.create(TENANT, "user-1", {
+        audienceType: "csv",
+        csvFileUrl: FILE_URL,
+      }),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
