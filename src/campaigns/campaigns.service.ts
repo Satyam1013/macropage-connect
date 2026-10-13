@@ -96,6 +96,23 @@ function buildTemplateComponents(
   return components;
 }
 
+function isCsvAudience(audienceType: unknown): boolean {
+  return (
+    typeof audienceType === "string" && audienceType.toLowerCase() === "csv"
+  );
+}
+
+// csvFileUrl is the field; older clients put the file URL in csvUploadId.
+function csvFileUrlOf(c: {
+  csvFileUrl?: string;
+  csvUploadId?: string;
+}): string | undefined {
+  if (c.csvFileUrl) return c.csvFileUrl;
+  return c.csvUploadId && /^https?:\/\//.test(c.csvUploadId)
+    ? c.csvUploadId
+    : undefined;
+}
+
 @Injectable()
 export class CampaignsService {
   private readonly logger = new Logger(CampaignsService.name);
@@ -169,6 +186,20 @@ export class CampaignsService {
 
     const scheduledAt = dto.scheduledAt ? new Date(dto.scheduledAt) : undefined;
     const isScheduled = !!scheduledAt && !Number.isNaN(scheduledAt.getTime());
+
+    // A CSV campaign must carry its file, or launch() would have nothing to
+    // target. Reject it here rather than at (possibly scheduled) launch.
+    if (isCsvAudience(dto.audienceType)) {
+      const fileUrl = csvFileUrlOf(dto);
+      if (!fileUrl) {
+        throw new BadRequestException(
+          'audienceType "csv" requires csvFileUrl (the uploaded file URL)',
+        );
+      }
+      this.contactsService.assertImportFileUrl(fileUrl);
+      dto.audienceType = "csv";
+      dto.csvFileUrl = fileUrl;
+    }
 
     const campaign = await this.campaignModel.create({
       ...dto,
@@ -265,11 +296,32 @@ export class CampaignsService {
     // the pending delayed job so it doesn't fire again later.
     await this.removeScheduledJob(id);
 
-    const { data: contacts } = await this.contactsService.findAll(tenantId, {
-      tags: campaign.audienceTags.length ? campaign.audienceTags : undefined,
-      isOptedOut: false,
-      limit: 100000,
-    });
+    let contacts: { id: string; phone: string }[];
+    if (isCsvAudience(campaign.audienceType)) {
+      // Only the numbers in the uploaded file — never all contacts.
+      const fileUrl = csvFileUrlOf(campaign);
+      if (!fileUrl) {
+        throw new BadRequestException(
+          "This CSV campaign has no file attached — recreate it with the CSV.",
+        );
+      }
+      ({ contacts } = await this.contactsService.prepareCsvAudience(
+        tenantId,
+        fileUrl,
+        campaign.csvColumnMapping,
+      ));
+      if (contacts.length === 0) {
+        throw new BadRequestException(
+          "The CSV has no valid, opted-in phone numbers to send to.",
+        );
+      }
+    } else {
+      ({ data: contacts } = await this.contactsService.findAll(tenantId, {
+        tags: campaign.audienceTags.length ? campaign.audienceTags : undefined,
+        isOptedOut: false,
+        limit: 100000,
+      }));
+    }
 
     await this.recipientModel.insertMany(
       contacts.map((c) => ({

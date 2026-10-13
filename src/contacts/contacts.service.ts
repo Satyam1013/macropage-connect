@@ -480,7 +480,8 @@ export class ContactsService {
 
   // fileUrl must point at our own DO Spaces bucket — this endpoint has the
   // server fetch a client-supplied URL, so an unrestricted host would be SSRF.
-  private async downloadImportFile(fileUrl: string): Promise<Buffer> {
+  /** Throws 400 unless fileUrl is an http(s) URL on our DO Spaces bucket. */
+  assertImportFileUrl(fileUrl: string): void {
     let parsed: URL;
     try {
       parsed = new URL(fileUrl);
@@ -492,12 +493,22 @@ export class ContactsService {
         "fileUrl must point to a DigitalOcean Spaces file",
       );
     }
+    const pathname = parsed.pathname.toLowerCase();
+    if (!pathname.endsWith(".csv") && !pathname.endsWith(".xlsx")) {
+      throw new BadRequestException(
+        "Unsupported file type — fileUrl must be a .xlsx or .csv file",
+      );
+    }
+  }
 
+  private async downloadImportFile(fileUrl: string): Promise<Buffer> {
+    this.assertImportFileUrl(fileUrl);
     try {
       const resp = await axios.get<ArrayBuffer>(fileUrl, {
         responseType: "arraybuffer",
         timeout: 30000,
-        maxContentLength: 5 * 1024 * 1024,
+        // Matches the 10 MB limit the upload UI advertises.
+        maxContentLength: 10 * 1024 * 1024,
       });
       return Buffer.from(resp.data);
     } catch {
@@ -505,25 +516,23 @@ export class ContactsService {
     }
   }
 
-  async importContacts(
+  /**
+   * Downloads and parses an import file into contact rows, in file order
+   * (duplicates included — callers decide how to treat them). Shared by
+   * contact import and CSV campaign audiences so both apply the same
+   * column mapping and phone normalization.
+   */
+  private async readImportRows(
     tenantId: string,
     fileUrl: string,
-    columnMapping?: Record<string, string>,
-    duplicateHandling: "skip" | "update" = "skip",
+    columnMapping: Record<string, string> | undefined,
+    { requireName }: { requireName: boolean },
   ) {
     const buffer = await this.downloadImportFile(fileUrl);
     const pathname = new URL(fileUrl).pathname.toLowerCase();
-
-    let rawRows: Record<string, string>[];
-    if (pathname.endsWith(".csv")) {
-      rawRows = await parseCsvRows(buffer);
-    } else if (pathname.endsWith(".xlsx")) {
-      rawRows = await parseXlsxRows(buffer);
-    } else {
-      throw new BadRequestException(
-        "Unsupported file type — fileUrl must be a .xlsx or .csv file",
-      );
-    }
+    const rawRows = pathname.endsWith(".csv")
+      ? await parseCsvRows(buffer)
+      : await parseXlsxRows(buffer);
 
     const mapping = Object.fromEntries(
       IMPORT_FIELDS.map((field) => [field, columnMapping?.[field] ?? field]),
@@ -532,25 +541,19 @@ export class ContactsService {
     const getField = (row: Record<string, string>, field: ImportField) =>
       (row[mapping[field]] ?? "").toString().trim();
 
-    const existingPhones = new Set(
-      (
-        await this.contactModel.find({ tenantId }).select("phone").lean().exec()
-      ).map((c) => c.phone),
-    );
-
-    const toInsert: Partial<Contact>[] = [];
-    const toUpdate: { phone: string; data: Partial<Contact> }[] = [];
+    const rows: { phone: string; data: Partial<Contact> }[] = [];
     const errors: { row: number; reason: string }[] = [];
-    const seenInFile = new Set<string>();
-    let skipped = 0;
 
     rawRows.forEach((row, i) => {
       const rowNumber = i + 2; // +1 for header row, +1 for 1-indexing
       const name = getField(row, "name");
       const rawPhone = getField(row, "phone");
 
-      if (!name || !rawPhone) {
-        errors.push({ row: rowNumber, reason: "Missing name or phone" });
+      if (!rawPhone || (requireName && !name)) {
+        errors.push({
+          row: rowNumber,
+          reason: requireName ? "Missing name or phone" : "Missing phone",
+        });
         return;
       }
 
@@ -560,41 +563,71 @@ export class ContactsService {
         return;
       }
 
+      const tagsRaw = getField(row, "tags");
+      rows.push({
+        phone,
+        data: {
+          tenantId,
+          name: name || phone,
+          phone,
+          email: getField(row, "email") || undefined,
+          company: getField(row, "company") || undefined,
+          city: getField(row, "city") || undefined,
+          state: getField(row, "state") || undefined,
+          country: getField(row, "country") || undefined,
+          jobTitle: getField(row, "jobTitle") || undefined,
+          tags: tagsRaw
+            ? tagsRaw
+                .split(/[,;]/)
+                .map((t) => t.trim())
+                .filter(Boolean)
+            : [],
+        },
+      });
+    });
+
+    return { totalRows: rawRows.length, rows, errors };
+  }
+
+  async importContacts(
+    tenantId: string,
+    fileUrl: string,
+    columnMapping?: Record<string, string>,
+    duplicateHandling: "skip" | "update" = "skip",
+  ) {
+    const { totalRows, rows, errors } = await this.readImportRows(
+      tenantId,
+      fileUrl,
+      columnMapping,
+      { requireName: true },
+    );
+
+    const existingPhones = new Set(
+      (
+        await this.contactModel.find({ tenantId }).select("phone").lean().exec()
+      ).map((c) => c.phone),
+    );
+
+    const toInsert: Partial<Contact>[] = [];
+    const toUpdate: { phone: string; data: Partial<Contact> }[] = [];
+    const seenInFile = new Set<string>();
+    let skipped = 0;
+
+    for (const { phone, data } of rows) {
       const isExisting = existingPhones.has(phone);
       const isDupInFile = seenInFile.has(phone);
-      const tagsRaw = getField(row, "tags");
-
-      const contactData: Partial<Contact> = {
-        tenantId,
-        name,
-        phone,
-        email: getField(row, "email") || undefined,
-        company: getField(row, "company") || undefined,
-        city: getField(row, "city") || undefined,
-        state: getField(row, "state") || undefined,
-        country: getField(row, "country") || undefined,
-        jobTitle: getField(row, "jobTitle") || undefined,
-        tags: tagsRaw
-          ? tagsRaw
-              .split(/[,;]/)
-              .map((t) => t.trim())
-              .filter(Boolean)
-          : [],
-      };
+      seenInFile.add(phone);
 
       if (isExisting || isDupInFile) {
         if (duplicateHandling === "update" && isExisting && !isDupInFile) {
-          toUpdate.push({ phone, data: contactData });
+          toUpdate.push({ phone, data });
         } else {
           skipped++;
         }
-        seenInFile.add(phone);
-        return;
+        continue;
       }
-
-      seenInFile.add(phone);
-      toInsert.push(contactData);
-    });
+      toInsert.push(data);
+    }
 
     if (toInsert.length > 0) {
       await this.contactModel.insertMany(toInsert, { ordered: false });
@@ -606,12 +639,76 @@ export class ContactsService {
     return {
       success: true,
       data: {
-        totalRows: rawRows.length,
+        totalRows,
         imported: toInsert.length,
         updated: toUpdate.length,
         skipped,
         failed: errors.length,
         errors,
+      },
+    };
+  }
+
+  /**
+   * Resolves a CSV campaign audience: every valid number in the file,
+   * de-duplicated. Numbers not yet in contacts are added (name falls back
+   * to the number); existing contacts are left untouched. Opted-out
+   * contacts are excluded, as for every campaign.
+   */
+  async prepareCsvAudience(
+    tenantId: string,
+    fileUrl: string,
+    columnMapping?: Record<string, string>,
+  ) {
+    const { totalRows, rows, errors } = await this.readImportRows(
+      tenantId,
+      fileUrl,
+      columnMapping,
+      { requireName: false },
+    );
+
+    const byPhone = new Map<string, Partial<Contact>>();
+    for (const { phone, data } of rows) {
+      if (!byPhone.has(phone)) byPhone.set(phone, data);
+    }
+    const phones = [...byPhone.keys()];
+
+    const existing = new Set(
+      (
+        await this.contactModel
+          .find({ tenantId, phone: { $in: phones } })
+          .select("phone")
+          .lean()
+          .exec()
+      ).map((c) => c.phone),
+    );
+    const toInsert = phones
+      .filter((phone) => !existing.has(phone))
+      .map((phone) => byPhone.get(phone)!);
+    if (toInsert.length > 0) {
+      try {
+        await this.contactModel.insertMany(toInsert, { ordered: false });
+      } catch (err) {
+        // A concurrent insert of the same number (unique tenantId+phone)
+        // is fine — the contact exists either way.
+        if ((err as { code?: number }).code !== 11000) throw err;
+      }
+    }
+
+    const contacts = await this.contactModel
+      .find({ tenantId, phone: { $in: phones }, isOptedOut: { $ne: true } })
+      .select("_id phone")
+      .lean()
+      .exec();
+
+    return {
+      contacts: contacts.map((c) => ({ id: String(c._id), phone: c.phone })),
+      stats: {
+        totalRows,
+        invalid: errors.length,
+        duplicatesInFile: rows.length - phones.length,
+        optedOut: phones.length - contacts.length,
+        newContacts: toInsert.length,
       },
     };
   }
