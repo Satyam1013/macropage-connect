@@ -58,6 +58,18 @@ export class Campaign {
   @Prop({ type: Object })
   csvColumnMapping?: Record<string, string>;
 
+  // The audience, resolved from the file when the campaign is created —
+  // the upload URL is a presigned link that expires after an hour, so a
+  // scheduled launch can't re-read the file. Up to 100k ids; excluded from
+  // normal reads.
+  @Prop({ type: [String], select: false })
+  csvContactIds?: string[];
+
+  // Counts from parsing the file: totalRows, invalid, duplicatesInFile,
+  // optedOut, newContacts.
+  @Prop({ type: Object })
+  csvStats?: Record<string, number>;
+
   @Prop({ default: 0 })
   totalContacts!: number;
 
