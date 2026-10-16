@@ -151,6 +151,8 @@ describe("CampaignsService with a CSV audience", () => {
       {} as never,
       contactModel as never,
       {} as never,
+      {} as never,
+      {} as never,
       contactsService as never,
       {} as never,
       {} as never,

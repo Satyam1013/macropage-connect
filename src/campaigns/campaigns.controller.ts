@@ -70,6 +70,14 @@ export class CampaignsController {
     return this.campaignsService.cancel(tenantId, id);
   }
 
+  // Backfills "replied" for sends whose replies arrived before reply
+  // tracking existed. Idempotent.
+  @Post(":id/sync-replies")
+  @HttpCode(HttpStatus.OK)
+  syncReplies(@Request() req: ProjectAuthReq, @Param("id") id: string) {
+    return this.campaignsService.syncReplies(req.projectId, id);
+  }
+
   @Get(":id/recipients")
   getRecipients(
     @Request() req: ProjectAuthReq,

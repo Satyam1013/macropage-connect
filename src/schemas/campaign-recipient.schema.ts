@@ -29,6 +29,11 @@ export class CampaignRecipient {
   @Prop()
   readAt?: Date;
 
+  // First inbound message from this contact attributed to this send — see
+  // CampaignsService.recordReply().
+  @Prop()
+  repliedAt?: Date;
+
   @Prop()
   failedAt?: Date;
 
@@ -38,3 +43,7 @@ export class CampaignRecipient {
 
 export const CampaignRecipientSchema =
   SchemaFactory.createForClass(CampaignRecipient);
+// Status webhooks and swipe-replies look recipients up by Meta message id;
+// plain replies by the contact's most recent send.
+CampaignRecipientSchema.index({ metaMessageId: 1 }, { sparse: true });
+CampaignRecipientSchema.index({ contactId: 1, sentAt: -1 });
