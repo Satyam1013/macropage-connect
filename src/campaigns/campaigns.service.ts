@@ -22,6 +22,11 @@ import { ContactsService } from "../contacts/contacts.service";
 import { MetaService } from "../meta/meta.service";
 import { MessageUsageService } from "../analytics/message-usage.service";
 import { NotificationsService } from "../notifications/notifications.service";
+import {
+  Conversation,
+  ConversationDocument,
+} from "../schemas/conversation.schema";
+import { Message, MessageDocument } from "../schemas/message.schema";
 import { EmailService } from "../queue/email.service";
 
 function normalizePhone(raw: string): string {
@@ -113,6 +118,19 @@ function csvFileUrlOf(c: {
     : undefined;
 }
 
+// Campaign recipient lifecycle; a webhook never moves a recipient back.
+const RECIPIENT_STATUS_RANK: Record<string, number> = {
+  pending: 0,
+  sent: 1,
+  delivered: 2,
+  read: 3,
+  replied: 4,
+};
+
+// A plain (non swipe-reply) inbound message counts as a reply to the
+// contact's latest campaign send within this window.
+const REPLY_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+
 @Injectable()
 export class CampaignsService {
   private readonly logger = new Logger(CampaignsService.name);
@@ -128,6 +146,10 @@ export class CampaignsService {
     private readonly contactModel: Model<ContactDocument>,
     @InjectModel(User.name)
     private readonly userModel: Model<UserDocument>,
+    @InjectModel(Conversation.name)
+    private readonly convModel: Model<ConversationDocument>,
+    @InjectModel(Message.name)
+    private readonly msgModel: Model<MessageDocument>,
     private readonly contactsService: ContactsService,
     private readonly metaService: MetaService,
     private readonly messageUsageService: MessageUsageService,
@@ -726,6 +748,12 @@ export class CampaignsService {
     return this.findOne(tenantId, id);
   }
 
+  /**
+   * Delivered/read webhook for a campaign send. Counts each milestone once
+   * per recipient — Meta retries webhooks, and may report "read" before
+   * (or without) "delivered" — and never moves the status backwards
+   * (e.g. a late "delivered" after "read", or anything after "replied").
+   */
   async handleDeliveryUpdate(
     metaMessageId: string,
     status: "delivered" | "read",
@@ -733,24 +761,186 @@ export class CampaignsService {
   ): Promise<void> {
     const recipient = await this.recipientModel
       .findOne({ metaMessageId })
+      .select("campaignId status deliveredAt readAt")
+      .lean()
       .exec();
     if (!recipient) return;
 
-    const update: Record<string, unknown> = { status };
-    if (status === "delivered") update.deliveredAt = new Date(timestamp * 1000);
-    if (status === "read") update.readAt = new Date(timestamp * 1000);
+    const at = new Date(timestamp * 1000);
+    const set: Record<string, unknown> = {};
+    const inc: Record<string, number> = {};
+    // Read implies delivered.
+    if (!recipient.deliveredAt) {
+      set.deliveredAt = at;
+      inc.delivered = 1;
+    }
+    if (status === "read" && !recipient.readAt) {
+      set.readAt = at;
+      inc.read = 1;
+    }
+    if (Object.keys(inc).length === 0) return; // duplicate webhook
 
-    await this.recipientModel.updateOne({ _id: recipient._id }, update);
+    if (
+      (RECIPIENT_STATUS_RANK[status] ?? 0) >
+      (RECIPIENT_STATUS_RANK[recipient.status] ?? 0)
+    ) {
+      set.status = status;
+    }
 
-    const field = status === "delivered" ? "delivered" : "read";
+    // Only if those fields are still unset — a concurrent duplicate loses.
+    const res = await this.recipientModel.updateOne(
+      {
+        _id: recipient._id,
+        ...(set.deliveredAt ? { deliveredAt: { $exists: false } } : {}),
+        ...(set.readAt ? { readAt: { $exists: false } } : {}),
+      },
+      { $set: set },
+    );
+    if (res.modifiedCount === 0) return;
+
     await this.campaignModel.updateOne(
       { _id: recipient.campaignId },
-      { $inc: { [field]: 1 } },
+      { $inc: inc },
     );
 
     this.logger.log(
       `[Campaign] ${status} update for msg ${metaMessageId} → campaign ${recipient.campaignId}`,
     );
+  }
+
+  /**
+   * Attributes an inbound message to the campaign send it answers. Meta has
+   * no "replied" status — a reply is just an inbound message. A swipe-reply
+   * carries the campaign message's id (context.id) and is matched exactly;
+   * any other message counts toward the contact's most recent campaign send
+   * within REPLY_WINDOW_MS. Only the first reply per recipient counts.
+   */
+  async recordReply(
+    tenantId: string,
+    contactId: string,
+    timestamp: number,
+    replyToMetaId?: string,
+  ): Promise<boolean> {
+    const at = new Date(timestamp * 1000);
+    const repliable = { $in: ["sent", "delivered", "read"] };
+
+    let recipient = replyToMetaId
+      ? await this.recipientModel
+          .findOne({ metaMessageId: replyToMetaId, contactId })
+          .select("campaignId status sentAt")
+          .lean()
+          .exec()
+      : null;
+    if (!recipient) {
+      recipient = await this.recipientModel
+        .findOne({
+          contactId,
+          status: repliable,
+          sentAt: {
+            $gte: new Date(at.getTime() - REPLY_WINDOW_MS),
+            $lte: at,
+          },
+        })
+        .sort({ sentAt: -1 })
+        .select("campaignId status sentAt")
+        .lean()
+        .exec();
+    }
+    if (!recipient || recipient.status === "replied") return false;
+
+    // contactIds are tenant-scoped, but make sure the campaign is too.
+    const owned = await this.campaignModel.exists({
+      _id: recipient.campaignId,
+      tenantId,
+    });
+    if (!owned) return false;
+
+    const res = await this.recipientModel.updateOne(
+      { _id: recipient._id, status: repliable },
+      { $set: { status: "replied", repliedAt: at } },
+    );
+    if (res.modifiedCount === 0) return false;
+
+    await this.campaignModel.updateOne(
+      { _id: recipient.campaignId },
+      { $inc: { replied: 1 } },
+    );
+    this.logger.log(
+      `[Campaign] reply from contact ${contactId} → campaign ${recipient.campaignId}`,
+    );
+    return true;
+  }
+
+  /**
+   * Re-attributes replies that arrived before reply tracking existed (or
+   * while it missed them): for each send still awaiting a reply, looks for
+   * the contact's first inbound message within the reply window. Safe to
+   * run repeatedly.
+   */
+  async syncReplies(tenantId: string, campaignId: string) {
+    await this.findOne(tenantId, campaignId);
+
+    const recipients = await this.recipientModel
+      .find({
+        campaignId,
+        status: { $in: ["sent", "delivered", "read"] },
+        sentAt: { $exists: true },
+      })
+      .select("contactId sentAt")
+      .lean()
+      .exec();
+
+    let matched = 0;
+    for (const r of recipients) {
+      const conversation = await this.convModel
+        .findOne({ tenantId, contactId: r.contactId })
+        .select("_id")
+        .lean()
+        .exec();
+      if (!conversation) continue;
+
+      const sentAt = new Date(r.sentAt!);
+      const reply = await this.msgModel
+        .findOne({
+          tenantId,
+          conversationId: String(conversation._id),
+          direction: "INBOUND",
+          createdAt: {
+            $gt: sentAt,
+            $lte: new Date(sentAt.getTime() + REPLY_WINDOW_MS),
+          },
+        })
+        .sort({ createdAt: 1 })
+        .select("createdAt")
+        .lean()
+        .exec();
+      if (!reply) continue;
+
+      const when = new Date(
+        (reply as { createdAt?: Date }).createdAt ?? sentAt,
+      );
+      // Same attribution rule as live replies (latest send wins).
+      if (
+        await this.recordReply(
+          tenantId,
+          r.contactId,
+          Math.floor(when.getTime() / 1000),
+        )
+      ) {
+        matched++;
+      }
+    }
+
+    const campaign = await this.campaignModel
+      .findById(campaignId)
+      .select("replied")
+      .lean()
+      .exec();
+    return {
+      checked: recipients.length,
+      newlyMatched: matched,
+      replied: campaign?.replied ?? 0,
+    };
   }
 
   async getRecipients(

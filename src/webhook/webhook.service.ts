@@ -253,6 +253,7 @@ export class WebhookService {
         type,
         msg.timestamp as number,
         { mediaUrl, mediaId, mimeType, fileName },
+        (msg.context as { id?: string } | undefined)?.id,
       );
 
       // Assigned conversations notify the assignee; unassigned ones (the

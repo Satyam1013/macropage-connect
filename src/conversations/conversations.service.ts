@@ -4,6 +4,7 @@ import {
   ForbiddenException,
   BadRequestException,
   HttpException,
+  Logger,
 } from "@nestjs/common";
 import axios from "axios";
 import { InjectModel } from "@nestjs/mongoose";
@@ -41,6 +42,8 @@ function normalizePhone(raw: string): string {
 
 @Injectable()
 export class ConversationsService {
+  private readonly logger = new Logger(ConversationsService.name);
+
   constructor(
     @InjectModel(Conversation.name)
     private readonly convModel: Model<ConversationDocument>,
@@ -975,6 +978,8 @@ export class ConversationsService {
       mimeType?: string | null;
       fileName?: string | null;
     },
+    // context.id of a swipe-reply: the Meta id of the message answered.
+    replyToMetaId?: string,
   ): Promise<MessageDocument> {
     const message = await this.msgModel.create({
       tenantId,
@@ -992,6 +997,11 @@ export class ConversationsService {
 
     // Fire and forget — usage tracking must never block the inbound path
     void this.messageUsageService.trackInbound(tenantId);
+    void this.campaignsService
+      .recordReply(tenantId, contactId, timestamp, replyToMetaId)
+      .catch((err: unknown) =>
+        this.logger.error(`Campaign reply tracking failed`, err),
+      );
 
     const updatedConv = await this.convModel
       .findOneAndUpdate(

@@ -19,6 +19,11 @@ import { NotificationsModule } from "../notifications/notifications.module";
 
 import { ProjectAccessModule } from "../common/guards/project-access.module";
 import {
+  Conversation,
+  ConversationSchema,
+} from "../schemas/conversation.schema";
+import { Message, MessageSchema } from "../schemas/message.schema";
+import {
   UserAccountMembership,
   UserAccountMembershipSchema,
 } from "../auth/schemas/user-account-membership.schema";
@@ -34,6 +39,8 @@ import {
       { name: Template.name, schema: TemplateSchema },
       { name: Contact.name, schema: ContactSchema },
       { name: User.name, schema: UserSchema },
+      { name: Conversation.name, schema: ConversationSchema },
+      { name: Message.name, schema: MessageSchema },
     ]),
     ContactsModule,
     MetaModule,
