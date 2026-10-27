@@ -4,7 +4,7 @@
 import {
   BadGatewayException,
   BadRequestException,
-  ConflictException,
+  NotFoundException,
   ForbiddenException,
   HttpException,
 } from "@nestjs/common";
@@ -88,8 +88,26 @@ function setup(opts: {
   const inviteModel = {
     updateMany: jest.fn().mockResolvedValue({ modifiedCount: 0 }),
   };
+  // Same shape as GET /billing/plans (per-month prices, INR).
   const billingService = {
     syncUserPlan: jest.fn().mockResolvedValue(undefined),
+    getPlans: jest.fn().mockResolvedValue([
+      {
+        id: "STARTER",
+        name: "Starter",
+        pricing: {
+          monthly: { price: 1999 },
+          quarterly: { price: 1799 },
+          yearly: { price: 1499 },
+        },
+      },
+      { id: "GROWTH", name: "Growth", pricing: { monthly: { price: 3499 } } },
+      {
+        id: "ENTERPRISE",
+        name: "Enterprise",
+        pricing: { yearly: { price: 0 } },
+      },
+    ]),
   };
   const razorpayService = {
     cancelSubscription: jest.fn().mockResolvedValue({}),
@@ -145,6 +163,7 @@ function setup(opts: {
     disconnectSockets,
     apiKeyModel,
     sessionModel,
+    refreshTokenModel,
   };
 }
 
@@ -169,7 +188,7 @@ describe("date helpers", () => {
 });
 
 describe("AccountManagementService.createSubscription", () => {
-  it("replaces an active Razorpay subscription: cancels auto-pay, records REPLACED, activates the new plan", async () => {
+  it("replaces an active Razorpay subscription: cancels auto-pay, records the replaced plan, activates the new one", async () => {
     const t = setup({
       sub: {
         plan: "GROWTH",
@@ -181,18 +200,20 @@ describe("AccountManagementService.createSubscription", () => {
       },
     });
 
+    // The admin panel may send any case; the DTO uppercases, the service
+    // matches case-insensitively either way.
     const res = await t.service.createSubscription(ADMIN_ID, CUSTOMER_ID, {
-      planId: "STARTER",
+      planId: "starter",
       billingCycle: "quarterly",
-      startDate: "2026-10-13T00:00:00.000Z",
+      startDate: "2026-10-13",
       note: "deal",
     });
 
     expect(res).toEqual({
       planId: "STARTER",
       billingCycle: "quarterly",
-      startDate: new Date("2026-10-13T00:00:00.000Z"),
-      expiresAt: new Date("2027-01-13T00:00:00.000Z"),
+      startDate: new Date("2026-10-13"),
+      expiresAt: new Date("2027-01-13"),
       status: "active",
     });
     expect(t.razorpayService.cancelSubscription).toHaveBeenCalledWith(
@@ -203,14 +224,16 @@ describe("AccountManagementService.createSubscription", () => {
     const types = t.historyModel.create.mock.calls.map(
       ([docs]: [Array<{ type: string }>]) => docs[0].type,
     );
-    expect(types).toEqual(["REPLACED", "ADMIN_CREATE"]);
+    expect(types).toEqual(["replaced", "purchase"]);
     const created = t.historyModel.create.mock.calls[1][0][0];
     expect(created).toMatchObject({
       plan: "STARTER",
+      planName: "Starter",
       status: "active",
       createdBy: ADMIN_ID,
       note: "deal",
-      amount: 249900, // STARTER quarterly list price, paise
+      amount: 5397, // ₹1,799/month × 3 — the catalog's quarterly price
+      date: new Date("2026-10-13"),
     });
 
     const [, update] = t.subModel.updateOne.mock.calls[0];
@@ -252,21 +275,56 @@ describe("AccountManagementService.createSubscription", () => {
     expect(t.historyModel.create).not.toHaveBeenCalled();
   });
 
-  it("uses amountPaid (INR → paise) and needs one for ENTERPRISE", async () => {
-    const t = setup({ sub: null });
-    await t.service.createSubscription(ADMIN_ID, CUSTOMER_ID, {
+  it("records amountPaid as-is (INR); a custom-priced plan without one is a 0 admin_grant", async () => {
+    const paid = setup({ sub: null });
+    await paid.service.createSubscription(ADMIN_ID, CUSTOMER_ID, {
       planId: "ENTERPRISE",
       billingCycle: "yearly",
       amountPaid: 50000,
     });
-    expect(t.historyModel.create.mock.calls[0][0][0].amount).toBe(5000000);
+    expect(paid.historyModel.create.mock.calls[0][0][0]).toMatchObject({
+      type: "purchase",
+      amount: 50000,
+    });
 
-    await expect(
-      t.service.createSubscription(ADMIN_ID, CUSTOMER_ID, {
-        planId: "ENTERPRISE",
-        billingCycle: "yearly",
-      }),
-    ).rejects.toBeInstanceOf(BadRequestException);
+    const free = setup({ sub: null });
+    await free.service.createSubscription(ADMIN_ID, CUSTOMER_ID, {
+      planId: "ENTERPRISE",
+      billingCycle: "yearly",
+    });
+    expect(free.historyModel.create.mock.calls[0][0][0]).toMatchObject({
+      type: "admin_grant",
+      amount: 0,
+    });
+  });
+
+  it("is an admin_grant with amount 0 when complimentary", async () => {
+    const t = setup({ sub: null });
+    await t.service.createSubscription(ADMIN_ID, CUSTOMER_ID, {
+      planId: "GROWTH",
+      billingCycle: "monthly",
+      paymentMode: "complimentary",
+    });
+    expect(t.historyModel.create.mock.calls[0][0][0]).toMatchObject({
+      type: "admin_grant",
+      amount: 0,
+      planName: "Growth",
+    });
+  });
+
+  it("returns 404 for a plan that isn't in the catalog (or the trial)", async () => {
+    for (const planId of ["GOLD", "TRIAL"]) {
+      const t = setup({ sub: null });
+      const err = await t.service
+        .createSubscription(ADMIN_ID, CUSTOMER_ID, {
+          planId,
+          billingCycle: "monthly",
+        })
+        .catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(NotFoundException);
+      expect(errorCode(err)).toBe("PLAN_NOT_FOUND");
+      expect(t.subModel.updateOne).not.toHaveBeenCalled();
+    }
   });
 });
 
@@ -289,7 +347,8 @@ describe("AccountManagementService.extendSubscription", () => {
     const [, update] = t.subModel.updateOne.mock.calls[0];
     expect(update).toEqual({ $set: { currentPeriodEnd: res.expiresAt } });
     expect(t.historyModel.create.mock.calls[0][0][0]).toMatchObject({
-      type: "ADMIN_EXTEND",
+      type: "extension",
+      reason: "goodwill",
       amount: 0,
       extension: { months: 1, days: 2 },
       note: "goodwill",
@@ -337,12 +396,12 @@ describe("AccountManagementService.extendSubscription", () => {
   it.each([
     ["no subscription", null],
     ["only a free trial", { plan: "TRIAL", status: "TRIALING" }],
-  ])("returns 409 when the customer has %s", async (_label, sub) => {
+  ])("returns 400 when the customer has %s", async (_label, sub) => {
     const t = setup({ sub });
     const err = await t.service
       .extendSubscription(ADMIN_ID, CUSTOMER_ID, { months: 1 })
       .catch((e: unknown) => e);
-    expect(err).toBeInstanceOf(ConflictException);
+    expect(err).toBeInstanceOf(BadRequestException);
     expect(errorCode(err)).toBe("NO_SUBSCRIPTION");
     expect(t.subModel.updateOne).not.toHaveBeenCalled();
   });
@@ -377,6 +436,13 @@ describe("AccountManagementService suspend/unsuspend", () => {
       CUSTOMER_ID,
     ]);
     expect(t.disconnectSockets).toHaveBeenCalledWith(true);
+    // Sessions/refresh tokens are dropped so nothing can be renewed.
+    expect(t.sessionModel.deleteMany).toHaveBeenCalledWith({
+      userId: CUSTOMER_ID,
+    });
+    expect(t.refreshTokenModel.deleteMany).toHaveBeenCalledWith({
+      userId: CUSTOMER_ID,
+    });
     expect(t.auditModel.create).toHaveBeenCalled();
     expect(t.emailService.sendNotificationEmail).toHaveBeenCalled();
     // Expiry dates are untouched.
@@ -492,7 +558,9 @@ describe("AccountManagementService.softDelete", () => {
     expect(t.apiKeyModel.updateMany).toHaveBeenCalled();
     expect(t.campaignsService.pauseForSuspension).toHaveBeenCalled();
     // Expiry is kept for audit — only renewal is stopped.
+    // Cancelled, but the expiry is kept for audit.
     const [, subUpdate] = t.subModel.updateOne.mock.calls[0];
+    expect(subUpdate.$set.status).toBe("CANCELLED");
     expect(subUpdate.$set).not.toHaveProperty("currentPeriodEnd");
   });
 });

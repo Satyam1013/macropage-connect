@@ -172,4 +172,35 @@ export class PlatformCustomersService {
       messagesFailedToday: globalStats.failedToday,
     };
   }
+
+  async getCurrentPlan(id: string) {
+    const customer = await this.findOne(id);
+    // Billing lives on the customer's own main account — the same tenant
+    // POST /platform/customers/:id/subscription writes to.
+    const [sub, plans] = await Promise.all([
+      this.billingService.getSubscription(customer.id),
+      this.billingService.getPlans(),
+    ]);
+    const view = this.billingService.toPlatformSubscriptionView(
+      sub?.toObject() ?? null,
+    );
+    if (!view) {
+      return {
+        planId: null,
+        planName: null,
+        billingCycle: null,
+        status: "none",
+        expiresAt: null,
+        endDate: null,
+      };
+    }
+    const catalogEntry = (plans as Array<{ id: string; name: string }>).find(
+      (p) => p.id === view.planId,
+    );
+    return {
+      ...view,
+      planName:
+        catalogEntry?.name ?? (view.planId === "TRIAL" ? "Trial" : view.planId),
+    };
+  }
 }

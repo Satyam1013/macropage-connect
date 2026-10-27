@@ -27,6 +27,13 @@ export class PlatformCustomersController {
     return this.customersService.findOne(id);
   }
 
+  // The customer's subscription as the admin panel reads it: planId,
+  // planName, billingCycle, status, expiresAt (alias endDate).
+  @Get(":id/current-plan")
+  getCurrentPlan(@Param("id") id: string) {
+    return this.customersService.getCurrentPlan(id);
+  }
+
   @Get(":id/profile")
   getProfile(@Param("id") id: string) {
     return this.customersService.getProfile(id);
