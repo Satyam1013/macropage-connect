@@ -46,6 +46,7 @@ import { EmailService } from "../../queue/email.service";
 import { NotificationsService } from "../../notifications/notifications.service";
 import { AccountStatusService } from "../../account-status/account-status.service";
 import {
+  ADMIN_PLAN_IDS,
   AdminBillingCycle,
   AdminPlanId,
   CreateSubscriptionDto,
@@ -69,6 +70,23 @@ const PLAN_NAMES: Record<AdminPlanId, string> = {
 
 // Statuses under which Razorpay may still charge the customer.
 const RAZORPAY_LIVE_STATUSES = ["ACTIVE", "PAST_DUE"];
+
+type CatalogPlan = {
+  id: AdminPlanId;
+  name: string;
+  pricing?: Partial<Record<AdminBillingCycle, { price?: number }>>;
+};
+
+/**
+ * The plan's list price for a whole cycle, in INR. Catalog prices are per
+ * month (quarterly/yearly are discounted monthly rates), so multiply by the
+ * cycle length — e.g. Starter yearly ₹1,499 × 12 = ₹17,988, as billed.
+ * Custom-priced plans (Enterprise) come out as 0.
+ */
+export function listPrice(plan: CatalogPlan, cycle: AdminBillingCycle): number {
+  const monthly = plan.pricing?.[cycle]?.price ?? 0;
+  return monthly * CYCLE_MONTHS[cycle];
+}
 
 /** Adds months, clamping the day (Jan 31 + 1 month → Feb 28/29). */
 export function addMonths(date: Date, months: number): Date {
@@ -170,7 +188,17 @@ export class AccountManagementService {
       );
     }
 
-    const amountPaise = this.resolveAmountPaise(dto);
+    const plan = await this.resolvePlan(dto.planId);
+    const planId = plan.id;
+    const amountPaid =
+      dto.amountPaid ??
+      (dto.paymentMode === "complimentary"
+        ? 0
+        : listPrice(plan, dto.billingCycle));
+    const historyType =
+      dto.paymentMode === "complimentary" || amountPaid === 0
+        ? "admin_grant"
+        : "purchase";
     const startDate = dto.startDate ? new Date(dto.startDate) : new Date();
     const expiresAt = addMonths(startDate, CYCLE_MONTHS[dto.billingCycle]);
 
@@ -190,7 +218,7 @@ export class AccountManagementService {
           [
             {
               tenantId,
-              type: "REPLACED",
+              type: "replaced",
               plan: before.plan,
               planName: PLAN_NAMES[before.plan] ?? before.plan,
               billingCycle: before.billingCycle,
@@ -199,7 +227,8 @@ export class AccountManagementService {
               periodStart: before.currentPeriodStart,
               periodEnd: before.currentPeriodEnd,
               createdBy: adminId,
-              note: `Replaced by ${dto.planId} (${dto.billingCycle})`,
+              date: new Date(),
+              note: `Replaced by ${planId} (${dto.billingCycle})`,
             },
           ],
           { session },
@@ -214,7 +243,7 @@ export class AccountManagementService {
         {
           $set: {
             tenantId,
-            plan: dto.planId,
+            plan: planId,
             billingCycle: dto.billingCycle,
             status: "ACTIVE",
             source: "ADMIN",
@@ -234,17 +263,18 @@ export class AccountManagementService {
         },
         { upsert: true, session },
       );
-      await this.billingService.syncUserPlan(tenantId, dto.planId, session);
+      await this.billingService.syncUserPlan(tenantId, planId, session);
 
       await this.historyModel.create(
         [
           {
             tenantId,
-            type: "ADMIN_CREATE",
-            plan: dto.planId,
-            planName: PLAN_NAMES[dto.planId],
+            type: historyType,
+            plan: planId,
+            planName: plan.name,
             billingCycle: dto.billingCycle,
-            amount: amountPaise,
+            amount: amountPaid,
+            date: startDate,
             status: "active",
             paymentMode: dto.paymentMode ?? "manual",
             periodStart: startDate,
@@ -264,14 +294,15 @@ export class AccountManagementService {
           reason: dto.note,
           before: this.subSnapshot(before),
           after: {
-            plan: dto.planId,
+            plan: planId,
             billingCycle: dto.billingCycle,
             status: "ACTIVE",
             currentPeriodStart: startDate,
             currentPeriodEnd: expiresAt,
           },
           meta: {
-            amountPaise,
+            amountPaid,
+            historyType,
             paymentMode: dto.paymentMode ?? "manual",
             cancelledRazorpaySubId:
               before && this.hasLiveRazorpay(before)
@@ -285,12 +316,12 @@ export class AccountManagementService {
 
     this.notifyInApp(
       customerId,
-      `${PLAN_NAMES[dto.planId]} plan activated`,
-      `Your ${dto.billingCycle} ${PLAN_NAMES[dto.planId]} plan is active until ${expiresAt.toDateString()}.`,
+      `${plan.name} plan activated`,
+      `Your ${dto.billingCycle} ${plan.name} plan is active until ${expiresAt.toDateString()}.`,
     );
 
     return {
-      planId: dto.planId,
+      planId,
       billingCycle: dto.billingCycle,
       startDate,
       expiresAt,
@@ -327,9 +358,9 @@ export class AccountManagementService {
     // A free trial was never purchased — there's nothing to extend.
     if (!sub || sub.plan === "TRIAL") {
       throw apiError(
-        ConflictException,
+        BadRequestException,
         "NO_SUBSCRIPTION",
-        "This customer has no subscription to extend. Create one instead (POST /platform/customers/:id/subscription).",
+        "This customer has no subscription to extend. Create a subscription first.",
       );
     }
 
@@ -364,7 +395,7 @@ export class AccountManagementService {
         [
           {
             tenantId,
-            type: "ADMIN_EXTEND",
+            type: "extension",
             plan: sub.plan,
             planName: PLAN_NAMES[sub.plan as AdminPlanId] ?? sub.plan,
             billingCycle: sub.billingCycle,
@@ -374,7 +405,9 @@ export class AccountManagementService {
             periodEnd: expiresAt,
             previousPeriodEnd: sub.currentPeriodEnd,
             extension: { months, days },
+            date: now,
             createdBy: adminId,
+            reason: dto.reason,
             note: dto.reason,
           },
         ],
@@ -440,7 +473,13 @@ export class AccountManagementService {
       };
     }
 
-    const stopped = await this.stopOutboundActivity(customerId);
+    // Access tokens are already refused by the status check on every
+    // request; also drop sessions/refresh tokens so nothing can be renewed.
+    const [stopped, sessions, refreshTokens] = await Promise.all([
+      this.stopOutboundActivity(customerId),
+      this.sessionModel.deleteMany({ userId: customerId }),
+      this.refreshTokenModel.deleteMany({ userId: customerId }),
+    ]);
     await this.audit({
       adminId,
       customerId,
@@ -448,7 +487,11 @@ export class AccountManagementService {
       reason: dto.reason,
       before: { accountStatus: customer.accountStatus ?? "active" },
       after: { accountStatus: "suspended" },
-      meta: stopped,
+      meta: {
+        ...stopped,
+        sessionsRevoked: sessions.deletedCount,
+        refreshTokensRevoked: refreshTokens.deletedCount,
+      },
     });
 
     this.notifyByEmail(
@@ -564,14 +607,14 @@ export class AccountManagementService {
     if (res.modifiedCount === 0) return { success: true };
 
     if (sub) {
-      // Expiry dates and history stay for audit; no further renewals.
+      // Cancelled, but expiry dates and history stay for audit.
       await this.subModel.updateOne(
         { tenantId: customerId },
         {
           $set: {
+            status: "CANCELLED",
             cancelAtPeriodEnd: false,
             cancelledAt: new Date(),
-            ...(cancelledRazorpaySubId && { status: "CANCELLED" }),
           },
           $unset: { pendingRazorpaySubId: "", pendingRazorpayPlanId: "" },
         },
@@ -659,21 +702,23 @@ export class AccountManagementService {
     return customer;
   }
 
-  private resolveAmountPaise(dto: CreateSubscriptionDto): number {
-    if (dto.amountPaid !== undefined) return Math.round(dto.amountPaid * 100);
-    if (dto.paymentMode === "complimentary") return 0;
-    const price =
-      dto.planId === "ENTERPRISE"
-        ? undefined
-        : PLANS[dto.planId].pricing[dto.billingCycle]?.amount;
-    if (price === undefined) {
+  /**
+   * The plan from the same catalog GET /billing/plans serves, matched
+   * case-insensitively. 404 when it doesn't exist (TRIAL isn't grantable).
+   */
+  private async resolvePlan(planId: string): Promise<CatalogPlan> {
+    const wanted = planId.trim().toUpperCase();
+    const plans =
+      (await this.billingService.getPlans()) as unknown as CatalogPlan[];
+    const plan = plans.find((p) => String(p.id).toUpperCase() === wanted);
+    if (!plan || !(ADMIN_PLAN_IDS as readonly string[]).includes(plan.id)) {
       throw apiError(
-        BadRequestException,
-        "AMOUNT_REQUIRED",
-        `${dto.planId} has no list price — pass amountPaid (or paymentMode "complimentary").`,
+        NotFoundException,
+        "PLAN_NOT_FOUND",
+        `Plan "${planId}" doesn't exist. Valid plans: ${ADMIN_PLAN_IDS.join(", ")}.`,
       );
     }
-    return price;
+    return { ...plan, id: plan.id };
   }
 
   private hasLiveRazorpay(sub: Pick<Subscription, "razorpaySubId" | "status">) {

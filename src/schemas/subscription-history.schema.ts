@@ -8,9 +8,18 @@ export type SubscriptionHistoryDocument =
   };
 
 export const SUBSCRIPTION_HISTORY_TYPES = [
+  // Admin-created subscription: "purchase" when money was paid,
+  // "admin_grant" when complimentary / free.
+  "purchase",
+  "admin_grant",
+  // Admin extension of the current period.
+  "extension",
+  // The previous subscription, ended because an admin created a new one.
+  "replaced",
+  // Legacy names written before the admin panel's contract — kept so old
+  // rows still validate.
   "ADMIN_CREATE",
   "ADMIN_EXTEND",
-  // The previous subscription, ended because an admin created a new one.
   "REPLACED",
 ] as const;
 export type SubscriptionHistoryType =
@@ -36,9 +45,15 @@ export class SubscriptionHistory {
   @Prop()
   billingCycle?: string;
 
-  // Paise, same unit as `payments.amount`.
+  // INR (rupees) as entered by the admin (amountPaid). Note: Razorpay rows
+  // in `payments` store paise.
   @Prop({ default: 0 })
   amount!: number;
+
+  // The purchase/grant date shown in plan history (the subscription's
+  // start date).
+  @Prop()
+  date?: Date;
 
   @Prop({ default: "INR" })
   currency!: string;
@@ -68,6 +83,10 @@ export class SubscriptionHistory {
 
   @Prop()
   note?: string;
+
+  // Why an admin extended the period.
+  @Prop()
+  reason?: string;
 }
 
 export const SubscriptionHistorySchema =

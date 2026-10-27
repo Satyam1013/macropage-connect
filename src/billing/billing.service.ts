@@ -202,6 +202,7 @@ export class BillingService {
       planId: sub.plan,
       billingCycle: sub.billingCycle ?? null,
       expiresAt,
+      endDate: expiresAt,
       status: lapsed ? "expired" : String(sub.status).toLowerCase(),
     };
   }
