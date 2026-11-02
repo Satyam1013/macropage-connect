@@ -31,6 +31,11 @@ import {
   AddNoteDto,
   UpdateConversationDto,
 } from "./dto/send-message.dto";
+import {
+  headerComponent,
+  resolveHeaderMedia,
+  templateVarIndex,
+} from "../templates/template-header.util";
 import type { ConversationFilters } from "./conversations.types";
 
 function normalizePhone(raw: string): string {
@@ -340,40 +345,19 @@ export class ConversationsService {
       const bodyParams =
         resolvedVars && Object.keys(resolvedVars).length > 0
           ? Object.keys(resolvedVars)
-              .sort((a, b) => Number(a) - Number(b))
+              .sort((a, b) => templateVarIndex(a) - templateVarIndex(b))
               .map((k) => ({ type: "text", text: resolvedVars[k] }))
           : [];
 
-      // Media-header templates have their FORMAT fixed at registration
-      // (stored on tpl.header) but the actual media link is supplied fresh
-      // on every send — omitting it is exactly what causes Meta's #132012
-      // "Parameter format does not match format in the created template".
-      const storedHeader = tpl?.header as { format?: string } | undefined;
-      const headerInput = dto.header as
-        | {
-            format?: string;
-            type?: string;
-            mediaUrl?: string;
-            link?: string;
-            url?: string;
-          }
-        | undefined;
-      const headerFormat = (
-        headerInput?.format ??
-        headerInput?.type ??
-        storedHeader?.format
-      )?.toUpperCase();
-      const headerMedia =
-        headerInput?.mediaUrl ?? headerInput?.link ?? headerInput?.url;
-
-      const components: Record<string, unknown>[] = [];
-      if (headerFormat && headerFormat !== "TEXT" && headerMedia) {
-        const mediaKey = headerFormat.toLowerCase();
-        components.push({
-          type: "header",
-          parameters: [{ type: mediaKey, [mediaKey]: { link: headerMedia } }],
-        });
-      }
+      const headerMedia = this.requireHeaderMedia(
+        dto.templateName,
+        dto.header,
+        tpl?.header,
+      );
+      const headerComp = headerComponent(headerMedia);
+      const components: Record<string, unknown>[] = headerComp
+        ? [headerComp]
+        : [];
       if (bodyParams.length > 0) {
         components.push({ type: "body", parameters: bodyParams });
       }
@@ -779,6 +763,26 @@ export class ConversationsService {
     return conv;
   }
 
+  // A media-header template can't go out without its media. Say so here,
+  // rather than letting Meta answer with an opaque #132012.
+  private requireHeaderMedia(
+    templateName: string | undefined,
+    input: Record<string, unknown> | undefined,
+    stored: Record<string, unknown> | undefined,
+  ) {
+    const media = resolveHeaderMedia(input, stored);
+    if (media.format && !media.link) {
+      throw new BadRequestException({
+        success: false,
+        error: {
+          code: "TEMPLATE_HEADER_MEDIA_REQUIRED",
+          message: `Template "${templateName}" has a ${media.format.toLowerCase()} header but no saved media. Send the file link in header.mediaUrl, or edit the template and upload the file again.`,
+        },
+      });
+    }
+    return media;
+  }
+
   async initiateConversation(
     tenantId: string,
     contactId: string,
@@ -853,6 +857,35 @@ export class ConversationsService {
       }
     }
 
+    const headerComp = headerComponent(
+      this.requireHeaderMedia(templateName, undefined, template.header),
+    );
+    const components: Record<string, unknown>[] = headerComp
+      ? [headerComp]
+      : [];
+    if (resolvedVars && Object.keys(resolvedVars).length > 0) {
+      const varKeys = Object.keys(resolvedVars).sort(
+        (a, b) => templateVarIndex(a) - templateVarIndex(b),
+      );
+      components.push({
+        type: "body",
+        parameters: varKeys.map((k) => ({
+          type: "text",
+          text: resolvedVars[k],
+        })),
+      });
+      // Meta requires authentication (OTP) templates to repeat the code as
+      // the copy-code button's parameter.
+      if (template.category === "AUTHENTICATION") {
+        components.push({
+          type: "button",
+          sub_type: "url",
+          index: "0",
+          parameters: [{ type: "text", text: resolvedVars[varKeys[0]] }],
+        });
+      }
+    }
+
     const toNumber = normalizePhone(contact.phone);
     let metaMessageId: string | undefined;
     try {
@@ -863,38 +896,7 @@ export class ConversationsService {
         template: {
           name: templateName,
           language: { code: template.language },
-          ...(resolvedVars &&
-            Object.keys(resolvedVars).length > 0 && {
-              components: [
-                {
-                  type: "body",
-                  parameters: Object.keys(resolvedVars)
-                    .sort((a, b) => Number(a) - Number(b))
-                    .map((k) => ({ type: "text", text: resolvedVars[k] })),
-                },
-                // Meta requires authentication (OTP) templates to repeat the
-                // code as the copy-code button's parameter.
-                ...(template.category === "AUTHENTICATION"
-                  ? [
-                      {
-                        type: "button",
-                        sub_type: "url",
-                        index: "0",
-                        parameters: [
-                          {
-                            type: "text",
-                            text: resolvedVars[
-                              Object.keys(resolvedVars).sort(
-                                (a, b) => Number(a) - Number(b),
-                              )[0]
-                            ],
-                          },
-                        ],
-                      },
-                    ]
-                  : []),
-              ],
-            }),
+          ...(components.length > 0 && { components }),
         },
       });
       metaMessageId = (resp.data as { messages?: Array<{ id: string }> })

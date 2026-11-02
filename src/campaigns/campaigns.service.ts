@@ -27,6 +27,10 @@ import {
   ConversationDocument,
 } from "../schemas/conversation.schema";
 import { Message, MessageDocument } from "../schemas/message.schema";
+import {
+  headerComponent,
+  resolveHeaderMedia,
+} from "../templates/template-header.util";
 import { EmailService } from "../queue/email.service";
 
 function normalizePhone(raw: string): string {
@@ -65,23 +69,10 @@ function buildTemplateComponents(
 ): Record<string, unknown>[] {
   const components: Record<string, unknown>[] = [];
 
-  // Media-header templates need the actual media link on every send — the
-  // format is fixed at registration but WhatsApp still expects it supplied
-  // per-message. We reuse whatever media was stored when the template was
-  // created/edited (templates.service.ts saves it on template.header).
-  const headerInfo = header as
-    | { format?: string; mediaUrl?: string; link?: string; url?: string }
-    | undefined;
-  const headerFormat = headerInfo?.format?.toUpperCase();
-  const headerMedia =
-    headerInfo?.mediaUrl ?? headerInfo?.link ?? headerInfo?.url;
-  if (headerFormat && headerFormat !== "TEXT" && headerMedia) {
-    const mediaKey = headerFormat.toLowerCase();
-    components.push({
-      type: "header",
-      parameters: [{ type: mediaKey, [mediaKey]: { link: headerMedia } }],
-    });
-  }
+  // The format is fixed at registration but WhatsApp still expects the media
+  // on every send, so reuse what's saved on the template.
+  const headerComp = headerComponent(resolveHeaderMedia(undefined, header));
+  if (headerComp) components.push(headerComp);
 
   const bodyParams = Object.entries(variableMapping ?? {})
     .map(([key, value]) => {
