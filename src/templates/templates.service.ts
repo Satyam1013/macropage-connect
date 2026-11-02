@@ -11,6 +11,7 @@ import { Model } from "mongoose";
 import { Template, TemplateDocument } from "../schemas/template.schema";
 import type { TemplateCategory } from "./templates.types";
 import { MetaService } from "../meta/meta.service";
+import { mergeSyncedHeader } from "./template-header.util";
 import { CreateTemplateDto } from "./dto/create-template.dto";
 
 @Injectable()
@@ -327,7 +328,18 @@ export class TemplatesService {
         metaTemplateId: t["id"],
         body,
       };
-      if (headerComp) setFields.header = headerComp;
+      if (headerComp) {
+        const existing = await this.templateModel
+          .findOne({
+            tenantId,
+            name: t["name"] as string,
+            language: t["language"] as string,
+          })
+          .select("header")
+          .lean()
+          .exec();
+        setFields.header = mergeSyncedHeader(headerComp, existing?.header);
+      }
       if (buttonsComp) setFields.buttons = buttonsComp;
       const footerText = footerComp?.["text"];
       if (typeof footerText === "string" && footerText) {
