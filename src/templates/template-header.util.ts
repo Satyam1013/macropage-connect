@@ -8,8 +8,19 @@ type HeaderLike = {
   url?: unknown;
 };
 
-const asUrl = (value: unknown): string | undefined =>
-  typeof value === "string" && /^https?:\/\//.test(value) ? value : undefined;
+// Meta's own CDNs serve the template's review sample through signed,
+// expiring URLs — Meta itself later refuses to fetch them (403).
+const META_SAMPLE_HOST = /(^|\.)(whatsapp\.net|fbcdn\.net|fbsbx\.com)$/i;
+
+function asUrl(value: unknown): string | undefined {
+  if (typeof value !== "string" || !/^https?:\/\//.test(value)) return;
+  try {
+    if (META_SAMPLE_HOST.test(new URL(value).hostname)) return;
+  } catch {
+    return;
+  }
+  return value;
+}
 
 const directLink = (h?: HeaderLike) =>
   asUrl(h?.mediaUrl) ?? asUrl(h?.link) ?? asUrl(h?.url);
@@ -25,7 +36,8 @@ function mediaFormat(value: unknown): string | undefined {
  * leaving it out is what causes #132012 "Parameter format does not match".
  *
  * The link comes from the request, else the media saved on the template.
- * Meta's own review sample (example.header_handle, a signed
+ * Meta's own review sample — whether read from the template or echoed back
+ * by a client that shows it as the preview — (example.header_handle, a signed
  * scontent.whatsapp.net URL) is deliberately NOT used: it expires, and Meta
  * then refuses to fetch it (#131053 "Downloading media from weblink failed
  * with http code 403") — after the API has already accepted the send. With

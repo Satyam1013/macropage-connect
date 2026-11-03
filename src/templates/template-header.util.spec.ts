@@ -42,6 +42,23 @@ describe("resolveHeaderMedia", () => {
     ).toEqual({ format: "IMAGE", link: undefined });
   });
 
+  it("skips a Meta sample link echoed back in the request", () => {
+    const sample =
+      "https://scontent.whatsapp.net/v/t61.29466-34/722603954_n.jpg?oh=1";
+    expect(
+      resolveHeaderMedia(
+        { format: "IMAGE", mediaUrl: sample },
+        { format: "IMAGE", mediaUrl: SAVED },
+      ).link,
+    ).toBe(SAVED);
+    expect(
+      resolveHeaderMedia(
+        { format: "IMAGE", link: sample },
+        { format: "IMAGE", mediaUrl: "https://scontent-bom1-1.xx.fbcdn.net/x" },
+      ).link,
+    ).toBeUndefined();
+  });
+
   it("reports a media header with no usable link", () => {
     expect(
       resolveHeaderMedia(
