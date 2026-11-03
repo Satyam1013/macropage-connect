@@ -178,15 +178,23 @@ export class MetaService {
           error_subcode?: number;
           error_user_title?: string;
           error_user_msg?: string;
+          error_data?: { details?: string };
         };
       };
 
       const code = metaError?.error?.code ?? 0;
-      const message =
+      const summary =
         metaError?.error?.error_user_msg ??
         metaError?.error?.error_user_title ??
         metaError?.error?.message ??
         `Meta API error (HTTP ${err.response?.status ?? "unknown"})`;
+      // Generic codes like #131009 only say *which* parameter is wrong
+      // in error_data.details.
+      const details = metaError?.error?.error_data?.details;
+      const message =
+        details && !summary.includes(details)
+          ? `${summary} — ${details}`
+          : summary;
 
       this.logger.error(`Meta API error [${code}]: ${message}`);
 
