@@ -26,13 +26,20 @@ describe("resolveHeaderMedia", () => {
     ).toBe("https://x.test/new.png");
   });
 
-  it("falls back to Meta's sample URL after a sync", () => {
+  it("never uses Meta's expiring review sample (scontent) as the link", () => {
     expect(
-      resolveHeaderMedia(undefined, {
-        format: "IMAGE",
-        example: { header_handle: ["https://scontent.test/a.jpg"] },
-      }).link,
-    ).toBe("https://scontent.test/a.jpg");
+      resolveHeaderMedia(
+        { type: "HEADER" },
+        {
+          format: "IMAGE",
+          example: {
+            header_handle: [
+              "https://scontent.whatsapp.net/v/t61.29466-34/722603954_n.jpg",
+            ],
+          },
+        },
+      ),
+    ).toEqual({ format: "IMAGE", link: undefined });
   });
 
   it("reports a media header with no usable link", () => {
