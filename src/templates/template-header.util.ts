@@ -12,7 +12,8 @@ type HeaderLike = {
 // expiring URLs — Meta itself later refuses to fetch them (403).
 const META_SAMPLE_HOST = /(^|\.)(whatsapp\.net|fbcdn\.net|fbsbx\.com)$/i;
 
-function asUrl(value: unknown): string | undefined {
+/** An http(s) link Meta can fetch on every send, or undefined. */
+export function asUrl(value: unknown): string | undefined {
   if (typeof value !== "string" || !/^https?:\/\//.test(value)) return;
   try {
     if (META_SAMPLE_HOST.test(new URL(value).hostname)) return;
@@ -25,7 +26,7 @@ function asUrl(value: unknown): string | undefined {
 const directLink = (h?: HeaderLike) =>
   asUrl(h?.mediaUrl) ?? asUrl(h?.link) ?? asUrl(h?.url);
 
-function mediaFormat(value: unknown): string | undefined {
+export function mediaFormat(value: unknown): string | undefined {
   const format = typeof value === "string" ? value.toUpperCase() : undefined;
   return format && MEDIA_HEADER_FORMATS.includes(format) ? format : undefined;
 }
