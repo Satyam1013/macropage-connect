@@ -6,7 +6,6 @@ type HeaderLike = {
   mediaUrl?: unknown;
   link?: unknown;
   url?: unknown;
-  example?: { header_handle?: unknown };
 };
 
 const asUrl = (value: unknown): string | undefined =>
@@ -25,8 +24,12 @@ function mediaFormat(value: unknown): string | undefined {
  * fixes the format at registration but wants the media supplied per message;
  * leaving it out is what causes #132012 "Parameter format does not match".
  *
- * The link comes from the request, else the media saved on the template,
- * else the sample URL Meta returns on sync (a last resort: those can expire).
+ * The link comes from the request, else the media saved on the template.
+ * Meta's own review sample (example.header_handle, a signed
+ * scontent.whatsapp.net URL) is deliberately NOT used: it expires, and Meta
+ * then refuses to fetch it (#131053 "Downloading media from weblink failed
+ * with http code 403") — after the API has already accepted the send. With
+ * no link the caller rejects up front instead.
  * `type` may hold the component's type ("HEADER") rather than a format, so
  * only a real media format counts.
  */
@@ -42,9 +45,7 @@ export function resolveHeaderMedia(
     mediaFormat(tpl?.format);
   if (!format) return {};
 
-  const samples = tpl?.example?.header_handle;
-  const sample = Array.isArray(samples) ? asUrl(samples[0]) : undefined;
-  return { format, link: directLink(req) ?? directLink(tpl) ?? sample };
+  return { format, link: directLink(req) ?? directLink(tpl) };
 }
 
 /** The Cloud API `header` component, or null when there's nothing to send. */
