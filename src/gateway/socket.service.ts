@@ -43,6 +43,8 @@ export class SocketService {
       conversationId: string;
       status: string;
       timestamp?: string;
+      errorCode?: string;
+      errorMessage?: string;
     },
   ) {
     this.emitToTenant(tenantId, "message:status", data);
