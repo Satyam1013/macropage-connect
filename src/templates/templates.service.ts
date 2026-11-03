@@ -11,7 +11,7 @@ import { Model } from "mongoose";
 import { Template, TemplateDocument } from "../schemas/template.schema";
 import type { TemplateCategory } from "./templates.types";
 import { MetaService } from "../meta/meta.service";
-import { mergeSyncedHeader } from "./template-header.util";
+import { asUrl, mediaFormat, mergeSyncedHeader } from "./template-header.util";
 import { CreateTemplateDto } from "./dto/create-template.dto";
 
 @Injectable()
@@ -244,6 +244,49 @@ export class TemplatesService {
     if (!t) throw new NotFoundException("Draft template not found");
     Object.assign(t, dto);
     return t.save();
+  }
+
+  /**
+   * Saves the file a media-header template sends by default. Local only:
+   * the media isn't part of what Meta reviews, so unlike update() this
+   * never resubmits the template.
+   */
+  async setHeaderMedia(
+    tenantId: string,
+    id: string,
+    mediaUrl: string,
+  ): Promise<TemplateDocument> {
+    const t = await this.findOne(tenantId, id);
+    const header = t.header as { format?: unknown } | undefined;
+    if (!mediaFormat(header?.format)) {
+      throw new BadRequestException({
+        success: false,
+        error: {
+          code: "TEMPLATE_HEADER_NOT_MEDIA",
+          message: "This template has no image, video or document header.",
+        },
+      });
+    }
+    const link = asUrl(mediaUrl);
+    if (!link) {
+      throw new BadRequestException({
+        success: false,
+        error: {
+          code: "INVALID_MEDIA_URL",
+          message:
+            "mediaUrl must be a public http(s) link, e.g. from /upload/image. Meta's own preview links expire and can't be used.",
+        },
+      });
+    }
+    const updated = await this.templateModel
+      .findOneAndUpdate(
+        { _id: id, tenantId },
+        { $set: { "header.mediaUrl": link } },
+        { new: true },
+      )
+      .exec();
+    if (!updated) throw new NotFoundException("Template not found");
+    return updated;
   }
 
   async update(

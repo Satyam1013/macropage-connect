@@ -14,6 +14,7 @@ import {
 } from "@nestjs/common";
 import { TemplatesService } from "./templates.service";
 import { CreateTemplateDto } from "./dto/create-template.dto";
+import { SetHeaderMediaDto } from "./dto/set-header-media.dto";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { ProjectAccessGuard } from "../common/guards/project-access.guard";
 import type { ProjectAuthReq } from "../auth/dto/auth-request.interface";
@@ -64,6 +65,17 @@ export class TemplatesController {
   ) {
     const tenantId = req.projectId;
     return this.templatesService.updateDraft(tenantId, id, dto);
+  }
+
+  @Patch(":id/header-media")
+  @HttpCode(HttpStatus.OK)
+  setHeaderMedia(
+    @Request() req: ProjectAuthReq,
+    @Param("id") id: string,
+    @Body() dto: SetHeaderMediaDto,
+  ) {
+    const tenantId = req.projectId;
+    return this.templatesService.setHeaderMedia(tenantId, id, dto.mediaUrl);
   }
 
   @Patch(":id")
