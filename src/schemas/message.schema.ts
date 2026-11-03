@@ -88,6 +88,11 @@ export class Message {
   @Prop()
   errorCode?: string;
 
+  // Why Meta failed the send, from the status webhook's errors[] (title +
+  // details) — a "failed" status arrives after the API already accepted it.
+  @Prop()
+  errorMessage?: string;
+
   @Prop({ default: false })
   isNote!: boolean;
 

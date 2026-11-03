@@ -45,6 +45,27 @@ function normalizePhone(raw: string): string {
   return digits;
 }
 
+type MetaStatusError = {
+  code?: number;
+  title?: string;
+  message?: string;
+  error_data?: { details?: string };
+};
+
+/** Meta's first status error as { code, "title — details" }. */
+function describeMetaError(
+  errors: MetaStatusError[] | undefined,
+): { code: string; message: string } | null {
+  const e = errors?.[0];
+  if (!e) return null;
+  const title = e.title ?? e.message ?? "Unknown error";
+  const details = e.error_data?.details;
+  return {
+    code: e.code !== undefined ? String(e.code) : "UNKNOWN",
+    message: details && details !== title ? `${title} — ${details}` : title,
+  };
+}
+
 @Injectable()
 export class ConversationsService {
   private readonly logger = new Logger(ConversationsService.name);
@@ -309,6 +330,8 @@ export class ConversationsService {
 
     const contactPhone = normalizePhone(contact.phone);
     let payload: Record<string, unknown>;
+    // Stored on TEMPLATE messages so the inbox can join the template back in.
+    let templateRef: { id: string; vars?: Record<string, string> } | undefined;
     // Free-form text/media replies are only allowed inside the 24hr
     // customer service window, so they're billed as "service" (free).
     let usageCategory: "marketing" | "utility" | "authentication" | "service" =
@@ -329,6 +352,7 @@ export class ConversationsService {
       if (tpl?.category) {
         usageCategory = tpl.category.toLowerCase() as typeof usageCategory;
       }
+      if (tpl) templateRef = { id: String(tpl._id) };
 
       let resolvedVars = dto.templateVars ?? dto.variables;
       if (!resolvedVars || Object.keys(resolvedVars).length === 0) {
@@ -348,6 +372,8 @@ export class ConversationsService {
               .sort((a, b) => templateVarIndex(a) - templateVarIndex(b))
               .map((k) => ({ type: "text", text: resolvedVars[k] }))
           : [];
+
+      if (templateRef && resolvedVars) templateRef.vars = resolvedVars;
 
       const headerMedia = this.requireHeaderMedia(
         dto.templateName,
@@ -389,6 +415,10 @@ export class ConversationsService {
       type: dto.type as MessageType,
       content: dto.content,
       mediaUrl: dto.mediaUrl,
+      ...(templateRef && {
+        templateId: templateRef.id,
+        templateVars: templateRef.vars,
+      }),
       status: "PENDING",
       agentId,
       sentAt: new Date(),
@@ -929,6 +959,8 @@ export class ConversationsService {
       direction: "OUTBOUND",
       type: "TEMPLATE",
       content: templateName,
+      templateId: String(template._id),
+      ...(resolvedVars && { templateVars: resolvedVars }),
       metaMessageId,
       status: "SENT",
       agentId,
@@ -1051,11 +1083,21 @@ export class ConversationsService {
     metaMessageId: string,
     status: string,
     timestamp: number,
+    errors?: MetaStatusError[],
   ): Promise<void> {
     const update: Record<string, unknown> = { status: status.toUpperCase() };
     if (status === "delivered") update.deliveredAt = new Date(timestamp * 1000);
     if (status === "read") update.readAt = new Date(timestamp * 1000);
     if (status === "failed") update.failedAt = new Date(timestamp * 1000);
+
+    const failure = status === "failed" ? describeMetaError(errors) : null;
+    if (failure) {
+      update.errorCode = failure.code;
+      update.errorMessage = failure.message;
+      this.logger.warn(
+        `Meta failed message ${metaMessageId} (tenant ${tenantId}): ${failure.code} ${failure.message}`,
+      );
+    }
 
     const msg = await this.msgModel
       .findOneAndUpdate({ tenantId, metaMessageId }, update, {
@@ -1069,6 +1111,10 @@ export class ConversationsService {
         conversationId: String(msg.conversationId),
         status: status.toUpperCase(),
         timestamp: new Date().toISOString(),
+        ...(failure && {
+          errorCode: failure.code,
+          errorMessage: failure.message,
+        }),
       });
     }
 

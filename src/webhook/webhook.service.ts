@@ -567,6 +567,9 @@ export class WebhookService {
         status.id as string,
         status.status as string,
         status.timestamp as number,
+        status.errors as Parameters<
+          ConversationsService["updateMessageStatus"]
+        >[4],
       );
     } catch (err) {
       this.logger.error("Failed to handle status update", err);
