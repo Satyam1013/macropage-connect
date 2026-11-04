@@ -2,6 +2,18 @@ import { Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { sendViaBrevo } from "./brevo.client";
 
+// Servers run in UTC; our customers read these emails in India.
+const EMAIL_TIME_ZONE = "Asia/Kolkata";
+
+function formatIst(date: Date): string {
+  const when = date.toLocaleString("en-IN", {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: EMAIL_TIME_ZONE,
+  });
+  return `${when} IST`;
+}
+
 @Injectable()
 export class EmailService {
   private readonly logger = new Logger(EmailService.name);
@@ -450,10 +462,7 @@ export class EmailService {
       totalContacts: number;
     },
   ): Promise<void> {
-    const when = data.scheduledFor.toLocaleString("en-IN", {
-      dateStyle: "medium",
-      timeStyle: "short",
-    });
+    const when = formatIst(data.scheduledFor);
     const html = this.renderCampaignEmailShell({
       badgeIcon: "📨",
       badgeText: "CAMPAIGN SCHEDULED",
@@ -529,10 +538,7 @@ export class EmailService {
       pending: number;
     },
   ): Promise<void> {
-    const when = data.sentAt.toLocaleString("en-IN", {
-      dateStyle: "medium",
-      timeStyle: "short",
-    });
+    const when = formatIst(data.sentAt);
     const pct = (n: number) =>
       data.totalContacts > 0
         ? `${((n / data.totalContacts) * 100).toFixed(1)}%`
@@ -634,6 +640,7 @@ export class EmailService {
   ): Promise<void> {
     const joinDate = data.joinDate.toLocaleDateString("en-IN", {
       dateStyle: "medium",
+      timeZone: EMAIL_TIME_ZONE,
     });
 
     const infoField = (icon: string, label: string, value: string) => `
