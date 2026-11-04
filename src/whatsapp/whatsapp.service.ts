@@ -929,7 +929,7 @@ export class WhatsappService {
     <div class="row"><span class="label">Verify Token</span><span class="value">macropage_webhook_verify_2024</span></div>
     <div class="row"><span class="label">Status</span><span class="badge ${webhookVerified ? "green" : "amber"}">${webhookVerified ? "Verified" : "Not verified"}</span></div>
   </div>
-  <div class="footer"><p>Sent from Macropage Connect · ${new Date().toLocaleDateString("en-IN")}</p></div>
+  <div class="footer"><p>Sent from Macropage Connect · ${new Date().toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata" })}</p></div>
 </body>
 </html>`;
   }
