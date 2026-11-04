@@ -62,6 +62,11 @@ function resolveCampaignVariable(
     : mappingValue;
 }
 
+// Recipients sent in parallel per batch, and the minimum time per batch:
+// at most 20 msg/s.
+const SEND_BATCH_SIZE = 20;
+const SEND_BATCH_INTERVAL_MS = 1000;
+
 function buildTemplateComponents(
   variableMapping: Record<string, unknown>,
   header: Record<string, unknown> | undefined,
@@ -456,7 +461,7 @@ export class CampaignsService {
       .find({ campaignId, status: "pending" })
       .exec();
 
-    for (const recipient of recipients) {
+    for (let i = 0; i < recipients.length; i += SEND_BATCH_SIZE) {
       const current = await this.campaignModel
         .findById(campaignId)
         .select("status")
@@ -467,71 +472,35 @@ export class CampaignsService {
         return;
       }
 
-      try {
-        const contact = await this.contactsService
-          .findOne(tenantId, recipient.contactId)
-          .catch(() => null);
-
-        const components = contact
-          ? buildTemplateComponents(
-              campaign.variableMapping,
-              template.header,
-              contact,
-            )
-          : [];
-
-        const resp = await client.sendMessage({
-          messaging_product: "whatsapp",
-          to: normalizePhone(recipient.phone),
-          type: "template",
-          template: {
-            name: template.name,
-            language: { code: template.language },
-            ...(components.length > 0 && { components }),
+      const batchStarted = Date.now();
+      const batch = recipients.slice(i, i + SEND_BATCH_SIZE);
+      const contacts = await this.contactModel
+        .find({
+          _id: {
+            $in: batch
+              .map((r) => String(r.contactId))
+              .filter((id) => Types.ObjectId.isValid(id)),
           },
-        });
-
-        const metaMessageId = (
-          resp.data as { messages?: Array<{ id: string }> }
-        )?.messages?.[0]?.id;
-
-        await this.recipientModel.updateOne(
-          { _id: recipient._id },
-          { status: "sent", metaMessageId, sentAt: new Date() },
-        );
-        await this.campaignModel.updateOne(
-          { _id: campaignId },
-          { $inc: { sent: 1 } },
-        );
-        await this.contactModel.updateOne(
-          { _id: recipient.contactId, tenantId },
-          { $inc: { totalMessages: 1 }, $set: { lastMessageAt: new Date() } },
-        );
-
-        // Fire and forget — usage tracking must never block campaign sending
-        void this.messageUsageService.trackOutbound(
           tenantId,
-          template.category.toLowerCase() as
-            | "marketing"
-            | "utility"
-            | "authentication",
-          1,
-          "campaign",
-        );
-      } catch (err) {
-        const reason = this.extractSendErrorReason(err);
-        await this.recipientModel.updateOne(
-          { _id: recipient._id },
-          { status: "failed", failedAt: new Date(), failureReason: reason },
-        );
-        await this.campaignModel.updateOne(
-          { _id: campaignId },
-          { $inc: { failed: 1 } },
-        );
-      }
+        })
+        .exec();
+      const contactById = new Map(contacts.map((c) => [String(c._id), c]));
 
-      // 200ms delay to respect Meta rate limits
-      await new Promise((r) => setTimeout(r, 200));
+      await Promise.all(
+        batch.map((recipient) =>
+          this.sendToRecipient(
+            campaign,
+            template,
+            client,
+            recipient,
+            contactById.get(String(recipient.contactId)),
+          ),
+        ),
+      );
+
+      // Stay well under Meta's per-number throughput (80 msg/s by default).
+      const wait = SEND_BATCH_INTERVAL_MS - (Date.now() - batchStarted);
+      if (wait > 0) await new Promise((r) => setTimeout(r, wait));
     }
 
     const final = await this.campaignModel
@@ -557,6 +526,74 @@ export class CampaignsService {
             `Failed to send campaign-summary email for ${campaignId}`,
             err,
           ),
+      );
+    }
+  }
+
+  private async sendToRecipient(
+    campaign: CampaignDocument,
+    template: TemplateDocument,
+    client: Awaited<ReturnType<MetaService["getClient"]>>,
+    recipient: CampaignRecipientDocument,
+    contact: ContactDocument | undefined,
+  ): Promise<void> {
+    const campaignId = String(campaign._id);
+    const tenantId = campaign.tenantId;
+    try {
+      const components = contact
+        ? buildTemplateComponents(
+            campaign.variableMapping,
+            template.header,
+            contact,
+          )
+        : [];
+
+      const resp = await client.sendMessage({
+        messaging_product: "whatsapp",
+        to: normalizePhone(recipient.phone),
+        type: "template",
+        template: {
+          name: template.name,
+          language: { code: template.language },
+          ...(components.length > 0 && { components }),
+        },
+      });
+
+      const metaMessageId = (resp.data as { messages?: Array<{ id: string }> })
+        ?.messages?.[0]?.id;
+
+      await this.recipientModel.updateOne(
+        { _id: recipient._id },
+        { status: "sent", metaMessageId, sentAt: new Date() },
+      );
+      await this.campaignModel.updateOne(
+        { _id: campaignId },
+        { $inc: { sent: 1 } },
+      );
+      await this.contactModel.updateOne(
+        { _id: recipient.contactId, tenantId },
+        { $inc: { totalMessages: 1 }, $set: { lastMessageAt: new Date() } },
+      );
+
+      // Fire and forget — usage tracking must never block campaign sending
+      void this.messageUsageService.trackOutbound(
+        tenantId,
+        template.category.toLowerCase() as
+          | "marketing"
+          | "utility"
+          | "authentication",
+        1,
+        "campaign",
+      );
+    } catch (err) {
+      const reason = this.extractSendErrorReason(err);
+      await this.recipientModel.updateOne(
+        { _id: recipient._id },
+        { status: "failed", failedAt: new Date(), failureReason: reason },
+      );
+      await this.campaignModel.updateOne(
+        { _id: campaignId },
+        { $inc: { failed: 1 } },
       );
     }
   }
