@@ -10,6 +10,7 @@ function setup() {
   const socketService = { messageStatus: jest.fn() };
   const campaignsService = {
     handleDeliveryUpdate: jest.fn().mockResolvedValue(undefined),
+    handleDeliveryFailure: jest.fn().mockResolvedValue(undefined),
   };
   const service = Object.assign(
     Object.create(ConversationsService.prototype) as object,
@@ -20,7 +21,7 @@ function setup() {
       logger: { warn: jest.fn(), error: jest.fn(), log: jest.fn() },
     },
   ) as unknown as ConversationsService;
-  return { service, msgModel, socketService };
+  return { service, msgModel, socketService, campaignsService };
 }
 
 describe("ConversationsService.updateMessageStatus", () => {
@@ -45,6 +46,11 @@ describe("ConversationsService.updateMessageStatus", () => {
       "tenant",
       expect.objectContaining({ status: "FAILED", errorCode: "131053" }),
     );
+    expect(t.campaignsService.handleDeliveryFailure).toHaveBeenCalledWith(
+      "wamid.1",
+      "131053: Media upload error — Unable to download the media from the URL",
+      1,
+    );
   });
 
   it("leaves error fields alone for non-failed statuses", async () => {
@@ -52,5 +58,6 @@ describe("ConversationsService.updateMessageStatus", () => {
     await t.service.updateMessageStatus("tenant", "wamid.1", "delivered", 1);
     const update = (t.msgModel.findOneAndUpdate.mock.calls[0] as unknown[])[1];
     expect(update).not.toHaveProperty("errorCode");
+    expect(t.campaignsService.handleDeliveryFailure).not.toHaveBeenCalled();
   });
 });

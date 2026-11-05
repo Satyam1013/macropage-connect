@@ -1109,6 +1109,15 @@ export class ConversationsService {
         .handleDeliveryUpdate(metaMessageId, status, timestamp)
         .catch(() => undefined);
     }
+    if (failure) {
+      void this.campaignsService
+        .handleDeliveryFailure(
+          metaMessageId,
+          `${failure.code}: ${failure.message}`,
+          timestamp,
+        )
+        .catch(() => undefined);
+    }
   }
 
   async assignConversation(
