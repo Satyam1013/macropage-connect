@@ -837,6 +837,42 @@ export class CampaignsService {
   }
 
   /**
+   * Meta can accept a send and fail it later (e.g. #131049 marketing limit,
+   * #131026 undeliverable). Without this the recipient stays "sent" forever.
+   * Moves it from sent to failed, so sent + failed still adds up to the
+   * recipients attempted. Never touches one already delivered or read.
+   */
+  async handleDeliveryFailure(
+    metaMessageId: string,
+    reason: string,
+    timestamp: number,
+  ): Promise<void> {
+    const recipient = await this.recipientModel
+      .findOneAndUpdate(
+        { metaMessageId, status: "sent", deliveredAt: { $exists: false } },
+        {
+          $set: {
+            status: "failed",
+            failedAt: new Date(timestamp * 1000),
+            failureReason: reason,
+          },
+        },
+      )
+      .select("campaignId")
+      .lean()
+      .exec();
+    if (!recipient) return;
+
+    await this.campaignModel.updateOne(
+      { _id: recipient.campaignId },
+      { $inc: { sent: -1, failed: 1 } },
+    );
+    this.logger.log(
+      `[Campaign] failed update for msg ${metaMessageId} → campaign ${recipient.campaignId}: ${reason}`,
+    );
+  }
+
+  /**
    * Attributes an inbound message to the campaign send it answers. Meta has
    * no "replied" status — a reply is just an inbound message. A swipe-reply
    * carries the campaign message's id (context.id) and is matched exactly;

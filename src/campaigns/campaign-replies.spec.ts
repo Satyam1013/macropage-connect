@@ -25,6 +25,9 @@ function setup(opts: {
   modified?: number;
 }) {
   const recipientModel = {
+    findOneAndUpdate: jest.fn(() =>
+      query(opts.byMetaId ? { campaignId: opts.byMetaId.campaignId } : null),
+    ),
     findOne: jest.fn((filter: Record<string, unknown>) =>
       query(
         filter.metaMessageId ? (opts.byMetaId ?? null) : (opts.latest ?? null),
@@ -190,5 +193,34 @@ describe("CampaignsService.handleDeliveryUpdate", () => {
       { _id: "camp" },
       { $inc: { read: 1 } },
     );
+  });
+});
+
+describe("CampaignsService.handleDeliveryFailure", () => {
+  it("moves a sent recipient to failed and fixes the counts", async () => {
+    const t = setup({ byMetaId: { _id: "r1", campaignId: "camp" } });
+    await t.service.handleDeliveryFailure("wamid.1", "131049: limit", NOW);
+
+    const [filter, update] = t.recipientModel.findOneAndUpdate.mock
+      .calls[0] as unknown as [Record<string, unknown>, { $set: object }];
+    expect(filter).toEqual({
+      metaMessageId: "wamid.1",
+      status: "sent",
+      deliveredAt: { $exists: false },
+    });
+    expect(update.$set).toMatchObject({
+      status: "failed",
+      failureReason: "131049: limit",
+    });
+    expect(t.campaignModel.updateOne).toHaveBeenCalledWith(
+      { _id: "camp" },
+      { $inc: { sent: -1, failed: 1 } },
+    );
+  });
+
+  it("ignores non-campaign messages and already delivered recipients", async () => {
+    const t = setup({});
+    await t.service.handleDeliveryFailure("wamid.x", "131049: limit", NOW);
+    expect(t.campaignModel.updateOne).not.toHaveBeenCalled();
   });
 });
